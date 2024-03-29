@@ -1,7 +1,8 @@
+from src.fingerprint_comparison.domain.types import Image
+
 type FingerprintArgs = {
     "image": Image,
     "filename": str,
-    "score": int,
 }
 
 
@@ -12,4 +13,3 @@ class Fingerprint:
     ) -> None:
         self.image = args["image"]
         self.filename = args["filename"]
-        self.score = args["score"]

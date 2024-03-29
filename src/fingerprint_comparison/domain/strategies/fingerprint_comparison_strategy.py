@@ -1,7 +1,9 @@
 from typing import Any
 
-type BestScore = int
-type Image[T] = T
+from src.fingerprint_comparison.domain.entities.fingerprint import Fingerprint
+from src.fingerprint_comparison.domain.types import Image
+
+type BestScore = float
 type Filename = str
 type KeyPoints = list[Any]
 type MatchPoints = Any
@@ -20,6 +22,6 @@ class FingerprintComparisonStrategy:
     def compare[
         T
     ](
-        self, sample_image: Image[T], fingerprint_image: Image[T]
+        self, sample_image: Fingerprint, fingerprint_image: Fingerprint
     ) -> FingerprintComparisonStrategyComparisonResult:
         raise NotImplementedError("Subclasses must implement compare method")

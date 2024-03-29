@@ -4,3 +4,7 @@
 
 # misc
 SOCOFing
+
+# cache
+.cache
+.pyc
