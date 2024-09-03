@@ -3,8 +3,15 @@
 .vscode
 
 # misc
-SOCOFing
+data/SOCOFing
 
 # cache
 .cache
 .pyc
+
+# logs
+logs
+
+# virtualenv
+venv
+myenv
