@@ -1,6 +1,9 @@
-class MinutiaeFeature:
-    def __init__(self, locX, locY, orientation, feature_type):
-        self.locX = locX
-        self.locY = locY
-        self.orientation = orientation
-        self.feature_type = feature_type
+from typing import Tuple
+
+
+class Minutiae:
+    """Representa una minucia en una huella dactilar."""
+
+    def __init__(self, type: str, position: Tuple[int, int]):
+        self.type = type  # 'termination' o 'bifurcation'
+        self.position = position

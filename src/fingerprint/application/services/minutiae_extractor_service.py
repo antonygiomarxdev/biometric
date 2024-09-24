@@ -1,18 +1,22 @@
+from abc import ABC, abstractmethod
+from typing import List
+
 import numpy as np
 
-from src.fingerprint.domain.entities.minutiae import MinutiaeFeature
-from src.fingerprint.domain.repositories.minutiae_extractor_repository import (
-    MinutiaeExtractorRepository,
-)
+from src.fingerprint.domain.entities.minutiae import Minutiae
 
 
-class MinutiaeExtractorService:
-    def __init__(self, extractor_repository: MinutiaeExtractorRepository):
-        self.extractor_repository = extractor_repository
+class MinutiaeExtractorService(ABC):
+    """Interfaz para la extracción de minucias de huellas dactilares."""
 
-    def extract_features(
-        self, img: np.ndarray, spurious_threshold: int
-    ) -> tuple[list[MinutiaeFeature], list[MinutiaeFeature]]:
-        return self.extractor_repository.extract_minutiae_features(
-            img, spurious_threshold
-        )
+    @abstractmethod
+    def extract_minutiae(self, skeleton_img: np.ndarray) -> List[Minutiae]:
+        """Extrae las minucias de una imagen skeletonizada.
+
+        Args:
+            skeleton_img (np.ndarray): Imagen de huella skeletonizada.
+
+        Returns:
+            List[Minutiae]: Lista de minucias encontradas.
+        """
+        pass

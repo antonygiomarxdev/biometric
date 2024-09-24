@@ -3,7 +3,7 @@ import numpy as np
 from src.fingerprint.infrastructure.opencv.fingerprint_image_enhancer_impl import (
     FingerprintImageEnhancer,
 )
-from src.fingerprint.infrastructure.opencv.minutiae_extractor_impl import (
+from src.fingerprint.infrastructure.opencv.fingerprint_minutiae_extractor_impl import (
     MinutiaeExtractorImpl,
 )
 

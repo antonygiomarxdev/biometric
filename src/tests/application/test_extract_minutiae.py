@@ -3,7 +3,7 @@ import numpy as np
 from src.fingerprint.application.services.minutiae_extractor_service import (
     MinutiaeExtractorService,
 )
-from src.fingerprint.infrastructure.opencv.minutiae_extractor_impl import (
+from src.fingerprint.infrastructure.opencv.fingerprint_minutiae_extractor_impl import (
     MinutiaeExtractorImpl,
 )
 

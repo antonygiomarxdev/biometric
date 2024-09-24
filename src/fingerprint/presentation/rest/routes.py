@@ -5,7 +5,7 @@ from fastapi import FastAPI, UploadFile, File
 from src.fingerprint.application.use_cases.extract_minutiae import (
     ExtractMinutiaeUseCase,
 )
-from src.fingerprint.infrastructure.opencv.minutiae_extractor_impl import (
+from src.fingerprint.infrastructure.opencv.fingerprint_minutiae_extractor_impl import (
     MinutiaeExtractorImpl,
 )
 
