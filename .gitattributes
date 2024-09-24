@@ -1,0 +1,2 @@
+# Enable Git's "auto" mode for EOL conversion
+* text=auto eol=lf
