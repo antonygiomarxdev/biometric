@@ -302,27 +302,15 @@ class FingerprintImageEnhancerImpl:
 
         # Normalización
         self.__ridge_segment(img)
-        cv2.imshow("Imagen Normalizada", self._normim)
-        cv2.waitKey(0)
 
         # Orientación de crestas
         self.__ridge_orient()
-        cv2.imshow("Orientación de Crestas", self._orientim)
-        cv2.waitKey(0)
 
         # Frecuencia de crestas
         self.__ridge_freq()
-        cv2.imshow("Frecuencia de Crestas", self._freq)
-        cv2.waitKey(0)
-
-        # Máscara de segmentación de crestas
-        cv2.imshow("Máscara de Segmentación", self._mask.astype(np.uint8) * 255)
-        cv2.waitKey(0)
 
         # Filtro Gabor
         self.__ridge_filter()
-        cv2.imshow("Imagen Filtrada", self._binim.astype(np.uint8) * 255)
-        cv2.waitKey(0)
 
         return np.uint8(self._binim * 255)
 
@@ -332,7 +320,3 @@ class FingerprintImageEnhancerImpl:
         skeleton = skeletonize(img_bin.astype(np.uint8))
         skeleton_255 = (skeleton * 255).astype(np.uint8)
         return skeleton_255
-
-    def save_enhanced_image(self, path: str) -> None:
-        """Guarda la imagen mejorada."""
-        cv2.imwrite(path, (255 * self._binim))

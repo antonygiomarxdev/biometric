@@ -22,7 +22,6 @@ def main():
 
     # Mostrar la imagen original
     cv2.imshow("Imagen original", img)
-    cv2.waitKey(0)
 
     # Mejorar la imagen
     enhancer_impl = FingerprintImageEnhancerImpl()
@@ -34,7 +33,6 @@ def main():
 
     # Mostrar la imagen mejorada
     cv2.imshow("Imagen mejorada", enhanced_img)
-    cv2.waitKey(0)
 
     # Skeletonizar la imagen mejorada
     skeletonized_img = enhancer_impl.skeletonize(enhanced_img)
@@ -45,7 +43,6 @@ def main():
 
     # Mostrar la imagen skeletonizada
     cv2.imshow("Imagen skeletonizada", skeletonized_img)
-    cv2.waitKey(0)
 
     # Extraer minucias
     minutiae_extractor = FingerprintMinutiaeExtractorImpl()
