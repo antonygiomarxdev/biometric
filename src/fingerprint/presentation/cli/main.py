@@ -16,28 +16,50 @@ def main():
         cv2.IMREAD_GRAYSCALE,
     )
 
+    if img is None:
+        print("Error: La imagen no se pudo cargar correctamente.")
+        return
+
+    # Mostrar la imagen original
+    cv2.imshow("Imagen original", img)
+    cv2.waitKey(0)
+
     # Mejorar la imagen
     enhancer_impl = FingerprintImageEnhancerImpl()
     enhanced_img = enhancer_impl.enhance(img)
 
+    if enhanced_img is None or enhanced_img.size == 0:
+        print("Error: No se pudo mejorar la imagen.")
+        return
+
+    # Mostrar la imagen mejorada
+    cv2.imshow("Imagen mejorada", enhanced_img)
+    cv2.waitKey(0)
+
     # Skeletonizar la imagen mejorada
     skeletonized_img = enhancer_impl.skeletonize(enhanced_img)
+
+    if skeletonized_img is None or skeletonized_img.size == 0:
+        print("Error: No se pudo skeletonizar la imagen.")
+        return
+
+    # Mostrar la imagen skeletonizada
+    cv2.imshow("Imagen skeletonizada", skeletonized_img)
+    cv2.waitKey(0)
 
     # Extraer minucias
     minutiae_extractor = FingerprintMinutiaeExtractorImpl()
     minutiae = minutiae_extractor.extract_minutiae(skeletonized_img)
+
+    if not minutiae:
+        print("Error: No se detectaron minucias.")
+        return
 
     # Mostrar la cantidad de minucias encontradas
     num_terminations = sum(1 for m in minutiae if m.type == "termination")
     num_bifurcations = sum(1 for m in minutiae if m.type == "bifurcation")
     print(f"Terminaciones: {num_terminations}")
     print(f"Bifurcaciones: {num_bifurcations}")
-
-    # Mostrar la imagen mejorada
-    cv2.imshow("Imagen mejorada", enhanced_img)
-
-    # Mostrar la imagen skeletonizada
-    cv2.imshow("Imagen skeletonizada", skeletonized_img)
 
     # Visualizar las minucias en la imagen
     display_minutiae_on_image(skeletonized_img, minutiae)
