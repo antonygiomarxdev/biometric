@@ -1,8 +1,6 @@
-import math
-from typing import List, Tuple
+from typing import List
 
 import numpy as np
-from skimage.morphology import convex_hull_image, erosion, square
 
 from src.fingerprint.domain.entities.minutiae import Minutiae
 
@@ -17,74 +15,82 @@ class FingerprintMinutiaeExtractorImpl:
             skeletonized_img (np.ndarray): Imagen de huella skeletonizada.
 
         Returns:
-            List[Minutiae]: Lista de minucias detectadas.
+            List[Minutia]: Lista de minucias detectadas.
         """
-        # Detectar las minucias
         minutiae = self._detect_minutiae(skeletonized_img)
-
-        # Aplicar filtrado de minucias cercanas al borde
         minutiae = self._filter_minutiae_by_distance(minutiae, skeletonized_img.shape)
-
-        # Filtrar minucias utilizando la máscara de la región válida
-        mask = self._create_convex_hull_mask(skeletonized_img)
-        minutiae = self._filter_minutiae_using_mask(minutiae, mask)
-
-        # Filtrar minucias en áreas ruidosas o cerca de bordes
-        minutiae = self._filter_invalid_minutiae(minutiae, skeletonized_img)
-
-        # Eliminar minucias aisladas
         minutiae = self._filter_isolated_minutiae(minutiae)
-
         return minutiae
 
     def _detect_minutiae(self, skeletonized_img: np.ndarray) -> List[Minutiae]:
-        """Detecta minucias en la imagen skeletonizada."""
+        """Detecta minucias en la imagen skeletonizada.
+
+        Args:
+            skeletonized_img (np.ndarray): Imagen skeletonizada.
+
+        Returns:
+            List[Minutiae]: Lista de minucias detectadas.
+        """
         minutiae = []
-        skel = skeletonized_img == 255
-        rows, cols = skel.shape
+        rows, cols = skeletonized_img.shape
+
+        # Recorrer la imagen para detectar terminaciones y bifurcaciones
         for i in range(1, rows - 1):
             for j in range(1, cols - 1):
-                block = skel[i - 1 : i + 2, j - 1 : j + 2]
-                block_sum = np.sum(block)
-                if skel[i, j] == 1:
-                    if block_sum == 2:  # Terminación
+                if skeletonized_img[i, j] == 255:  # Si hay un píxel de cresta
+                    block = skeletonized_img[i - 1 : i + 2, j - 1 : j + 2]
+                    block_sum = np.sum(block)
+                    if block_sum == 510:  # Terminación (solo un píxel vecino)
                         orientation = self._compute_orientation(block, "termination")
-                        minutiae.append(Minutiae("termination", (j, i), orientation))
-                    elif block_sum == 4:  # Bifurcación
+                        minutiae.append(
+                            Minutiae(
+                                type="termination",
+                                position=(i, j),
+                                orientation=orientation,
+                            )
+                        )
+                    elif block_sum == 1020:  # Bifurcación (tres píxeles vecinos)
                         orientation = self._compute_orientation(block, "bifurcation")
-                        minutiae.append(Minutiae("bifurcation", (j, i), orientation))
+                        minutiae.append(
+                            Minutiae(
+                                type="bifurcation",
+                                position=(i, j),
+                                orientation=orientation,
+                            )
+                        )
         return minutiae
 
     def _compute_orientation(self, block: np.ndarray, minutiae_type: str) -> float:
-        """Calcular la orientación de la minucia basada en el bloque 3x3 alrededor.
+        """Calcular la orientación de la minucia basada en su tipo y la dirección de la cresta.
 
         Args:
-            block (np.ndarray): Bloque 3x3 de la imagen.
+            block (np.ndarray): Bloque alrededor de la minucia.
             minutiae_type (str): Tipo de minucia ('termination' o 'bifurcation').
 
         Returns:
-            float: Orientación de la minucia en grados.
+            float: Orientación en grados.
         """
-        center_x, center_y = 1, 1  # Centro del bloque 3x3
-        angles = []
+        (rows, cols) = block.shape
+        center_x, center_y = (rows - 1) / 2, (cols - 1) / 2
 
-        for i in range(3):
-            for j in range(3):
-                if (i == 0 or i == 2 or j == 0 or j == 2) and block[i, j] != 0:
-                    angle = -math.degrees(math.atan2(i - center_y, j - center_x))
-                    angles.append(angle)
-
-        if minutiae_type == "termination" and len(angles) == 1:
-            return angles[0]
-        elif minutiae_type == "bifurcation" and len(angles) == 3:
-            return np.mean(angles)  # Promedio de las 3 direcciones
-        return 0.0  # Orientación desconocida
+        if minutiae_type == "termination":
+            for i in range(rows):
+                for j in range(cols):
+                    if block[i, j] == 255 and (i != center_x or j != center_y):
+                        return -np.degrees(np.arctan2(i - center_y, j - center_x))
+        elif minutiae_type == "bifurcation":
+            angles = []
+            for i in range(rows):
+                for j in range(cols):
+                    if block[i, j] == 255 and (i != center_x or j != center_y):
+                        angles.append(
+                            -np.degrees(np.arctan2(i - center_y, j - center_x))
+                        )
+            return np.mean(angles)
+        return 0.0  # Si no se detecta orientación
 
     def _filter_minutiae_by_distance(
-        self,
-        minutiae: List[Minutiae],
-        img_shape: Tuple[int, int],
-        border_margin: int = 10,
+        self, minutiae: List[Minutiae], img_shape: tuple, border_margin: int = 10
     ) -> List[Minutiae]:
         """Filtrar las minucias que estén cerca de los bordes de la imagen.
 
@@ -103,75 +109,6 @@ class FingerprintMinutiaeExtractorImpl:
             if border_margin <= m.position[0] <= width - border_margin
             and border_margin <= m.position[1] <= height - border_margin
         ]
-
-    def _create_convex_hull_mask(self, skeletonized_img: np.ndarray) -> np.ndarray:
-        """Crear una máscara convexa de la región válida de la huella.
-
-        Args:
-            skeletonized_img (np.ndarray): Imagen skeletonizada.
-
-        Returns:
-            np.ndarray: Máscara convexa que representa la región de la huella.
-        """
-        mask = skeletonized_img > 0
-        mask = convex_hull_image(mask)
-        mask = erosion(mask, square(5))  # Erosionamos para mejorar la precisión
-        return mask
-
-    def _filter_minutiae_using_mask(
-        self, minutiae: List[Minutiae], mask: np.ndarray
-    ) -> List[Minutiae]:
-        """Filtra las minucias que no están dentro de la región válida de la huella.
-
-        Args:
-            minutiae (List[Minutiae]): Lista de minucias detectadas.
-            mask (np.ndarray): Máscara que define la región válida de la huella.
-
-        Returns:
-            List[Minutiae]: Lista de minucias dentro de la región válida.
-        """
-        valid_minutiae = [
-            m for m in minutiae if mask[m.position[1], m.position[0]] != 0
-        ]
-        return valid_minutiae
-
-    def _filter_invalid_minutiae(
-        self, minutiae: List[Minutiae], skeletonized_img: np.ndarray
-    ) -> List[Minutiae]:
-        """Filtrar minucias en áreas de bordes ruidosos o en terminaciones de crestas no válidas.
-
-        Args:
-            minutiae (List[Minutiae]): Lista de minucias detectadas.
-            skeletonized_img (np.ndarray): Imagen de huella skeletonizada.
-
-        Returns:
-            List[Minutiae]: Lista de minucias filtradas.
-        """
-        filtered_minutiae = []
-        height, width = skeletonized_img.shape
-        for m in minutiae:
-            if self._is_valid_minutia(m, skeletonized_img, width, height):
-                filtered_minutiae.append(m)
-        return filtered_minutiae
-
-    def _is_valid_minutia(
-        self, minutia: Minutiae, skeletonized_img: np.ndarray, width: int, height: int
-    ) -> bool:
-        """Verificar si una minucia es válida. Evita falsos positivos en los bordes de la huella.
-
-        Args:
-            minutia (Minutiae): Minucia a validar.
-            skeletonized_img (np.ndarray): Imagen skeletonizada.
-            width (int): Ancho de la imagen.
-            height (int): Alto de la imagen.
-
-        Returns:
-            bool: True si es válida, False si es un falso positivo.
-        """
-        x, y = minutia.position
-        if x <= 5 or y <= 5 or x >= width - 5 or y >= height - 5:
-            return False  # Filtra minucias muy cercanas a los bordes
-        return True
 
     def _filter_isolated_minutiae(
         self, minutiae: List[Minutiae], distance_threshold: int = 15
