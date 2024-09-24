@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 from keras.src.utils.module_utils import scipy
 from scipy import ndimage, signal
+from skimage.morphology import skeletonize
 
 
 class FingerprintImageEnhancerImpl:
@@ -583,3 +584,55 @@ class FingerprintImageEnhancerImpl:
 
         # return the enhanced image as uint8
         return np.uint8(self._binim * 255)
+
+    def binarize(self, img: np.ndarray, threshold: int = 128) -> np.ndarray:
+        """Binariza la imagen según un umbral dado.
+
+        Args:
+            img (np.ndarray): Imagen de entrada.
+            threshold (int, opcional): Umbral para la binarización. Valor por defecto es 128.
+
+        Returns:
+            np.ndarray: Imagen binarizada.
+        """
+        # Binarización usando un umbral fijo
+        _, binarized_img = cv2.threshold(img, threshold, 255, cv2.THRESH_BINARY)
+        return binarized_img
+
+    def erode(self, img: np.ndarray, kernel_size: int = 3) -> np.ndarray:
+        """Aplica la operación de erosión a la imagen binarizada.
+
+        Args:
+            img (np.ndarray): Imagen binarizada.
+            kernel_size (int, opcional): Tamaño del kernel para la erosión. Valor por defecto es 3.
+
+        Returns:
+            np.ndarray: Imagen erosionada.
+        """
+        # Definir el kernel de erosión
+        kernel = np.ones((kernel_size, kernel_size), np.uint8)
+
+        # Aplicar la operación de erosión
+        eroded_img = cv2.erode(img, kernel, iterations=1)
+
+        return eroded_img
+
+    def skeletonize(self, img: np.ndarray) -> np.ndarray:
+        """Aplica el algoritmo de skeletonización a una imagen binaria.
+
+        Args:
+            img (np.ndarray): Imagen binaria en escala de grises (0 y 255).
+
+        Returns:
+            np.ndarray: Imagen skeletonizada (0 y 255).
+        """
+        # Convertir la imagen a binaria (0 y 1) para skeletonize
+        img_bin = img // 255
+
+        # Aplicar el método de skeletonization usando skimage
+        skeleton = skeletonize(img_bin.astype(np.uint8))
+
+        # Multiplicar por 255 para convertir el rango de nuevo a 0 y 255
+        skeleton_255 = (skeleton * 255).astype(np.uint8)
+
+        return skeleton_255
