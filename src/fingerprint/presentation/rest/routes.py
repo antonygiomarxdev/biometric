@@ -5,8 +5,9 @@ from fastapi import FastAPI, UploadFile, File
 from src.fingerprint.application.use_cases.extract_minutiae import (
     ExtractMinutiaeUseCase,
 )
-from src.fingerprint.infrastructure.opencv.fingerprint_minutiae_extractor_impl import (
-    MinutiaeExtractorImpl,
+from src.fingerprint.infrastructure.opencv import (
+    FingerprintImageEnhancerImpl,
+    FingerprintMinutiaeExtractorImpl,
 )
 
 app = FastAPI()
@@ -22,14 +23,17 @@ async def extract_minutiae(file: UploadFile = File(...)):
     if img is None:
         return {"error": "No se pudo leer la imagen."}
 
-    # Crear el servicio de extracción de minutiae
-    extractor_impl = MinutiaeExtractorImpl()
-    extract_minutiae_use_case = ExtractMinutiaeUseCase(extractor_impl)
+    # Crear servicios
+    enhancer_impl = FingerprintImageEnhancerImpl()
+    extractor_impl = FingerprintMinutiaeExtractorImpl()
+    extract_minutiae_use_case = ExtractMinutiaeUseCase(
+        enhancer_impl, extractor_impl
+    )
 
     # Ejecutar el caso de uso
-    features_term, features_bif = extract_minutiae_use_case.execute(img)
+    minutiae = extract_minutiae_use_case.execute(img)
 
     return {
-        "terminations": len(features_term),
-        "bifurcations": len(features_bif),
+        "terminations": sum(1 for m in minutiae if m.type == "termination"),
+        "bifurcations": sum(1 for m in minutiae if m.type == "bifurcation"),
     }

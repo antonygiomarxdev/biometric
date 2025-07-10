@@ -1,31 +1,29 @@
 import numpy as np
 
+from src.fingerprint.domain.entities.minutiae import Minutiae
+
 from src.fingerprint.infrastructure.opencv.fingerprint_image_enhancer_impl import (
-    FingerprintImageEnhancer,
+    FingerprintImageEnhancerImpl,
 )
 from src.fingerprint.infrastructure.opencv.fingerprint_minutiae_extractor_impl import (
-    MinutiaeExtractorImpl,
+    FingerprintMinutiaeExtractorImpl,
 )
 
 
 class ExtractMinutiaeUseCase:
+    """Use case to obtain minutiae from a fingerprint image."""
+
     def __init__(
         self,
-        minutiae_extractor_service: MinutiaeExtractorImpl,
-        enhancer: FingerprintImageEnhancer,
-    ):
-        self.minutiae_extractor_service: MinutiaeExtractorImpl = (
-            minutiae_extractor_service
-        )
-        self.enhancer: FingerprintImageEnhancer = enhancer
+        enhancer: FingerprintImageEnhancerImpl,
+        extractor: FingerprintMinutiaeExtractorImpl,
+    ) -> None:
+        self.enhancer = enhancer
+        self.extractor = extractor
 
-    def execute(
-        self, img: np.ndarray, spurious_threshold: int = 10
-    ) -> tuple[list, list]:
-        # Mejora la imagen primero
-        enhanced_img: np.ndarray = self.enhancer.enhance(img)
+    def execute(self, img: np.ndarray) -> list[Minutiae]:
+        """Enhance the image and extract its minutiae."""
 
-        # Luego, extrae las minutiae de la imagen mejorada
-        return self.minutiae_extractor_service.extract_minutiae_features(
-            enhanced_img, spurious_threshold
-        )
+        enhanced_img = self.enhancer.enhance(img)
+        skeleton = self.enhancer.skeletonize(enhanced_img)
+        return self.extractor.extract_minutiae(skeleton)
