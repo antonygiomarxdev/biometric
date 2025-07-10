@@ -77,7 +77,7 @@ class FingerprintMinutiaeExtractorImpl:
         if minutiae_type == "termination" and len(angles) == 1:
             return angles[0]
         elif minutiae_type == "bifurcation" and len(angles) == 3:
-            return np.mean(angles)  # Promedio de las 3 direcciones
+            return sum(angles) / 3
         return 0.0  # Orientación desconocida
 
     def _filter_minutiae_by_distance(
