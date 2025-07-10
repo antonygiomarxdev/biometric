@@ -1,6 +1,5 @@
 import cv2
 import numpy as np
-from keras.src.utils.module_utils import scipy
 from scipy import ndimage, signal
 from skimage.morphology import skeletonize
 
@@ -216,7 +215,7 @@ class FingerprintImageEnhancerImpl:
         gabor_filter = np.zeros((angle_range, filt_rows, filt_cols))
 
         for filter_idx in range(angle_range):
-            rot_filt = scipy.ndimage.rotate(
+            rot_filt = ndimage.rotate(
                 reffilter, -(filter_idx * self.angle_inc + 90), reshape=False
             )
             gabor_filter[filter_idx] = rot_filt
