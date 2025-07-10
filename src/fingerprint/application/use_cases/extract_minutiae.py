@@ -18,6 +18,12 @@ class ExtractMinutiaeUseCase:
         enhancer: FingerprintImageEnhancerImpl,
         extractor: FingerprintMinutiaeExtractorImpl,
     ) -> None:
+        """
+        Initialize the use case with the image enhancer and minutiae extractor.
+        Args:
+            enhancer (FingerprintImageEnhancerImpl): The image enhancer service.
+            extractor (FingerprintMinutiaeExtractorImpl): The minutiae extractor service.
+        """
         self.enhancer = enhancer
         self.extractor = extractor
 
