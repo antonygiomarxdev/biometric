@@ -18,3 +18,4 @@ myenv
 
 # cache files
 __pycache__
+data/
