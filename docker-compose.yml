@@ -1,0 +1,21 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_DB: fingerprint
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+  api:
+    build: .
+    command: uvicorn src.fingerprint.presentation.rest.routes:app --host 0.0.0.0 --port 8000
+    volumes:
+      - ./data:/data
+    depends_on:
+      - postgres
+volumes:
+  pgdata:
+  data:
