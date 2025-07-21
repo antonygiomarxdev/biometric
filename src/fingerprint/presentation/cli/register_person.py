@@ -33,7 +33,10 @@ def load_minutiae_from_image(path: str) -> list[Minutiae]:
 def load_minutiae_from_json(path: str) -> list[Minutiae]:
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
-    return [Minutiae(**m) for m in data]
+    return [
+        Minutiae(m["type"], tuple(m["position"]), m["orientation"])
+        for m in data
+    ]
 
 
 def main() -> None:
