@@ -1,0 +1,54 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: biometric_postgres_prod
+    restart: always
+    environment:
+      POSTGRES_DB: fingerprint
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - biometric_network
+
+  api:
+    build: .
+    container_name: biometric_api_prod
+    restart: always
+    command: uvicorn src.api.rest:app --host 0.0.0.0 --port 8000 --workers 4
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data
+    environment:
+      ENV: production
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-changeme}@postgres:5432/fingerprint
+      LOG_LEVEL: INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - biometric_network
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4G
+        reservations:
+          cpus: "1"
+          memory: 2G
+
+volumes:
+  pgdata_prod:
+    name: biometric_pgdata_prod
+
+networks:
+  biometric_network:
+    name: biometric_network
+    driver: bridge

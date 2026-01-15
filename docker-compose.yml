@@ -1,21 +1,108 @@
-version: '3.8'
 services:
   postgres:
-    image: postgres:15
-    restart: always
+    image: pgvector/pgvector:pg15
+    container_name: biometric_postgres_dev
+    restart: unless-stopped
     environment:
       POSTGRES_DB: fingerprint
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+    ports:
+      - "5434:5432" # Puerto 5434 en host → 5432 en container
     volumes:
-      - pgdata:/var/lib/postgresql/data
-  api:
-    build: .
-    command: uvicorn src.fingerprint.presentation.rest.routes:app --host 0.0.0.0 --port 8000
+      - pgdata_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: biometric_minio_dev
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
     volumes:
-      - ./data:/data
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  createbuckets:
+    image: minio/mc:latest
     depends_on:
-      - postgres
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin || true;
+      if ! /usr/bin/mc ls myminio/fingerprints >/dev/null 2>&1; then
+        /usr/bin/mc mb myminio/fingerprints;
+      else
+        echo 'Bucket fingerprints already exists';
+      fi;
+      /usr/bin/mc anonymous set public myminio/fingerprints || true;
+      exit 0;
+      "
+
+  backend:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    container_name: biometric_backend_dev
+    restart: unless-stopped
+    command: uvicorn src.api.rest:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./apps/backend/src:/app/src
+      - ./data:/data
+    environment:
+      ENV: development
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/fingerprint
+      LOG_LEVEL: DEBUG
+      # MinIO Config
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: fingerprints
+      MINIO_SECURE: "false"
+      # CORS: Permitir origen del frontend
+      CORS_ORIGINS: "http://localhost:5173,http://localhost:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./apps/frontend
+      dockerfile: Dockerfile
+    container_name: biometric_frontend_dev
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./apps/frontend/src:/app/src
+      - ./apps/frontend/public:/app/public
+      - ./apps/frontend/index.html:/app/index.html
+      - ./apps/frontend/vite.config.ts:/app/vite.config.ts
+      - ./apps/frontend/tailwind.config.js:/app/tailwind.config.js
+    depends_on:
+      - backend
+
 volumes:
-  pgdata:
-  data:
+  pgdata_dev:
+    name: biometric_pgdata_dev
+  minio_data:
+    name: biometric_minio_data
