@@ -1,0 +1,820 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Sistema Biom\u00e9trico de Huellas Dactilares",
+    "description": "API para procesamiento, registro e identificaci\u00f3n de huellas",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/": {
+      "get": {
+        "summary": "Health Check",
+        "description": "Verifica el estado del sistema.",
+        "operationId": "health_check__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/extract": {
+      "post": {
+        "summary": "Extract Minutiae",
+        "description": "Extrae minutiae de una imagen de huella.\n\nArgs:\n    file: Archivo de imagen (BMP, PNG, JPEG)\n    \nReturns:\n    Conteo de minutiae extra\u00eddas",
+        "operationId": "extract_minutiae_extract_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_extract_minutiae_extract_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtractResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/register": {
+      "post": {
+        "summary": "Register Fingerprint",
+        "description": "Registra una nueva huella en el sistema.\n\nArgs:\n    person_id: ID \u00fanico de la persona\n    name: Nombre completo\n    document: N\u00famero de documento\n    file: Archivo de imagen de la huella\n    \nReturns:\n    Confirmaci\u00f3n de registro",
+        "operationId": "register_fingerprint_register_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_register_fingerprint_register_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/identify": {
+      "post": {
+        "summary": "Identify Fingerprint",
+        "description": "Identifica una huella buscando coincidencias en el sistema.\n\nArgs:\n    file: Archivo de imagen de la huella\n    \nReturns:\n    Resultado de la identificaci\u00f3n",
+        "operationId": "identify_fingerprint_identify_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_identify_fingerprint_identify_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentifyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/fingerprints/{person_id}/image": {
+      "get": {
+        "summary": "Get Fingerprint Image",
+        "description": "Recupera la imagen original de una huella.\n\nArgs:\n    person_id: ID de la persona\n    \nReturns:\n    Imagen (image/bmp)",
+        "operationId": "get_fingerprint_image_fingerprints__person_id__image_get",
+        "parameters": [
+          {
+            "name": "person_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Person Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/fingerprints/{person_id}/details": {
+      "get": {
+        "summary": "Get Fingerprint Details",
+        "description": "Recupera detalles y minucias guardadas.\n\nArgs:\n    person_id: ID de la persona\n    \nReturns:\n    JSON con metadatos y minucias",
+        "operationId": "get_fingerprint_details_fingerprints__person_id__details_get",
+        "parameters": [
+          {
+            "name": "person_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Person Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "summary": "Get Metrics",
+        "description": "Obtiene m\u00e9tricas de performance del sistema.",
+        "operationId": "get_metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/extract/diagnostic": {
+      "post": {
+        "summary": "Extract Diagnostic",
+        "description": "Endpoint de diagn\u00f3stico para entender por qu\u00e9 no se extraen minutiae.",
+        "operationId": "extract_diagnostic_extract_diagnostic_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_extract_diagnostic_extract_diagnostic_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagnosticResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics/reset": {
+      "post": {
+        "summary": "Reset Metrics",
+        "description": "Resetea las m\u00e9tricas acumuladas.",
+        "operationId": "reset_metrics_metrics_reset_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Body_extract_diagnostic_extract_diagnostic_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_extract_diagnostic_extract_diagnostic_post"
+      },
+      "Body_extract_minutiae_extract_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_extract_minutiae_extract_post"
+      },
+      "Body_identify_fingerprint_identify_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_identify_fingerprint_identify_post"
+      },
+      "Body_register_fingerprint_register_post": {
+        "properties": {
+          "person_id": {
+            "type": "string",
+            "title": "Person Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "document": {
+            "type": "string",
+            "title": "Document"
+          },
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "person_id",
+          "name",
+          "document",
+          "file"
+        ],
+        "title": "Body_register_fingerprint_register_post"
+      },
+      "DiagnosticResponse": {
+        "properties": {
+          "image_decoded": {
+            "type": "boolean",
+            "title": "Image Decoded"
+          },
+          "image_shape": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Shape"
+          },
+          "image_dtype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Dtype"
+          },
+          "image_stats": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Stats"
+          },
+          "enhancement_completed": {
+            "type": "boolean",
+            "title": "Enhancement Completed"
+          },
+          "enhanced_stats": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enhanced Stats"
+          },
+          "extraction_completed": {
+            "type": "boolean",
+            "title": "Extraction Completed"
+          },
+          "candidates_before_filter": {
+            "type": "integer",
+            "title": "Candidates Before Filter"
+          },
+          "candidates_after_filter": {
+            "type": "integer",
+            "title": "Candidates After Filter"
+          },
+          "skeleton_pixels": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skeleton Pixels"
+          },
+          "skeleton_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skeleton Ratio"
+          },
+          "binary_white_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binary White Ratio"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "image_decoded",
+          "image_shape",
+          "image_dtype",
+          "image_stats",
+          "enhancement_completed",
+          "enhanced_stats",
+          "extraction_completed",
+          "candidates_before_filter",
+          "candidates_after_filter",
+          "skeleton_pixels",
+          "skeleton_ratio",
+          "binary_white_ratio"
+        ],
+        "title": "DiagnosticResponse"
+      },
+      "ExtractResponse": {
+        "properties": {
+          "minutiae_count": {
+            "type": "integer",
+            "title": "Minutiae Count"
+          },
+          "terminations": {
+            "type": "integer",
+            "title": "Terminations"
+          },
+          "bifurcations": {
+            "type": "integer",
+            "title": "Bifurcations"
+          },
+          "minutiae": {
+            "items": {
+              "$ref": "#/components/schemas/MinutiaPoint"
+            },
+            "type": "array",
+            "title": "Minutiae"
+          },
+          "processing_time_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Time Ms"
+          },
+          "processed_image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processed Image"
+          },
+          "image_shape": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Shape"
+          },
+          "image_dtype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Dtype"
+          },
+          "minutiae_initial_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minutiae Initial Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "minutiae_count",
+          "terminations",
+          "bifurcations",
+          "minutiae"
+        ],
+        "title": "ExtractResponse"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "database_records": {
+            "type": "integer",
+            "title": "Database Records"
+          },
+          "vector_index_size": {
+            "type": "integer",
+            "title": "Vector Index Size"
+          },
+          "config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Config"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "database_records",
+          "vector_index_size",
+          "config"
+        ],
+        "title": "HealthResponse"
+      },
+      "IdentifyResponse": {
+        "properties": {
+          "matched": {
+            "type": "boolean",
+            "title": "Matched"
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "document": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "distance": {
+            "type": "number",
+            "title": "Distance"
+          },
+          "processing_time_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Time Ms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "matched",
+          "score",
+          "distance"
+        ],
+        "title": "IdentifyResponse"
+      },
+      "MetricsResponse": {
+        "properties": {
+          "operations": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Operations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "operations"
+        ],
+        "title": "MetricsResponse"
+      },
+      "MinutiaPoint": {
+        "properties": {
+          "x": {
+            "type": "integer",
+            "title": "X"
+          },
+          "y": {
+            "type": "integer",
+            "title": "Y"
+          },
+          "type": {
+            "type": "integer",
+            "title": "Type"
+          },
+          "angle": {
+            "type": "number",
+            "title": "Angle"
+          }
+        },
+        "type": "object",
+        "required": [
+          "x",
+          "y",
+          "type",
+          "angle"
+        ],
+        "title": "MinutiaPoint"
+      },
+      "RegisterResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "record_id": {
+            "type": "integer",
+            "title": "Record Id"
+          },
+          "person_id": {
+            "type": "string",
+            "title": "Person Id"
+          },
+          "minutiae_count": {
+            "type": "integer",
+            "title": "Minutiae Count"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "record_id",
+          "person_id",
+          "minutiae_count",
+          "message"
+        ],
+        "title": "RegisterResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

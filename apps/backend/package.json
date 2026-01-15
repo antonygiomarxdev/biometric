@@ -1,0 +1,13 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "uv run python dev.py",
+    "dev:uvicorn": "uv run uvicorn src.api.rest:app --reload --reload-dir ./src --reload-include *.py --host 0.0.0.0 --port 8000",
+    "build": "echo 'Backend build handled by uv/pip'",
+    "test": "uv run pytest",
+    "lint": "uv run ruff check src/ tests/",
+    "format": "uv run ruff format src/ tests/"
+  }
+}

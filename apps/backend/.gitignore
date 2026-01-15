@@ -1,0 +1,44 @@
+#ide
+.idea
+# .vscode/settings.json se incluye (configuración del proyecto)
+.vscode/*
+!.vscode/settings.json
+
+# misc
+data/SOCOFing
+
+# cache
+.cache
+.pyc
+
+# logs
+logs
+
+# virtualenv
+venv
+myenv
+.venv
+.env
+
+# cache files
+__pycache__
+data/
+
+.dockerignore
+
+# uv
+.uv
+
+*.db
+
+*.faiss
+
+
+
+# Outputs
+output_*.png
+output_*.jpg
+*.BMP.png
+
+# Docker
+.dockerignore
