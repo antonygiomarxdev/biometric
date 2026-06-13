@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from src.api.dependencies import get_db
 from src.core.config import config
 from src.db.models import User
-from src.services.auth_service import (
+from src.api.dependencies.auth import (
     create_access_token,
     get_current_user,
     verify_password,
