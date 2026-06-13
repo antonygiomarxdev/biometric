@@ -57,11 +57,20 @@ app.add_middleware(
 
 
 # Incluir routers por recurso (per D-02)
-from src.api.routers import cases_router, decisiones_router, dictamenes_router, evidencias_router
+from src.api.routers import (
+    auth_router,
+    auditoria_router,
+    cases_router,
+    decisiones_router,
+    dictamenes_router,
+    evidencias_router,
+)
+app.include_router(auth_router)
+app.include_router(auditoria_router)
 app.include_router(cases_router)
-app.include_router(evidencias_router)
 app.include_router(decisiones_router)
 app.include_router(dictamenes_router)
+app.include_router(evidencias_router)
 
 
 # Modelos Pydantic para requests/responses

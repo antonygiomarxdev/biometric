@@ -12,3 +12,4 @@ sqlalchemy
 python-multipart
 uuid6
 alembic
+weasyprint
