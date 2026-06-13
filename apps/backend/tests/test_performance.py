@@ -66,7 +66,7 @@ def test_vectorization_performance():
 def test_search_performance(sample_image, repository):
     """Benchmark de búsqueda en índice."""
     service = FingerprintService()
-    comparison = ComparisonService(repository=repository)
+    # ComparisonService removed — using repository directly
     
     # Registrar varias huellas
     num_samples = 50
@@ -74,7 +74,7 @@ def test_search_performance(sample_image, repository):
     for i in range(num_samples):
         fp = service.process_image(sample_image, fingerprint_id=f"fp_{i}")
         if fp.minutiae:
-            comparison.register_fingerprint(
+            repository.register(fp=
                 fingerprint=fp,
                 person_id=f"P{i:03d}",
                 name=f"User {i}",
@@ -89,7 +89,7 @@ def test_search_performance(sample_image, repository):
         start = time.perf_counter()
         
         for _ in range(iterations):
-            result = comparison.identify(fp_query)
+            result = repository.identify(fp_query)
         
         duration = (time.perf_counter() - start) * 1000
         avg_time = duration / iterations
@@ -103,12 +103,12 @@ def test_search_performance(sample_image, repository):
 def test_end_to_end_latency(sample_image, repository):
     """Benchmark latencia end-to-end."""
     service = FingerprintService()
-    comparison = ComparisonService(repository=repository)
+    # ComparisonService removed — using repository directly
     
     # Registrar una huella de referencia
     fp_ref = service.process_image(sample_image)
     if fp_ref.minutiae:
-        comparison.register_fingerprint(
+        repository.register(fp=
             fingerprint=fp_ref,
             person_id="P001",
             name="Reference",
@@ -122,7 +122,7 @@ def test_end_to_end_latency(sample_image, repository):
     for _ in range(iterations):
         fp = service.process_image(sample_image)
         if fp.minutiae:
-            result = comparison.identify(fp)
+            result = repository.identify(fp)
     
     duration = (time.perf_counter() - start) * 1000
     avg_time = duration / iterations

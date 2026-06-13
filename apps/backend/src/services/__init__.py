@@ -6,7 +6,7 @@ from .audit_service import audit_service, AuditService
 __all__ = [
     "fingerprint_service",
     "FingerprintService",
-    "ComparisonService",
+    
     "audit_service",
     "AuditService",
 ]

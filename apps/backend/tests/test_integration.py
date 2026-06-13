@@ -11,7 +11,7 @@ from src.core.types import NormalizedFingerprint
 def test_full_pipeline(sample_image, repository):
     """Test del pipeline completo: procesar, registrar, identificar."""
     service = FingerprintService()
-    comparison = ComparisonService(repository=repository)
+    # ComparisonService removed — using repository directly
     
     # 1. Procesar imagen
     fingerprint = service.process_image(sample_image, fingerprint_id="test_001")
@@ -23,7 +23,7 @@ def test_full_pipeline(sample_image, repository):
     # Si tiene minutiae, continuar con registro e identificación
     if fingerprint.minutiae:
         # 2. Registrar
-        record_id = comparison.register_fingerprint(
+        record_id = repository.register(fp=
             fingerprint=fingerprint,
             person_id="P001",
             name="Test User",
@@ -34,7 +34,7 @@ def test_full_pipeline(sample_image, repository):
         assert record_id > 0
         
         # 3. Identificar la misma huella
-        result = comparison.identify(fingerprint)
+        result = repository.identify(fingerprint)
         
         assert result is not None
         # Debería encontrar match con la huella recién registrada
@@ -48,7 +48,7 @@ def test_full_pipeline(sample_image, repository):
 def test_register_and_search(sample_image, repository):
     """Test registro de múltiples huellas y búsqueda."""
     service = FingerprintService()
-    comparison = ComparisonService(repository=repository)
+    # ComparisonService removed — using repository directly
     
     fingerprints = []
     
@@ -63,7 +63,7 @@ def test_register_and_search(sample_image, repository):
         
         if fp.minutiae:
             fingerprints.append(fp)
-            comparison.register_fingerprint(
+            repository.register(fp=
                 fingerprint=fp,
                 person_id=f"P{i:03d}",
                 name=f"User {i}",
@@ -75,20 +75,20 @@ def test_register_and_search(sample_image, repository):
     
     # Buscar la primera huella
     if fingerprints:
-        result = comparison.identify(fingerprints[0])
+        result = repository.identify(fingerprints[0])
         assert result is not None
 
 
 def test_no_match_scenario(sample_image, repository):
     """Test cuando no hay coincidencia."""
     service = FingerprintService()
-    comparison = ComparisonService(repository=repository)
+    # ComparisonService removed — using repository directly
     
     # Registrar una huella
     fp1 = service.process_image(sample_image, fingerprint_id="fp1")
     
     if fp1.minutiae:
-        comparison.register_fingerprint(
+        repository.register(fp=
             fingerprint=fp1,
             person_id="P001",
             name="User 1",
@@ -100,7 +100,7 @@ def test_no_match_scenario(sample_image, repository):
         fp2 = service.process_image(different_img, fingerprint_id="fp2")
         
         if fp2.minutiae:
-            result = comparison.identify(fp2)
+            result = repository.identify(fp2)
             
             # Probablemente no debería haber match
             assert result is not None

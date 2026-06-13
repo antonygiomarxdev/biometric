@@ -306,5 +306,5 @@ class PDFGeneratorService:
 
 
 # Module-level singleton for convenience (mirrors existing pattern
-# used by fingerprint_service and comparison_service).
+# used by fingerprint_service).
 pdf_generator_service = PDFGeneratorService()
