@@ -31,9 +31,10 @@ Plans:
 **Plans:** 6 plans
 
 Plans:
+
 - [x] 02-01-PLAN.md — Enhancement Spike (U-Net vs alternative evaluation)
 - [x] 02-02-PLAN.md — AI Infrastructure (ModelManager, GPU detection, config, types)
-- [ ] 02-03-PLAN.md — AI Enhancers (SegmentationEnhancer + EnhancementEnhancer)
+- [x] 02-03-PLAN.md — AI Enhancers (SegmentationEnhancer + EnhancementEnhancer)
 - [ ] 02-04-PLAN.md — DL Minutiae Extractor (AiFeatureExtractor)
 - [ ] 02-05-PLAN.md — Fallback Minutiae Editor (React canvas editor)
 - [ ] 02-06-PLAN.md — Pipeline Integration & Benchmark (AI vs traditional on SOCOFing)

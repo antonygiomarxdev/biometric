@@ -9,6 +9,11 @@
 
 - [x] **AI-INFRA**: AI module structure, ModelManager, GPU detection, AiConfig, AlgorithmOrigin AI values
 
+### AI / ML Segmentation & Enhancement
+
+- [x] **AI-SEG**: AI fingerprint segmentation (U-Net ONNX) — SegmentationEnhancer implementing IEnhancer
+- [x] **AI-ENH**: AI fingerprint enhancement (U-Net MobileNetV2 ONNX) — EnhancementEnhancer implementing IEnhancer
+
 ### Matching & Algoritmo AFIS
 
 - [ ] **AFIS-01**: Investigar y documentar algoritmo de matching óptimo (mejorar actual vs implementar NIST)
@@ -79,6 +84,8 @@
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | AI-INFRA | Phase 2 | ✅ Complete |
+| AI-SEG | Phase 2 | ✅ Complete |
+| AI-ENH | Phase 2 | ✅ Complete |
 | AFIS-01 | Phase 1 | Pending |
 | AFIS-02 | Phase 1 | Pending |
 | AUTH-01 | Phase 2 | Pending |
