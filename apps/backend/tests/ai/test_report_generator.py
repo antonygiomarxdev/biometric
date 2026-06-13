@@ -11,6 +11,24 @@ from pydantic import ValidationError
 from src.schemas.dictamen_schema import DictamenPericial
 
 
+def _make_validation_error() -> ValidationError:
+    """Construct a ``ValidationError`` for a bad ``numero_caso`` value.
+
+    Uses ``from_exception_data`` with Pydantic v2 error type codes.
+    """
+    return ValidationError.from_exception_data(
+        "DictamenPericial",
+        line_errors=[
+            {
+                "type": "string_type",
+                "loc": ("numero_caso",),
+                "msg": "Input should be a valid string",
+                "input": 123,
+            }
+        ],
+    )
+
+
 @pytest.mark.asyncio
 class TestGenerateDictamen:
     """``generate_dictamen`` should produce a typed DictamenPericial from case data."""
@@ -69,9 +87,6 @@ class TestGenerateDictamen:
         mock_llm_factory.create.return_value = mock_llm
 
         # First two calls fail with ValidationError, third succeeds
-        invalid_raw = MagicMock()
-        invalid_raw.raw = {"numero_caso": 123}  # wrong type — would cause error
-
         valid_raw = MagicMock()
         valid_raw.raw = DictamenPericial(
             numero_caso="CASO-2024-001",
@@ -81,30 +96,12 @@ class TestGenerateDictamen:
             nivel_confianza=0.5,
         )
 
+        validation_error = _make_validation_error()
+
         mock_structured_llm.acomplete = AsyncMock(
             side_effect=[
-                ValidationError.from_exception_data(
-                    title="DictamenPericial",
-                    line_errors=[
-                        {
-                            "type": "type_error",
-                            "loc": ("numero_caso",),
-                            "msg": "Input should be a valid string",
-                            "input": 123,
-                        }
-                    ],
-                ),
-                ValidationError.from_exception_data(
-                    title="DictamenPericial",
-                    line_errors=[
-                        {
-                            "type": "type_error",
-                            "loc": ("numero_caso",),
-                            "msg": "Input should be a valid string",
-                            "input": 123,
-                        }
-                    ],
-                ),
+                validation_error,
+                validation_error,
                 valid_raw,
             ]
         )
@@ -132,23 +129,13 @@ class TestGenerateDictamen:
         mock_llm.as_structured_llm.return_value = mock_structured_llm
         mock_llm_factory.create.return_value = mock_llm
 
-        validation_error_instance = ValidationError.from_exception_data(
-            title="DictamenPericial",
-            line_errors=[
-                {
-                    "type": "type_error",
-                    "loc": ("numero_caso",),
-                    "msg": "Input should be a valid string",
-                    "input": 123,
-                }
-            ],
-        )
+        validation_error = _make_validation_error()
 
         mock_structured_llm.acomplete = AsyncMock(
             side_effect=[
-                validation_error_instance,
-                validation_error_instance,
-                validation_error_instance,
+                validation_error,
+                validation_error,
+                validation_error,
             ]
         )
 
