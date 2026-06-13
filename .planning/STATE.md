@@ -4,20 +4,20 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 03
 status: executing
-last_updated: "2026-06-13T22:58:07.753Z"
+last_updated: "2026-06-13T23:07:43.266Z"
 progress:
   total_phases: 3
   completed_phases: 1
-   total_plans: 18
-   completed_plans: 15
-   percent: 35
+  total_plans: 18
+  completed_plans: 15
+  percent: 33
 ---
 
 # State: Biometric
 
 **Last updated:** 2026-06-13
 **Current phase:** 03
-**Status:** Executing Phase 03
+**Status:** Executing Phase 03 — Plan 02 complete
 
 ## Project Reference
 
@@ -31,13 +31,13 @@ See: `.planning/PROJECT.md`
 |-------|--------|----------|
 | 1. Flujo Core Forense | ✅ Completado | 100% |
 | 2. IA Visión Computacional | 🏃‍♂️ En progreso | 67% (4/6 planes) |
-| 3. Global Compliance & Security | 🏃‍♂️ En progreso | 25% (1/4 planes) |
+| 3. Global Compliance & Security | 🏃‍♂️ En progreso | 50% (2/4 planes) |
 | 4. IA Generativa (Dictámenes) | ✅ Completado | 100% (5/5 planes) |
 | 5. Despliegue On-Premise | ⏳ Pendiente | 0% |
 
 ## Current Work
 
-Phase 3 (Global Compliance & Security Core) — Plan 01 completado: IComplianceStrategy protocol with BaseStrategy (no-op), ExtremePrivacyStrategy (aggressive PII scrubbing), and ComplianceFactory wired to Config. Next: Plan 03-02 (Log PII Scrubber).
+Phase 3 (Global Compliance & Security Core) — Plan 02 completado: Log PII Scrubber with ComplianceLogFormatter, PIIFilter, and setup_compliance_logging wired into FastAPI and CLI. Next: Plan 03-03 (AI Data Tokenizer / Masking).
 
 ## Completed Plans
 
@@ -53,6 +53,7 @@ Phase 3 (Global Compliance & Security Core) — Plan 01 completado: IComplianceS
 | 03-ia-generativa-burocracia | 04 - GenAI REST API Router | ✅ Two endpoints (/assistant, /report/{caso_id}), Spanish error messages, 6 router tests, wired into main.py. |
 | 03-ia-generativa-burocracia | 05 - Observability & Eval Setup | ✅ OpenTelemetry + Arize Phoenix tracing, Promptfoo eval config. |
 | 03-global-compliance-core | 01 - Strategy Pattern & Interfaces | ✅ IComplianceStrategy protocol, BaseStrategy, ExtremePrivacyStrategy, ComplianceFactory wired to Config. |
+| 03-global-compliance-core | 02 - Log PII Scrubber | ✅ ComplianceLogFormatter, PIIFilter, setup_compliance_logging wired into FastAPI and CLI. |
 
 ## Decisions Log
 
@@ -71,7 +72,7 @@ Phase 3 (Global Compliance & Security Core) — Plan 01 completado: IComplianceS
 ## Next Actions
 
 1. ~~Plan 03-01: Strategy Pattern & Interfaces~~ ✅
-2. Plan 03-02: Log PII Scrubber
+2. ~~Plan 03-02: Log PII Scrubber~~ ✅
 3. Plan 03-03: AI Data Tokenizer (Masking)
 4. Plan 03-04: Storage Encryption
 
@@ -89,3 +90,4 @@ Phase 3 (Global Compliance & Security Core) — Plan 01 completado: IComplianceS
 | Phase 03-ia-generativa-burocracia P04 | 3min | 2 tasks (1 TDD) | 5 files |
 | Phase 03-ia-generativa-burocracia P05 | 15min | 2 tasks | 5 files |
 | 03-global-compliance-core | 01 | ~15min | 2 tasks (1 TDD) | 10 files |
+| 03-global-compliance-core | 02 | 5 min | 2 tasks (1 TDD) | 6 files |
