@@ -7,6 +7,11 @@ from src.core.compliance.factory import (
     get_compliance_strategy,
     get_compliance_strategy_from_config,
 )
+from src.core.compliance.logger import (
+    ComplianceLogFormatter,
+    PIIFilter,
+    setup_compliance_logging,
+)
 
 __all__ = [
     "IComplianceStrategy",
@@ -14,4 +19,7 @@ __all__ = [
     "ExtremePrivacyStrategy",
     "get_compliance_strategy",
     "get_compliance_strategy_from_config",
+    "ComplianceLogFormatter",
+    "PIIFilter",
+    "setup_compliance_logging",
 ]

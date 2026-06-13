@@ -24,6 +24,8 @@ _PII_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
     # National ID patterns (e.g., Latin American cédula: 001-123456-1234A)
     re.compile(r"\b\d{3}[-.\s]?\d{6,9}[-.\s]?\d{1,4}[A-Za-z]?\b"),
+    # UUID v4/v1 identifiers (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+    re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"),
 ]
 
 _REDACTION_TOKEN = "[REDACTED]"
