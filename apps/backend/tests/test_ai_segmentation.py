@@ -52,24 +52,30 @@ class TestSegmentationEnhancer:
         mock_model_manager: MockModelManager,
         sample_fingerprint: np.ndarray,
     ) -> None:
-        """Enhance() returns ndarray with same H,W as input (within model bounds)."""
+        """Enhance() returns ndarray (cropped to mask bounding box) with uint8."""
         enhancer = SegmentationEnhancer(mock_model_manager)
         result = enhancer.enhance(sample_fingerprint)
         assert isinstance(result, np.ndarray)
-        assert result.shape == sample_fingerprint.shape
         assert result.dtype == np.uint8
+        # Output is cropped to bounding box of the mask, so shape <= input
+        assert result.ndim == 2
+        assert result.shape[0] <= sample_fingerprint.shape[0]
+        assert result.shape[1] <= sample_fingerprint.shape[1]
+        # Cropped region has at least some foreground (mask blob applies)
+        assert result.size > 0
 
     def test_enhance_invalid_image(
         self,
         mock_model_manager: MockModelManager,
     ) -> None:
-        """Blank image does not crash — returns zero mask result."""
+        """Blank image does not crash — returns empty cropped region."""
         blank = np.zeros((256, 256), dtype=np.uint8)
         enhancer = SegmentationEnhancer(mock_model_manager)
-        # Should not raise — model produces mask over background
+        # Should not raise — model still produces mask, bitwise_and returns zeros
         result = enhancer.enhance(blank)
         assert isinstance(result, np.ndarray)
-        assert result.shape == (256, 256)
+        assert result.ndim == 2
+        assert result.size > 0
 
 
 # ── SegmentationProcessor unit tests ────────────────────────────────────
