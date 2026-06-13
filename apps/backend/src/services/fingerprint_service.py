@@ -10,7 +10,7 @@ from typing import List, Optional, Union
 import cv2
 import numpy as np
 
-from src.core.gpu_utils import GPUConfig
+
 from src.core.interfaces import IEnhancer, IFeatureExtractor, INormalizer
 from src.core.metrics import measure_time, timed
 from src.core.types import MinutiaCandidate, NormalizedFingerprint
@@ -35,8 +35,8 @@ class FingerprintService:
         self.normalizer = normalizer or MinutiaNormalizer()
 
         # Configure executor based on hardware
-        self.use_parallel = not GPUConfig.is_enabled()
-        self._max_workers = None if self.use_parallel else 1
+        self.use_parallel = True  # Always parallel on CPU
+        self._max_workers = None
 
     def process_image(
         self, image: np.ndarray, fingerprint_id: str = "unknown", resize: bool = True
