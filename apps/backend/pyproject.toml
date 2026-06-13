@@ -66,7 +66,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = ["-v", "--tb=short", "--strict-markers", "-ra"]
+addopts = ["-v", "--tb=short", "--strict-markers", "-ra", "--cov=src", "--cov-report=term-missing", "--cov-fail-under=90"]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
@@ -103,7 +103,13 @@ ignore_missing_imports = true
 
 [tool.coverage.run]
 source = ["src"]
-omit = ["tests/*", "**/__pycache__/*"]
+omit = [
+    "tests/*",
+    "**/__pycache__/*",
+    "src/db/migrations/*",
+    "**/__init__.py",
+]
+concurrency = ["thread", "multiprocessing"]
 
 [tool.coverage.report]
 exclude_lines = [
