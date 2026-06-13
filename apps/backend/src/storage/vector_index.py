@@ -1,3 +1,4 @@
+# NOTE: _VectorRecord is an internal auto-increment table, distinct from db.models.FingerprintVector (UUID PK).
 """Índice vectorial con pgvector para búsqueda de similitud."""
 
 from __future__ import annotations
@@ -19,8 +20,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class FingerprintVector(Base):
-    """Tabla para almacenar vectores de huellas con pgvector."""
+class _VectorRecord(Base):
+    """Internal auto-increment vector storage for pgvector similarity search."""
 
     __tablename__ = "fingerprint_vectors"
 
@@ -28,7 +29,7 @@ class FingerprintVector(Base):
     embedding: Column[list[float]] = Column(Vector(256))  # Vector de 256 dimensiones
 
     def __repr__(self):
-        return f"<FingerprintVector(id={self.id})>"
+        return f"<_VectorRecord(id={self.id})>"
 
 
 class VectorIndex:
@@ -154,7 +155,7 @@ class VectorIndex:
 
         session = self.db_manager.get_session()
         try:
-            vec_record = FingerprintVector(embedding=vector.tolist())
+            vec_record = _VectorRecord(embedding=vector.tolist())
             session.add(vec_record)
             session.commit()
             session.refresh(vec_record)
@@ -227,7 +228,7 @@ class VectorIndex:
         """Retorna el número de vectores en el índice."""
         session = self.db_manager.get_session()
         try:
-            count = session.query(FingerprintVector).count()
+            count = session.query(_VectorRecord).count()
             return count
         finally:
             session.close()
@@ -236,7 +237,7 @@ class VectorIndex:
         """Elimina todos los vectores del índice."""
         session = self.db_manager.get_session()
         try:
-            session.query(FingerprintVector).delete()
+            session.query(_VectorRecord).delete()
             session.commit()
             logger.info("Índice vectorial reseteado")
         except Exception as e:
@@ -251,8 +252,8 @@ class VectorIndex:
         session = self.db_manager.get_session()
         try:
             record = (
-                session.query(FingerprintVector)
-                .filter(FingerprintVector.id == vector_id)
+                session.query(_VectorRecord)
+                .filter(_VectorRecord.id == vector_id)
                 .first()
             )
 
@@ -270,8 +271,8 @@ class VectorIndex:
         session = self.db_manager.get_session()
         try:
             records = (
-                session.query(FingerprintVector)
-                .filter(FingerprintVector.id.in_(vector_ids))
+                session.query(_VectorRecord)
+                .filter(_VectorRecord.id.in_(vector_ids))
                 .all()
             )
 
