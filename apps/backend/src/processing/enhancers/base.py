@@ -3,7 +3,10 @@ Clase base y configuración para Enhancers.
 """
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
+
 import numpy as np
+
+from src.core.interfaces import IEnhancer
 
 @dataclass
 class EnhancerConfig:
