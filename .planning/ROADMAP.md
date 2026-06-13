@@ -1,75 +1,54 @@
 # Roadmap: Biometric
 
-**Created:** 2025-06-12
-**Phases:** 5 | **Requirements mapped:** 27/27 ✓
+**Created:** 2025-06-12 | **Updated:** 2025-06-12
+**Strategy:** Entregas Verticales (Vertical Slices) — cada fase entrega valor real y usable para el perito.
 
 ---
 
-### Phase 1: Investigación y Benchmark de Matching
-**Goal:** Determinar el algoritmo de matching óptimo para uso forense
-**Mode:** mvp
-**Requirements:** AFIS-01, AFIS-02, AFIS-03
-**Success Criteria:**
-1. Documento de investigación con comparación de enfoques (pgvector actual vs NIST vs otros)
-2. Benchmark cuantitativo ejecutado contra dataset SOCOFing o similar
-3. Decisión documentada sobre qué algoritmo implementar
-4. Reproducibilidad del benchmark (scripts + datos de prueba)
+### Fase 1: El Flujo Core Forense (MVP Vertical)
+**Objetivo:** El perito puede subir una foto, el sistema la procesa con CV básico, busca en BD, y el perito compara visualmente para decidir.
+**Valor:** Reemplaza la búsqueda manual en archivos físicos por una búsqueda digital instantánea.
 
-### Phase 2: Seguridad y Auditoría
-**Goal:** Sistema seguro con autenticación, control de acceso y cadena de custodia
-**Mode:** mvp
-**Requirements:** AUTH-01, AUTH-02, AUTH-03, AUDIT-01, AUDIT-02, SEC-01, SEC-02
-**Success Criteria:**
-1. Usuarios pueden autenticarse con JWT con roles (admin, operador, auditor)
-2. Cada operación (registro, identificación, consulta) queda registrada con timestamp + usuario
-3. Imágenes de huellas protegidas (bucket no público)
-4. Validación server-side de imágenes subidas
-5. Frontend protegido por autenticación
+**Plans:** 8 plans
 
-### Phase 3: Infraestructura y CI/CD
-**Goal:** Pipeline de desarrollo robusto con tests reales y deploy automatizado
-**Mode:** mvp
-**Requirements:** INFRA-01, INFRA-02, INFRA-03, INFRA-04, TEST-01, TEST-02, TEST-03, TEST-04
-**Success Criteria:**
-1. GitHub Actions corre tests, lint y typecheck en cada PR
-2. Tests de integración con base de datos de prueba (no mocked)
-3. Tests de frontend con Vitest + Playwright
-4. Docker compose listo para producción (sin --reload, con healthchecks reales)
-5. Reverse proxy con TLS configurado
-6. Scripts de backup/restore funcionales
+Plans:
+- [ ] 01-01-PLAN.md — DB Foundation & FastAPI Core
+- [ ] 01-02-PLAN.md — Audit System & Seed Data
+- [ ] 01-03-PLAN.md — Matching Engine & Benchmark
+- [ ] 01-04-PLAN.md — Core CRUD Routers
+- [ ] 01-05-PLAN.md — Legal Report Generator (PDF)
+- [ ] 01-06-PLAN.md — Auth Service & Security Base
+- [ ] 01-07-PLAN.md — API Wiring & Monolith Teardown
+- [ ] 01-08-PLAN.md — Forensic Frontend (UI)
 
-### Phase 4: UI Forense y Reportes
-**Goal:** Interfaz completa para uso forense con reportes exportables
-**Mode:** mvp
-**Requirements:** UI-01, UI-02, UI-03, UI-04, UI-05, UI-06
-**Success Criteria:**
-1. Login UI funcional con manejo de sesión
-2. Dashboard con métricas en tiempo real (procesamientos, identificaciones, errores)
-3. Panel de resultados con detalle forense (score, minucias coincidentes, imagen)
-4. Carga batch de múltiples imágenes
-5. Reportes exportables en PDF y CSV
-6. Visualización mejorada de minucias en canvas
+### Fase 2: IA de Visión Computacional (El Músculo)
+**Objetivo:** Reemplazar el procesamiento tradicional con Deep Learning para que el sistema funcione bien con fotos de la escena del crimen, no solo de escáner.
+**Valor:** Aumenta radicalmente el "Hit Rate" en huellas de mala calidad.
 
-### Phase 5: Refactor Técnico y Deuda
-**Goal:** Limpiar deuda técnica acumulada para base sólida hacia fase 6+
-**Mode:** mvp
-**Requirements:** REF-01, REF-02, REF-03, REF-04
-**Success Criteria:**
-1. API dividida en routers (rest.py < 300 líneas)
-2. URL del frontend configurable por env var
-3. Código en idioma consistente
-4. Dependencias inyectadas en lugar de singletons globales
-5. Tests pasando después de refactor
+1. **Segmentación IA (U-Net/CNN):** Recorte automático de la huella, eliminando el fondo.
+2. **Enhancement (GAN):** Integración de modelo generativo para limpiar y reconstruir latentes.
+3. **Extracción Deep Learning:** Reemplazo de la extracción tradicional por una red neuronal (ej. MinutiaeNet).
+4. **Editor de Fallback:** Interfaz manual para que el perito edite minucias si la IA falla (5% de los casos).
+
+### Fase 3: IA Generativa y Burocracia Forense (El Cerebro)
+**Objetivo:** Automatizar la redacción y generación del dictamen pericial.
+**Valor:** Le devuelve al perito el 50% de su tiempo, automatizando el papeleo legal.
+
+1. **Motor de Reportes:** Generación de PDF forense estándar.
+2. **GenAI Reportes:** Integración de LLM (local o API segura) para redactar el dictamen legal a partir de los datos técnicos del match.
+3. **Dashboard Analítico:** Estadísticas del laboratorio.
+4. **Asistente (NLP):** Consultas en lenguaje natural sobre la base de datos (ej. "Cadena de custodia de caso X").
+
+### Fase 4: Despliegue, Infraestructura y Operación Policial
+**Objetivo:** Sistema listo para producción on-premise y soporte a hardware físico.
+**Valor:** Sistema autónomo, seguro y extensible a las calles.
+
+1. **CI/CD y Pruebas E2E:** Automatización total.
+2. **Contenedores de Producción:** Docker Compose optimizado para on-premise sin internet.
+3. **Soporte WSQ / NFIQ 2.0:** Estándares del FBI.
+4. **Integración con Scanner:** Soporte para captura en vivo (operación policial).
 
 ---
-
-## Fase 6+ (Post-MVP)
-
-Las siguientes fases se definirán después de completar las 5 fases iniciales:
-
-- **Phase 6**: Implementación de matching AFIS definitivo (según resultados de Phase 1)
-- **Phase 7**: Reconocimiento facial
-- **Phase 8**: Reconocimiento de iris
-- **Phase 9**: Matching multimodal
-- **Phase 10**: Escalabilidad (cola de tareas, sharding)
-- **Phase 11**: Sincronización servidor ↔ equipos forenses
+## Fases Futuras (Post-Fase 4)
+- **Fase 5:** Reconocimiento Facial (Multimodal)
+- **Fase 6:** Sincronización entre múltiples laboratorios regionales.
