@@ -74,8 +74,8 @@ def test_search_performance(sample_image, repository):
     for i in range(num_samples):
         fp = service.process_image(sample_image, fingerprint_id=f"fp_{i}")
         if fp.minutiae:
-            repository.register(fp=
-                fingerprint=fp,
+            repository.register(
+        fp=fp,
                 person_id=f"P{i:03d}",
                 name=f"User {i}",
                 document=f"DOC{i:08d}"
@@ -108,7 +108,7 @@ def test_end_to_end_latency(sample_image, repository):
     # Registrar una huella de referencia
     fp_ref = service.process_image(sample_image)
     if fp_ref.minutiae:
-        repository.register(fp=
+        repository.register(
             fingerprint=fp_ref,
             person_id="P001",
             name="Reference",

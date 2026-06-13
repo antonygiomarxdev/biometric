@@ -23,8 +23,8 @@ def test_full_pipeline(sample_image, repository):
     # Si tiene minutiae, continuar con registro e identificación
     if fingerprint.minutiae:
         # 2. Registrar
-        record_id = repository.register(fp=
-            fingerprint=fingerprint,
+        record_id = repository.register(
+        fp=fingerprint,
             person_id="P001",
             name="Test User",
             document="12345678"
@@ -63,8 +63,8 @@ def test_register_and_search(sample_image, repository):
         
         if fp.minutiae:
             fingerprints.append(fp)
-            repository.register(fp=
-                fingerprint=fp,
+            repository.register(
+        fp=fp,
                 person_id=f"P{i:03d}",
                 name=f"User {i}",
                 document=f"DOC{i:08d}"
@@ -88,7 +88,7 @@ def test_no_match_scenario(sample_image, repository):
     fp1 = service.process_image(sample_image, fingerprint_id="fp1")
     
     if fp1.minutiae:
-        repository.register(fp=
+        repository.register(
             fingerprint=fp1,
             person_id="P001",
             name="User 1",
