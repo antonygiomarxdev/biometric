@@ -1,0 +1,19 @@
+{
+  "nodes": [
+    { "id": "nginx", "name": "Nginx (TLS)", "type": "frame", "x": 400, "y": 50, "w": 200, "h": 60, "fill": "#2563EB" },
+    { "id": "api", "name": "FastAPI", "type": "frame", "x": 400, "y": 150, "w": 200, "h": 60, "fill": "#059669" },
+    { "id": "celery", "name": "Celery Workers (v2)", "type": "frame", "x": 650, "y": 150, "w": 200, "h": 60, "fill": "#D97706" },
+    { "id": "redis", "name": "Redis Queue", "type": "frame", "x": 650, "y": 270, "w": 200, "h": 60, "fill": "#DC2626" },
+    { "id": "postgres", "name": "PostgreSQL + pgvector", "type": "frame", "x": 400, "y": 270, "w": 200, "h": 60, "fill": "#6366F1" },
+    { "id": "minio", "name": "MinIO (Imágenes)", "type": "frame", "x": 150, "y": 270, "w": 200, "h": 60, "fill": "#0891B2" },
+    { "id": "prometheus", "name": "Prometheus + Grafana", "type": "frame", "x": 150, "y": 150, "w": 200, "h": 60, "fill": "#7C3AED" },
+    { "id": "forensic", "name": "Equipos Forenses (PWA + Scanner)", "type": "frame", "x": 400, "y": 400, "w": 200, "h": 60, "fill": "#4B5563" },
+    { "id": "arrows_1", "name": "", "type": "connection", "from": "nginx", "to": "api" },
+    { "id": "arrows_2", "name": "", "type": "connection", "from": "api", "to": "postgres" },
+    { "id": "arrows_3", "name": "", "type": "connection", "from": "api", "to": "minio" },
+    { "id": "arrows_4", "name": "", "type": "connection", "from": "api", "to": "celery" },
+    { "id": "arrows_5", "name": "", "type": "connection", "from": "celery", "to": "redis" },
+    { "id": "arrows_6", "name": "", "type": "connection", "from": "api", "to": "prometheus" },
+    { "id": "arrows_7", "name": "", "type": "connection", "from": "forensic", "to": "nginx" }
+  ]
+}

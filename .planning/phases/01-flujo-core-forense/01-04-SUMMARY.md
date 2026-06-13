@@ -129,6 +129,12 @@ None - no external service configuration required.
 - Core REST resource routers are fully defined, type-checked via Pydantic, and wired into the FastAPI application.
 - Ready for Plan 05: Matching pipeline routers and frontend integration.
 
+## Self-Check: PASSED
+
+- **Files verified:** All 5 files exist on disk
+- **Commits verified:** All 3 commits present in git history (`40030f7`, `a4015ca`, `6b05851`)
+- **Import tests:** All three routers (`cases`, `evidencias`, `decisiones`) import cleanly
+
 ---
 
 *Phase: 01-flujo-core-forense*

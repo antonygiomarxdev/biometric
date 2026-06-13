@@ -23,7 +23,7 @@ import {
   searchMatching,
   createDecision,
 } from "@/lib/api";
-import type { CaseResponse, EvidenceResponse, MatchCandidate } from "@/lib/api";
+import type { EvidenceResponse, MatchCandidate } from "@/lib/api";
 
 type Verdict = "Identificación" | "Exclusión" | "Inconcluso";
 
@@ -32,28 +32,24 @@ const VERDICT_BUTTONS: {
   label: string;
   icon: typeof CheckCircle;
   variant: "default" | "destructive" | "secondary";
-  color: string;
 }[] = [
   {
     verdict: "Identificación",
     label: "Identificación",
     icon: CheckCircle,
     variant: "default",
-    color: "bg-green-600 hover:bg-green-700 text-white",
   },
   {
     verdict: "Exclusión",
     label: "Exclusión",
     icon: XCircle,
     variant: "destructive",
-    color: "",
   },
   {
     verdict: "Inconcluso",
     label: "Inconcluso",
     icon: HelpCircle,
     variant: "secondary",
-    color: "",
   },
 ];
 
@@ -134,7 +130,7 @@ function CandidateCard({
                       ? "bg-yellow-500"
                       : "bg-muted-foreground/30"
                 }`}
-                style={{ width: `${Math.min(scorePercent, 100)}%` }}
+                style={{ width: `${Math.min(Number(scorePercent), 100)}%` }}
               />
             </div>
             <span className="text-xs font-mono text-muted-foreground shrink-0">
@@ -550,7 +546,7 @@ export default function ComparisonView() {
                       Decisión registrada: {submittedVerdict}
                     </Badge>
                   ) : (
-                    VERDICT_BUTTONS.map(({ verdict, label, icon: Icon, color }) => (
+                    VERDICT_BUTTONS.map(({ verdict, label, icon: Icon }) => (
                       <Button
                         key={verdict}
                         variant={verdict === "Exclusión" ? "destructive" : verdict === "Inconcluso" ? "secondary" : "default"}

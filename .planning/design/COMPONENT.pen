@@ -1,0 +1,20 @@
+{
+  "nodes": [
+    { "id": "api-layer", "name": "API Layer (FastAPI Routers)", "type": "frame", "x": 300, "y": 50, "w": 300, "h": 50, "fill": "#3B82F6" },
+    { "id": "auth-router", "name": "Auth Router", "type": "frame", "x": 150, "y": 120, "w": 150, "h": 40, "fill": "#93C5FD" },
+    { "id": "fp-router", "name": "Fingerprint Router", "type": "frame", "x": 320, "y": 120, "w": 150, "h": 40, "fill": "#93C5FD" },
+    { "id": "admin-router", "name": "Admin Router", "type": "frame", "x": 490, "y": 120, "w": 150, "h": 40, "fill": "#93C5FD" },
+    { "id": "svc-layer", "name": "Service Layer", "type": "frame", "x": 300, "y": 190, "w": 300, "h": 50, "fill": "#10B981" },
+    { "id": "auth-svc", "name": "AuthService", "type": "frame", "x": 150, "y": 260, "w": 150, "h": 40, "fill": "#6EE7B7" },
+    { "id": "fp-svc", "name": "FingerprintService", "type": "frame", "x": 320, "y": 260, "w": 150, "h": 40, "fill": "#6EE7B7" },
+    { "id": "audit-svc", "name": "AuditService", "type": "frame", "x": 490, "y": 260, "w": 150, "h": 40, "fill": "#6EE7B7" },
+    { "id": "processing", "name": "Processing Layer (Strategy)", "type": "frame", "x": 300, "y": 330, "w": 300, "h": 50, "fill": "#F59E0B" },
+    { "id": "enhancer", "name": "Enhancer (GPU/CPU)", "type": "frame", "x": 150, "y": 400, "w": 150, "h": 40, "fill": "#FCD34D" },
+    { "id": "extractor", "name": "Extractor", "type": "frame", "x": 320, "y": 400, "w": 150, "h": 40, "fill": "#FCD34D" },
+    { "id": "normalizer", "name": "Normalizer", "type": "frame", "x": 490, "y": 400, "w": 150, "h": 40, "fill": "#FCD34D" },
+    { "id": "storage", "name": "Storage Layer", "type": "frame", "x": 300, "y": 470, "w": 300, "h": 50, "fill": "#8B5CF6" },
+    { "id": "repo", "name": "Repository (Hybrid Match)", "type": "frame", "x": 150, "y": 540, "w": 150, "h": 40, "fill": "#C4B5FD" },
+    { "id": "vector", "name": "pgvector Index", "type": "frame", "x": 320, "y": 540, "w": 150, "h": 40, "fill": "#C4B5FD" },
+    { "id": "obj-storage", "name": "MinIO Storage", "type": "frame", "x": 490, "y": 540, "w": 150, "h": 40, "fill": "#C4B5FD" }
+  ]
+}

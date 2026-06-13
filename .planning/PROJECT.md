@@ -1,90 +1,105 @@
-# Biometric — Sistema AFIS para Identificación Gubernamental
+# Biometric — Sistema AFIS para Criminalística
 
 ## What This Is
 
-Sistema biométrico de identificación por huellas dactilares (AFIS) diseñado para uso gubernamental y forense. Procesa imágenes de huellas, extrae minucias, y realiza identificación por matching vectorial. Actualmente en fase de investigación y desarrollo, con visión de convertirse en plataforma multimodal (huellas + facial + iris).
+**Sistema de identificación dactilar para laboratorios de criminalística.** El perito forense sube una foto de una huella levantada en escena del crimen, el sistema ayuda a segmentarla, mejorarla, extraer minucias, y buscar candidatos en base de datos. El perito revisa, ajusta y decide — el sistema no reemplaza al experto.
+
+Secundariamente, soportará identificación con scanner para uso operativo policial.
 
 ## Core Value
 
-Identificar personas por sus huellas dactilares con precisión forense, rapidez y auditabilidad, en un sistema propio y soberano para el gobierno de Nicaragua.
+Darle al perito forense una herramienta digital para identificar huellas latentes más rápido y con trazabilidad, manteniendo su criterio como autoridad final.
 
-## Context
+## Who Uses It
 
-- Proyecto iniciado como aprendizaje personal que evolucionó a necesidad real identificada en Nicaragua
-- Contacto informal con potenciales usuarios en el ámbito gubernamental
-- Backend funcional con pipeline de procesamiento (enhancement → extracción → normalización → matching)
-- Arquitectura Clean Code con Strategy Pattern para múltiples biometrías
-- Matching actual: pgvector L2 + reranking coseno (híbrido)
-- Sin autenticación, sin auditoría, sin CI/CD
-- Face provider es stub (no implementado)
-- Sistema desplegable en modalidad híbrida: servidores on-premise y equipos forenses locales
+| Usuario | Qué hace | Sistema |
+|---------|----------|---------|
+| **Perito forense** | Sube foto de huella latente, el sistema procesa automáticamente y busca en BD, el perito revisa candidatos y decide | Web app en laboratorio |
+| **Admin técnico** | Configura sistema, gestiona usuarios, monitorea | Web app |
+| **Auditor** | Revisa cadena de custodia, reportes | Solo consulta |
+| **Futuro: Operador policial** | Captura con scanner, identificación rápida | Web app + scanner |
+
+## Real Workflow (Criminalística)
+
+```
+PRIMARIO (95% de los casos):
+1. SUBIR FOTO → Foto de huella latente (JPEG, cualquier ángulo/fondo)
+2. PIPELINE AUTOMÁTICO → Segmentación + Enhancement + Extracción
+3. BUSCAR 1:N → Devuelve TOP-K candidatos con score
+4. PERITO REVISA → Compara visualmente lado a lado
+5. PERITO DECIDE → Match confirmado o descartado
+6. REPORTE PDF → Con cadena de custodia
+
+FALLBACK (5%, casos difíciles):
+Si el pipeline automático no da buen resultado:
+  → Perito ajusta parámetros de enhancement
+  → O marca/edita minucias manualmente
+  → Re-busca
+  → Revisa y decide
+```
+
+## What We Have Now
+
+- Pipeline básico de procesamiento (enhancement → extracción CN → normalización → matching vectorial)
+- API REST (8 endpoints)
+- Frontend React con carga de imagen y visualización básica
+- PostgreSQL + pgvector + MinIO en Docker
+- Sin auth, sin auditoría, sin herramientas forenses
+
+## Estrategia de Inteligencia Artificial (Doble Motor)
+
+Nuestra ventaja competitiva radica en democratizar tecnología de punta que los gigantes de la industria venden a precios exorbitantes, empaquetada en una herramienta accesible para laboratorios en LATAM:
+
+1. **IA de Visión Computacional (El Músculo):**
+   - *Segmentación (U-Net/CNN):* Aislar automáticamente la huella de fondos complejos (madera, papel, ruido).
+   - *Enhancement (GANs):* Reconstruir crestas degradadas en huellas latentes sin inventar minucias falsas.
+   - *Extracción (Deep Learning):* Detección robusta de minucias basada en redes neuronales, superior a la skeletonización tradicional.
+   - *Matching:* Búsqueda vectorial 1:N ultrarrápida usando embeddings y `pgvector`.
+
+2. **IA Generativa (El Cerebro Operativo):**
+   - *Generación de Dictámenes (LLM local/seguro):* Redacción automática de borradores de informes periciales en lenguaje judicial, basados en los hallazgos técnicos (ahorra 50% del tiempo de papeleo).
+   - *Asistente Forense:* Consultas en lenguaje natural (Text-to-SQL) para estadísticas y auditoría de cadena de custodia.
+   - *Explicabilidad (XAI):* Traducción de métricas de matching a justificaciones comprensibles para la corte.
+
+## What We Need to Build
+
+| Prioridad | Funcionalidad | Para qué |
+|-----------|--------------|----------|
+| 🔴 **Crítica** | Pipeline automático robusto | Segmentar + mejorar + extraer de foto real (no scanner) |
+| 🔴 **Crítica** | Búsqueda 1:N con candidatos | Devolver top-K para que perito revise |
+| 🔴 **Crítica** | Revisión visual lado a lado | Perito compara y decide |
+| 🔴 **Crítica** | Reporte forense PDF | Admisible en corte |
+| 🔴 **Crítica** | Cadena de custodia | Trazabilidad de cada acción |
+| 🟡 **Alta** | Carga de foto (JPEG/PNG) | Input principal: foto de cámara |
+| 🟡 **Alta** | Editor manual de minucias (fallback) | Solo para casos difíciles donde lo automático no funciona |
+| 🟢 **Media** | Autenticación + roles | Perito, admin, auditor |
+| 🟢 **Baja** | WSQ / scanner | Para futuro modo operativo policial |
+| 🟢 **Baja** | Velocidad en tiempo real | El perito espera, no es crítica |
+
+## Tech Stack (confirmado)
+
+| Componente | Tecnología | Estado |
+|-----------|-----------|--------|
+| Backend | Python 3.12+ / FastAPI | ✅ Confirmado |
+| Frontend | React + TypeScript + Vite | ✅ Confirmado |
+| Database | PostgreSQL + pgvector (HNSW) | ✅ Confirmado |
+| Storage | MinIO (imágenes) | ✅ Confirmado |
+| Queue | Redis + Celery (para async) | 📅 Futuro |
+| Auth | JWT + bcrypt | 📅 Fase 2 |
 
 ## Constraints
 
-- **Tecnología**: Stack actual Python/FastAPI/PostgreSQL mantenerse o evolucionar justificadamente
-- **Seguridad**: Al ser uso gubernamental/forense, autenticación, autorización y audit trail son críticos
-- **Precisión**: El matching debe cumplir estándares forenses (investigar qué estándares aplicar)
-- **Despliegue**: On-premise (servidores gobierno) + equipos forenses locales → sin dependencia cloud
-- **Rendimiento**: Capacidad de procesar volúmenes grandes de huellas (escala civil)
+- **On-premise:** Sin cloud, datos nunca salen del laboratorio
+- **Perito decide:** El sistema asiste, no reemplaza al experto
+- **Auditable:** Cada operación trazable para uso judicial
+- **Idioma:** Español (usuarios en Nicaragua)
 
-## Key Decisions
+## Key Principles
 
-| Decision | Rationale | Outcome |
-|----------|-----------|---------|
-| Nombre "Biometric" | Renombrado de BioSecure Gov para identidad propia | — Pending |
-| Matching híbrido (pgvector + coseno) | Implementación actual, investigar si cumple estándar AFIS | — Pending |
-| On-premise + forense | Sin cloud, control total de datos | — Pending |
-
-## Requirements
-
-### Validated
-
-- ✓ Extracción de minucias desde imágenes de huellas — existing
-- ✓ Pipeline de procesamiento (enhance + extract + normalize) — existing
-- ✓ Registro de personas con huellas — existing
-- ✓ Identificación por similitud vectorial — existing
-- ✓ Almacenamiento de imágenes en MinIO — existing
-- ✓ API REST con 8 endpoints — existing
-- ✓ Frontend React con UI de identificación/registro — existing
-- ✓ Soporte GPU (CuPy) con fallback CPU — existing
-- ✓ Arquitectura Strategy para múltiples biometrías — existing
-
-### Active
-
-- [ ] **AFIS-01**: Investigar y definir algoritmo de matching con precisión forense
-- [ ] **AFIS-02**: Autenticación y control de acceso al sistema
-- [ ] **AFIS-03**: Audit trail de todas las operaciones (quién, cuándo, qué)
-- [ ] **AFIS-04**: Pipeline de CI/CD para desarrollo seguro
-- [ ] **AFIS-05**: Tests de integración reales (no mocked)
-- [ ] **AFIS-06**: Frontend tests (Vitest/Playwright)
-- [ ] **AFIS-07**: Producción-ready (SSL, secrets, reverse proxy)
-- [ ] **AFIS-08**: Reportes y exportación de resultados forenses
-- [ ] **AFIS-09**: Carga batch de huellas desde escáner AFIS
-- [ ] **AFIS-10**: Dashboard de monitoreo y métricas
-
-### Out of Scope
-
-- **Reconocimiento Facial** — Postergado a fase posterior del roadmap
-- **Reconocimiento de Iris** — Postergado a fase posterior
-- **App móvil** — Web-first, interfaz forense de escritorio prioritaria
-- **Cloud público** — On-premise obligatorio por naturaleza de los datos
-
-## Evolution
-
-This document evolves at phase transitions and milestone boundaries.
-
-**After each phase transition:**
-1. Requirements invalidated? → Move to Out of Scope with reason
-2. Requirements validated? → Move to Validated with phase reference
-3. New requirements emerged? → Add to Active
-4. Decisions to log? → Add to Key Decisions
-5. "What This Is" still accurate? → Update if drifted
-
-**After each milestone:**
-1. Full review of all sections
-2. Core Value check — still the right priority?
-3. Audit Out of Scope — reasons still valid?
-4. Update Context with current state
+1. **Tool, not replacement** — El perito es la autoridad, el sistema es su herramienta
+2. **Forensic first** — Cadena de custodia, reportes, auditabilidad desde el día 1
+3. **Modos de operación** — Criminalística (foto, revisión manual) + futuro policial (scanner, rápido)
+4. **On-premise** — Soberanía de datos, sin dependencia externa
 
 ---
-*Last updated: 2025-06-12 after initialization*
+*Last updated: 2025-06-12 — visión corregida a criminalística forense*
