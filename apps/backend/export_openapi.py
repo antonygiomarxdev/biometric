@@ -1,5 +1,5 @@
 import json
-from src.api.rest import app
+from src.main import app
 
 def export_openapi():
     openapi_data = app.openapi()

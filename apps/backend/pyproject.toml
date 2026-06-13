@@ -43,7 +43,7 @@ dev = [
 
 [project.scripts]
 biometric = "src.api.cli:cli"
-biometric-api = "src.api.rest:main"
+biometric-api = "src.main:app"
 
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]
