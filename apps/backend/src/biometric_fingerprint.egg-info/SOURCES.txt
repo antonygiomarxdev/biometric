@@ -26,8 +26,15 @@ src/processing/enhancers/gpu.py
 src/services/__init__.py
 src/services/comparison_service.py
 src/services/fingerprint_service.py
+src/services/biometrics/__init__.py
+src/services/biometrics/base.py
+src/services/biometrics/factory.py
+src/services/biometrics/providers/__init__.py
+src/services/biometrics/providers/face.py
+src/services/biometrics/providers/fingerprint.py
 src/storage/__init__.py
 src/storage/database.py
+src/storage/object_storage.py
 src/storage/repository.py
 src/storage/vector_index.py
 tests/test_api_e2e.py
