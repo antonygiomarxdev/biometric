@@ -74,6 +74,7 @@ class TestGetAssistantQueryEngine:
         assert call_kwargs.get("synthesize_response") is True
 
 
+@pytest.mark.asyncio
 class TestAskAssistant:
     """``ask_assistant`` should return a synthesised text response."""
 
