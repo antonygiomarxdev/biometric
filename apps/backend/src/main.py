@@ -24,10 +24,11 @@ from src.api.routers import (
     auth_router,
     cases_router,
     decisions_router,
-    reports_router,
     evidence_router,
+    genai_router,
     known_fingerprints_router,
     matching_router,
+    reports_router,
 )
 
 logger = logging.getLogger(__name__)
@@ -126,6 +127,7 @@ async def not_found_error_handler(
 app.include_router(auth_router)
 app.include_router(cases_router)
 app.include_router(evidence_router)
+app.include_router(genai_router)
 app.include_router(known_fingerprints_router)
 app.include_router(matching_router)
 app.include_router(decisions_router)
