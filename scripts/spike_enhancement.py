@@ -24,6 +24,7 @@ from typing import Optional
 
 import cv2
 import numpy as np
+import onnxruntime as ort
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -282,27 +283,30 @@ class SOCOFingDataset(Dataset):
 
 
 class CNNAutoencoder(nn.Module):
-    """Lightweight 6-layer CNN autoencoder as comparison baseline.
+    """Lightweight 8-layer CNN autoencoder as comparison baseline.
 
     Architecture:
-        Encoder: Conv3x3(1→32) → Conv3x3(32→64) → Conv3x3(64→128) (stride 2 each)
-        Decoder: ConvTranspose(128→64) → ConvTranspose(64→32) → Conv3x3(32→1)
-        Each Conv has BatchNorm + ReLU; final layer has TanH to output in [-1,1].
+        Encoder: stride-2 conv blocks: 1→32→64→128→256
+        Decoder: stride-2 transpose conv blocks: 256→128→64→32→1
+        Each Conv has BatchNorm + ReLU; final TanH maps output to [-1, 1].
+        Input 512x512 → output 512x512.
     """
 
     def __init__(self, in_channels: int = 1) -> None:
         super().__init__()
 
-        # Encoder
+        # Encoder: 512 → 256 → 128 → 64 → 32
         self.enc1 = self._block(in_channels, 32)
         self.enc2 = self._block(32, 64)
         self.enc3 = self._block(64, 128)
+        self.enc4 = self._block(128, 256)
 
-        # Decoder
+        # Decoder: 32 → 64 → 128 → 256 → 512
+        self.dec4 = self._up_block(256, 128)
         self.dec3 = self._up_block(128, 64)
         self.dec2 = self._up_block(64, 32)
         self.dec1 = nn.Sequential(
-            nn.Conv2d(32, in_channels, kernel_size=3, padding=1),
+            nn.ConvTranspose2d(32, in_channels, kernel_size=4, stride=2, padding=1),
             nn.Tanh(),
         )
 
@@ -328,14 +332,16 @@ class CNNAutoencoder(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Encoder
-        e1 = self.enc1(x)      # 1 -> 32,  256x256
-        e2 = self.enc2(e1)     # 32 -> 64, 128x128
-        e3 = self.enc3(e2)     # 64 -> 128, 64x64
+        e1 = self.enc1(x)       # 1 → 32,   256x256
+        e2 = self.enc2(e1)      # 32 → 64,  128x128
+        e3 = self.enc3(e2)      # 64 → 128,  64x64
+        e4 = self.enc4(e3)      # 128 → 256, 32x32
 
         # Decoder
-        d3 = self.dec3(e3)     # 128 -> 64, 128x128
-        d2 = self.dec2(d3)     # 64 -> 32,  256x256
-        d1 = self.dec1(d2)     # 32 -> 1,   512x512
+        d4 = self.dec4(e4)      # 256 → 128, 64x64
+        d3 = self.dec3(d4)      # 128 → 64,  128x128
+        d2 = self.dec2(d3)      # 64 → 32,   256x256
+        d1 = self.dec1(d2)      # 32 → 1,    512x512
         return d1
 
 
@@ -389,11 +395,9 @@ class PerceptualLoss(nn.Module):
         import kornia.losses as K
 
         l1_loss = F.l1_loss(pred, target)
-        # SSIM loss = 1 - SSIM (higher SSIM = lower loss)
-        ssim_loss = 1.0 - K.ssim(
-            pred, target, window_size=11, reduction="mean"
-        )
-        return self.alpha * l1_loss + self.beta * ssim_loss
+        # SSIM loss: kornia's ssim_loss returns 1 - SSIM, so higher SSIM = lower loss
+        ssim_val = K.ssim_loss(pred, target, window_size=11, reduction="mean")
+        return self.alpha * l1_loss + self.beta * ssim_val
 
 
 # ---------------------------------------------------------------------------
@@ -419,7 +423,8 @@ def compute_ssim_score(
     import kornia.losses as K
 
     with torch.no_grad():
-        ssim_val = K.ssim(pred, target, window_size=11, reduction="mean")
+        # ssim_loss returns 1 - SSIM, so we invert it
+        ssim_val = 1.0 - K.ssim_loss(pred, target, window_size=11, reduction="mean")
     return float(ssim_val.item())
 
 
@@ -554,10 +559,14 @@ def validate(
         loss = criterion(output, real_imgs)
         total_loss += loss.item()
 
-        # Metrics on each sample
+        # Metrics on each sample (unsqueeze to add batch dim for kornia)
         for i in range(real_imgs.size(0)):
             psnr_list.append(compute_psnr(output[i], real_imgs[i]))
-            ssim_list.append(compute_ssim_score(output[i], real_imgs[i]))
+            ssim_list.append(
+                compute_ssim_score(
+                    output[i].unsqueeze(0), real_imgs[i].unsqueeze(0)
+                )
+            )
 
             # Minutiae recovery on CPU numpy
             enhanced_np = _tensor_to_uint8(output[i].squeeze(0))
@@ -608,6 +617,7 @@ def export_to_onnx(
                 "output": {0: "batch_size"},
             },
             opset_version=18,
+            dynamo=False,
         )
         logger.info("Modelo exportado a ONNX: %s", output_path)
         return output_path
