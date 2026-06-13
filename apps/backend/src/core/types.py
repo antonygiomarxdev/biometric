@@ -22,6 +22,9 @@ class AlgorithmOrigin(Enum):
     GABOR = auto()
     ADAPTIVE = auto()
     CONSENSUS = auto()
+    DEEP_LEARNING = auto()      # DL-based extraction (CNN / ViT)
+    GAN_ENHANCED = auto()       # GAN-enhanced minutiae
+    SEGMENTATION_AI = auto()    # AI segmentation (U-Net, etc.)
 
 @dataclass(frozen=True, slots=True)
 class MinutiaCandidate:
