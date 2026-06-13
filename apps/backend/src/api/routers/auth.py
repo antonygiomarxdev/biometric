@@ -18,14 +18,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
-from src.api.dependencies import get_db
+from src.api.dependencies import get_db, get_current_user
+from src.services.auth_service import create_access_token, verify_password, get_password_hash
 from src.core.config import config
 from src.db.models import User
-from src.api.dependencies.auth import (
-    create_access_token,
-    get_current_user,
-    verify_password,
-)
 
 logger = logging.getLogger(__name__)
 
