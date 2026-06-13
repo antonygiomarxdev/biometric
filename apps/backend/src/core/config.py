@@ -87,6 +87,13 @@ class Config:
         )
     )
 
+    # Storage Encryption (Fernet/AES-256)
+    storage_encryption_key: str = field(
+        default_factory=lambda: os.getenv(
+            "STORAGE_ENCRYPTION_KEY", ""
+        )
+    )
+
     # Authentication / JWT
     jwt_secret_key: str = field(
         default_factory=lambda: os.getenv(
