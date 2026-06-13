@@ -1,0 +1,164 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+# ---------------------------------------------------------------------------
+# Promptfoo evaluation configuration for the Biometric AI pipeline.
+#
+# Targets the forensic report generator (Dictamen Pericial) prompts from
+# ``src/ai/report_generator.py``.
+#
+# Run::
+#
+#     promptfoo eval -c promptfooconfig.yaml --no-telemetry
+#
+# See: https://www.promptfoo.dev/docs/configuration/guide
+# ---------------------------------------------------------------------------
+
+prompts:
+  # System prompt for the forensic report generator.
+  # Mirrors the prompt from src/ai/report_generator.py.
+  - |
+    Eres un Perito informático experto en la legislación de la República
+    de Nicaragua. Tu función es redactar Dictámenes Periciales forenses
+    con un tono formal, objetivo y técnicamente riguroso.
+
+    Debes cumplir estrictamente las siguientes reglas:
+    1. Usa lenguaje jurídico-técnico propio de la criminalística.
+    2. No uses frases conversacionales, especulativas o propias de un
+       asistente (ej. "parece ser", "es muy probable", "yo creo",
+       "aquí tienes el resumen").
+    3. Cada hallazgo técnico debe estar respaldado por los datos
+       proporcionados en los resultados de la consulta SQL.
+    4. No inventes ni extrapoles métricas o puntos característicos
+       que no estén explícitamente en los datos.
+    5. Incluye los identificadores de caso, huellas y evidencias
+       exactamente como aparecen en los datos, sin truncarlos ni
+       resumirlos.
+    6. La conclusión debe establecer si las huellas latentes y las
+       huellas de referencia provienen de la **misma fuente**, evitando
+       afirmaciones absolutas de identidad.
+
+    Datos del caso:
+    {{sql_results}}
+
+providers:
+  - id: ollama:llama3.1:latest
+    label: local-llama
+    config:
+      temperature: 0.1
+      context_window: 8000
+      request_timeout: 120
+
+# Default test variables shared across all test cases.
+defaults:
+  tests:
+    options:
+      provider:
+        text:
+          # Used for LLM-as-judge assertions below (ragas_faithfulness, etc.)
+          id: ollama:llama3.1:latest
+
+tests:
+  # ── Standard critical-path case ──────────────────────────────────────
+  - description: "Standard case — clear match with complete evidence"
+    vars:
+      sql_results: |
+        Caso: CASO-2024-001
+        Fecha: 2024-03-15
+        Perito: Dr. Juan Pérez
+        Evidencias:
+          - ID: HUE-001, Tipo: Latente, Fuente: Escena crimen
+          - ID: HUE-002, Tipo: Referencia, Fuente: Sospechoso
+        Minutias Coincidentes: 12
+        Resultado: Coincidencia positiva (misma fuente)
+    assert:
+      - type: is-json
+        # The LLM is instructed to produce structured JSON matching
+        # the DictamenPericial Pydantic schema.
+      - type: not-contains
+        value: "parece ser"
+      - type: not-contains
+        value: "es muy probable"
+      - type: not-contains
+        value: "yo creo"
+      - type: not-contains
+        value: "aquí tienes"
+      - type: contains
+        value: "misma fuente"
+
+  # ── Degraded / partial evidence ─────────────────────────────────────
+  - description: "Degraded evidence — low minutiae count, epistemic caution"
+    vars:
+      sql_results: |
+        Caso: CASO-2024-002
+        Fecha: 2024-06-22
+        Perito: Dr. Ana López
+        Evidencias:
+          - ID: HUE-010, Tipo: Latente, Fuente: Escena crimen (parcial)
+          - ID: HUE-011, Tipo: Referencia, Fuente: Sospechoso
+        Minutias Coincidentes: 4
+        Resultado: Coincidencia parcial (insuficiente para conclusión definitiva)
+    assert:
+      - type: is-json
+      - type: not-contains
+        value: "parece ser"
+      - type: not-contains
+        value: "yo creo"
+      - type: contains
+        value: "insuficiente"
+      - type: not-contains
+        value: "definitivamente"
+      - type: not-contains
+        value: "identidad absoluta"
+
+  # ── Edge case — large evidence log, tests summarisation ──────────────
+  - description: "Large evidence log — multiple items, tests context handling"
+    vars:
+      sql_results: |
+        Caso: CASO-2024-003
+        Fecha: 2024-09-10
+        Perito: Dr. Carlos Mendoza
+        Evidencias:
+          - ID: HUE-020, Tipo: Latente, Fuente: Puerta principal
+          - ID: HUE-021, Tipo: Latente, Fuente: Ventana
+          - ID: HUE-022, Tipo: Latente, Fuente: Arma
+          - ID: HUE-023, Tipo: Referencia, Fuente: Sospechoso Principal
+          - ID: HUE-024, Tipo: Referencia, Fuente: Sospechoso Secundario
+        Minutias Coincidentes: 8
+        Resultado: Coincidencia positiva (misma fuente)
+    assert:
+      - type: is-json
+      - type: not-contains
+        value: "parece ser"
+      - type: contains
+        value: "HUE-020"
+      - type: contains
+        value: "HUE-021"
+      - type: contains
+        value: "HUE-022"
+      - type: not-contains
+        value: "etc"
+
+  # ── Adversarial — conflicting context ────────────────────────────────
+  - description: "Adversarial — conflicting evidence, tests hallucination guardrails"
+    vars:
+      sql_results: |
+        Caso: CASO-2024-004
+        Fecha: 2024-11-05
+        Perito: Dr. Laura Gómez
+        Evidencias:
+          - ID: HUE-030, Tipo: Latente, Fuente: Vehículo
+          - ID: HUE-031, Tipo: Referencia, Fuente: Sospechoso
+        Minutias Coincidentes: 0
+        Resultado: Sin coincidencia (orígenes distintos)
+    assert:
+      - type: is-json
+      - type: not-contains
+        value: "parece ser"
+      - type: contains
+        value: "orígenes distintos"
+      - type: not-contains
+        value: "coincidencia"
+      - type: not-contains
+        value: "misma fuente"
+      - type: contains
+        value: "0"
