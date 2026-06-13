@@ -1,7 +1,7 @@
 """
 Router for the forensic audit log (auditoría de cadena de custodia).
 
-Per D-02: one router per REST resource — ``auditoria.py`` exposes
+Per D-02: one router per REST resource — ``audit.py`` exposes
 read-only endpoints against the ``audit_log`` table, allowing peritos,
 admins, and auditors to inspect the immutable hash chain (D-09).
 
@@ -12,7 +12,7 @@ Endpoints
 """
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
