@@ -16,7 +16,8 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.services.fingerprint_service import fingerprint_service
-from src.services.comparison_service import comparison_service
+from src.storage.repository import repository
+
 from src.storage.database import db_manager
 from src.core.metrics import metrics
 
@@ -150,7 +151,7 @@ def register(dataset_path, subset, limit, skip_errors):
                     continue
                 
                 # Registrar
-                comparison_service.register_fingerprint(
+                repository.register(fp=
                     fingerprint=fingerprint,
                     person_id=metadata["person_id"],
                     name=f"{metadata['name']} - {metadata['hand']} {metadata['finger']}",
@@ -242,7 +243,7 @@ def identify(dataset_path, subset, num_queries, different_person):
                     continue
                 
                 # Identificar
-                result = comparison_service.identify(fingerprint)
+                result = repository.identify(fingerprint)
                 
                 results["total"] += 1
                 

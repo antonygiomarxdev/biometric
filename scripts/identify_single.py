@@ -7,10 +7,10 @@ import time
 sys.path.insert(0, str(Path(__file__).parent))
 
 from src.services.fingerprint_service import fingerprint_service
-from src.services.comparison_service import comparison_service
+
 from src.storage.repository import repository
 from src.core.metrics import metrics
-from src.core.gpu_utils import GPUConfig
+# GPU support removed (CPU-only)
 from src.core.config import config
 
 
@@ -62,7 +62,7 @@ def identify_image(image_path: str):
     print(f"   Huellas indexadas: {total_indexed}")
     
     start = time.time()
-    result = comparison_service.identify(fingerprint)
+    result = repository.identify(fingerprint)
     search_time = time.time() - start
     
     print(f"   Tiempo de búsqueda: {search_time*1000:.2f}ms")

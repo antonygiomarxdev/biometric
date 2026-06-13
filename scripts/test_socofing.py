@@ -20,7 +20,7 @@ if sys.platform == "win32":
 sys.path.insert(0, str(Path(__file__).parent))
 
 from src.services.fingerprint_service import fingerprint_service
-from src.services.comparison_service import comparison_service
+
 from src.storage.database import db_manager
 from src.core.metrics import metrics
 
@@ -93,7 +93,7 @@ def index_dataset():
             
             # Registrar
             person_id, info = parse_filename(img_path.name)
-            comparison_service.register_fingerprint(
+            repository.register(fp=
                 fingerprint=fingerprint,
                 person_id=person_id,
                 name=f"Person {person_id} - {info}",
@@ -144,7 +144,7 @@ def search_fingerprint(image_path):
     
     # Buscar
     print("   Buscando en el índice...")
-    result = comparison_service.identify(fingerprint)
+    result = repository.identify(fingerprint)
     
     print("\n" + "="*60)
     if result.matched:

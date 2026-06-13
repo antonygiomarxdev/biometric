@@ -13,7 +13,7 @@ from typing import List
 sys.path.append(os.getcwd())
 
 from src.services.fingerprint_service import fingerprint_service
-from src.core.gpu_utils import GPUConfig
+# GPU support removed (CPU-only)
 from src.core.types import NormalizedFingerprint
 
 logging.basicConfig(level=logging.INFO)
@@ -32,7 +32,7 @@ def run_benchmark(num_images: int = 20):
     images = [generate_synthetic_fingerprint() for _ in range(num_images)]
     ids = [f"id_{i}" for i in range(num_images)]
     
-    logger.info(f"Iniciando benchmark con GPU={GPUConfig.is_enabled()}")
+    logger.info(f"Iniciando benchmark con GPU={False}")
     
     start_time = time.time()
     results = fingerprint_service.process_batch(images, fingerprint_ids=ids)
@@ -46,7 +46,7 @@ def run_benchmark(num_images: int = 20):
     print("\n" + "="*50)
     print("RESULTADOS BENCHMARK")
     print("="*50)
-    print(f"Modo:         {'GPU' if GPUConfig.is_enabled() else 'CPU (Parallel)'}")
+    print(f"Modo:         {'GPU' if False else 'CPU (Parallel)'}")
     print(f"Imágenes:     {num_images}")
     print(f"Tiempo Total: {total_time:.4f} s")
     print(f"Tiempo/Img:   {avg_time:.4f} s")

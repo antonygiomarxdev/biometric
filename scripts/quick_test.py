@@ -8,7 +8,8 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.services.fingerprint_service import fingerprint_service
-from src.services.comparison_service import comparison_service
+from src.storage.repository import repository
+
 from src.storage.database import db_manager
 
 def main():
@@ -49,7 +50,7 @@ def main():
     
     print(f"   ✅ Extraídas {len(fp1.minutiae)} minutiae")
     
-    rec_id = comparison_service.register_fingerprint(
+    rec_id = repository.register(fp=
         fingerprint=fp1,
         person_id="P001",
         name="Test Person 1",
@@ -63,7 +64,7 @@ def main():
     fp2 = fingerprint_service.process_image(img2, fingerprint_id=images[1].name)
     
     if fp2.minutiae:
-        comparison_service.register_fingerprint(
+        repository.register(fp=
             fingerprint=fp2,
             person_id="P002",
             name="Test Person 2",
@@ -73,7 +74,7 @@ def main():
     
     # Identificar la primera huella
     print("5️⃣ Identificando huella 1 nuevamente...")
-    result = comparison_service.identify(fp1)
+    result = repository.identify(fp1)
     
     if result.matched:
         print(f"   ✅ ¡MATCH ENCONTRADO!")
