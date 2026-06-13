@@ -26,10 +26,14 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Create seed tables and insert initial reference data.
 
+
     Tables created:
       - roles         : system roles (Admin, Perito)
-      - users         : system user accounts linked to roles
       - crime_types   : standard crime categories for case classification
+
+    Tables seeded (created in 0002):
+      - users         : system user accounts with default credentials
+    
     """
 
     # ------------------------------------------------------------------ #
@@ -52,49 +56,6 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
         ),
     )
-
-    # ------------------------------------------------------------------ #
-    #  users
-    # ------------------------------------------------------------------ #
-    op.create_table(
-        "users",
-        sa.Column(
-            "id",
-            postgresql.UUID(as_uuid=True),
-            primary_key=True,
-            server_default=sa.text("gen_random_uuid()"),
-        ),
-        sa.Column(
-            "role_id",
-            postgresql.UUID(as_uuid=True),
-            sa.ForeignKey("roles.id", ondelete="RESTRICT"),
-            nullable=False,
-        ),
-        sa.Column("username", sa.String(100), unique=True, nullable=False, index=True),
-        sa.Column("password_hash", sa.String(256), nullable=False),
-        sa.Column("email", sa.String(200), nullable=True),
-        sa.Column("full_name", sa.String(200), nullable=False),
-        sa.Column(
-            "is_active",
-            sa.Boolean(),
-            nullable=False,
-            server_default=sa.text("true"),
-        ),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.text("now()"),
-        ),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.text("now()"),
-        ),
-    )
-
-    op.create_index("idx_users_role_id", "users", ["role_id"])
 
     # ------------------------------------------------------------------ #
     #  crime_types
@@ -130,23 +91,20 @@ def upgrade() -> None:
 
     # ------------------------------------------------------------------ #
     #  Seed data — default users
-    #  NOTE: password hashes are placeholder bcrypt values.  The auth
-    #  module (planned in 01-06) will provide proper password management.
+    #  NOTE: password hashes are placeholder bcrypt values.
     # ------------------------------------------------------------------ #
     op.execute(
         """
-        INSERT INTO users (role_id, username, password_hash, email, full_name)
-        SELECT r.id, 'admin',   '$2b$12$NwUqRJmS2J3Y6I7K8L9M0O1P2Q3R4S5T6U7V8W9X0Y1Z2a3b4c5d6e',
-               'admin@forenso.local', 'Administrador del Sistema'
-        FROM roles r WHERE r.name = 'Admin'
+        INSERT INTO users (role, username, hashed_password, email, full_name)
+        VALUES ('Admin', 'admin', '$2b$12$NwUqRJmS2J3Y6I7K8L9M0O1P2Q3R4S5T6U7V8W9X0Y1Z2a3b4c5d6e',
+                'admin@forenso.local', 'Administrador del Sistema')
         """
     )
     op.execute(
         """
-        INSERT INTO users (role_id, username, password_hash, email, full_name)
-        SELECT r.id, 'perito1', '$2b$12$NwUqRJmS2J3Y6I7K8L9M0O1P2Q3R4S5T6U7V8W9X0Y1Z2a3b4c5d6f',
-               'perito1@forenso.local', 'Perito Forense Uno'
-        FROM roles r WHERE r.name = 'Perito'
+        INSERT INTO users (role, username, hashed_password, email, full_name)
+        VALUES ('Perito', 'perito1', '$2b$12$NwUqRJmS2J3Y6I7K8L9M0O1P2Q3R4S5T6U7V8W9X0Y1Z2a3b4c5d6f',
+                'perito1@forenso.local', 'Perito Forense Uno')
         """
     )
 
@@ -171,7 +129,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Remove seed tables and all seed data in reverse order."""
+    """Remove seed tables in reverse order."""
     op.drop_table("crime_types")
-    op.drop_table("users")
     op.drop_table("roles")

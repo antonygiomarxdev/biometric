@@ -114,6 +114,14 @@ class AuditService:
             chain_payload["record_id"] = str(record_id)
 
         # ---- lock & read the latest entry ----
+        # Serialise all concurrent appends with a table-level lock.
+        # ``SELECT … FOR UPDATE`` alone cannot protect against hash-chain
+        # forking when the audit_log table is empty — there are no rows
+        # to lock.  The table lock guarantees that even the very first
+        # insert is serialised across transactions.
+        from sqlalchemy import text
+        session.execute(text("LOCK TABLE audit_log IN SHARE ROW EXCLUSIVE MODE"))
+
         stmt = (
             select(AuditLog)
             .order_by(desc(AuditLog.created_at))

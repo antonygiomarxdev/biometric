@@ -32,7 +32,8 @@ def run_migrations_offline() -> None:
     ``ALTER TABLE`` statements to any number of databases without
     having an active connection (handy for CI / review).
     """
-    url = config.get_main_option("sqlalchemy.url")
+    from src.core.config import config as app_config
+    url = app_config.database_url
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -50,8 +51,9 @@ def run_migrations_online() -> None:
     Creates an Engine from the config URL and runs the migration
     against the connected database.
     """
+    from src.core.config import config as app_config
     connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        {**config.get_section(config.config_ini_section, {}), "sqlalchemy.url": app_config.database_url},
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )

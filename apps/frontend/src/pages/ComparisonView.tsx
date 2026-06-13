@@ -313,8 +313,9 @@ export default function ComparisonView() {
   const handleUseEvidence = useCallback(
     (evidence: EvidenceResponse) => {
       if (evidence.image_path) {
+        const API_BASE = import.meta.env.VITE_API_URL ?? "";
         setLatentPreview(
-          `http://localhost:8000${evidence.image_path.startsWith("/") ? "" : "/"}${evidence.image_path}`,
+          `${API_BASE}/api/v1/evidence/${evidence.id}/image`,
         );
         setLatentFile(null);
         setCandidates([]);
