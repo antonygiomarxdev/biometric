@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import {
   Upload,
   Fingerprint,
@@ -8,6 +8,7 @@ import {
   XCircle,
   Loader2,
   ArrowLeft,
+  Edit3,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -21,10 +22,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DefaultService, OpenAPI } from "../client";
-import type { MinutiaPoint, IdentifyResponse } from "../client";
+import type { MinutiaPoint, IdentifyResponse, ExtractResponse } from "../client";
 import { useToast } from "@/components/ui/toast";
 import { logger } from "@/lib/logger";
 import { ApiError } from "../client/core/ApiError";
+import { MinutiaeEditor } from "@/components/fingerprint/MinutiaeEditor";
 
 // Configure API Base URL
 OpenAPI.BASE = "http://localhost:8000";
@@ -34,8 +36,10 @@ export default function ScannerPage() {
   const [activeTab, setActiveTab] = useState<"scan" | "register">("scan");
   const [loading, setLoading] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [, setMinutiae] = useState<MinutiaPoint[]>([]);
   const [result, setResult] = useState<IdentifyResponse | null>(null);
+  const [showEditor, setShowEditor] = useState(false);
+  const [currentExtractData, setCurrentExtractData] = useState<ExtractResponse | null>(null);
+  const [editedMinutiae, setEditedMinutiae] = useState<MinutiaPoint[]>([]);
 
   // Registration form
   const [regName, setRegName] = useState("");
@@ -164,8 +168,9 @@ export default function ScannerPage() {
         bifurcations: extractRes.bifurcations || 0,
       });
 
+      setCurrentExtractData(extractRes);
+
       if (extractRes.minutiae && extractRes.minutiae.length > 0) {
-        setMinutiae(extractRes.minutiae);
         drawMinutiae(extractRes.minutiae);
         logger.debug("Minutiae visualizadas en canvas");
       } else {
@@ -315,6 +320,29 @@ export default function ScannerPage() {
     }
   };
 
+  const handleEditorSave = useCallback(
+    (minutiae: MinutiaPoint[]) => {
+      setEditedMinutiae(minutiae);
+      setShowEditor(false);
+
+      addToast({
+        type: "success",
+        title: "Minucias actualizadas",
+        description: `${minutiae.length} minucias guardadas. Re-buscando...`,
+        duration: 3000,
+      });
+
+      // Re-trigger identification with the original file
+      processImage("identify");
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
+  const handleEditorCancel = useCallback(() => {
+    setShowEditor(false);
+  }, []);
+
   return (
     <div className="min-h-screen bg-background text-foreground p-8 font-sans dark">
       <div className="max-w-4xl mx-auto space-y-8">
@@ -437,9 +465,16 @@ export default function ScannerPage() {
             </CardFooter>
           </Card>
 
-          {/* Right Column: Results */}
+          {/* Right Column: Results / Editor */}
           <div className="space-y-6">
-            {result && activeTab === "scan" ? (
+            {showEditor && currentExtractData ? (
+              <MinutiaeEditor
+                imageUrl={imagePreview ?? ""}
+                initialMinutiae={currentExtractData.minutiae}
+                onSave={handleEditorSave}
+                onCancel={handleEditorCancel}
+              />
+            ) : result && activeTab === "scan" ? (
               <Card
                 className={`border-l-4 ${
                   result.matched ? "border-l-green-500" : "border-l-red-500"
@@ -484,6 +519,21 @@ export default function ScannerPage() {
                       umbral de confianza actual.
                     </p>
                   )}
+
+                  {/* Edit Minutiae button — appears after identification */}
+                  <div className="pt-3 border-t border-border/50">
+                    <Button
+                      variant="outline"
+                      className="w-full gap-2 text-xs"
+                      onClick={() => setShowEditor(true)}
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      Editar Minucias
+                    </Button>
+                    <p className="text-[10px] text-muted-foreground text-center mt-1.5">
+                      Ajusta manualmente las minucias extraídas por IA
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
             ) : (
