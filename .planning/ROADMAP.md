@@ -68,7 +68,17 @@ Plans:
 - [x] 03-04-PLAN.md — FastAPI Router Integration & GenAI Endpoints
 - [x] 03-05-PLAN.md — Evaluation, Tracing, and CI/CD Setup
 
-### Fase 5: Despliegue, Infraestructura y Operación Policial
+### Fase 5: Test Coverage & Quality Assurance (>90%)
+
+**Objetivo:** Alcanzar más del 90% de code coverage en el backend mediante unit tests aislados (mockeando DB y modelos de IA pesados) para garantizar robustez a nivel empresarial.
+**Valor:** Seguridad de que las refactorizaciones y nuevos modelos no rompen la lógica de negocio ni el compliance legal.
+
+1. **Tests: Compliance Core:** Tests exhaustivos para PII Scrubber, Tokenizer y Encriptación.
+2. **Tests: Capa de IA (GenAI & CV):** Mocks para LLMFactory, ReportGenerator, y Enhancers.
+3. **Tests: Routers & Services:** Completar cobertura de los endpoints de la API y el `fingerprint_service`.
+4. **CI Setup:** Configurar Pytest con `pytest-cov` para fallar si el coverage baja del 90%.
+
+### Fase 6: Despliegue, Infraestructura y Operación Policial
 
 **Objetivo:** Sistema listo para producción on-premise y soporte a hardware físico.
 **Valor:** Sistema autónomo, seguro y extensible a las calles.
@@ -81,5 +91,5 @@ Plans:
 ---
 ## Fases Futuras (Post-Fase 4)
 
-- **Fase 6:** Reconocimiento Facial (Multimodal)
-- **Fase 7:** Sincronización entre múltiples laboratorios regionales.
+- **Fase 7:** Reconocimiento Facial (Multimodal)
+- **Fase 8:** Sincronización entre múltiples laboratorios regionales.
