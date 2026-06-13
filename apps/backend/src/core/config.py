@@ -44,6 +44,13 @@ class Config:
     num_workers: int = field(default_factory=lambda: int(os.getenv("NUM_WORKERS", "0"))) # 0 = Auto-detect
     force_cpu: bool = field(default_factory=lambda: os.getenv("FORCE_CPU", "0") == "1")
     
+    # AI / ML
+    ai_model_dir: str = field(default_factory=lambda: os.getenv("AI_MODEL_DIR", "data/models/"))
+    ai_use_gpu: bool = field(default_factory=lambda: os.getenv("AI_USE_GPU", "true").lower() == "true")
+    ai_gpu_device_id: int = field(default_factory=lambda: int(os.getenv("AI_GPU_DEVICE_ID", "0")))
+    ai_input_size: int = field(default_factory=lambda: int(os.getenv("AI_INPUT_SIZE", "512")))
+    ai_confidence_threshold: float = field(default_factory=lambda: float(os.getenv("AI_CONFIDENCE_THRESH", "0.5")))
+
     # Comparison Logic
     match_threshold: float = field(default_factory=lambda: float(os.getenv("MATCH_THRESHOLD", "2000.0")))
     top_k_matches: int = field(default_factory=lambda: int(os.getenv("TOP_K_MATCHES", "5")))
