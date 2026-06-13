@@ -31,8 +31,8 @@ Plans:
 **Plans:** 6 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Enhancement Spike (U-Net vs alternative evaluation)
-- [ ] 02-02-PLAN.md — AI Infrastructure (ModelManager, GPU detection, config, types)
+- [x] 02-01-PLAN.md — Enhancement Spike (U-Net vs alternative evaluation)
+- [x] 02-02-PLAN.md — AI Infrastructure (ModelManager, GPU detection, config, types)
 - [ ] 02-03-PLAN.md — AI Enhancers (SegmentationEnhancer + EnhancementEnhancer)
 - [ ] 02-04-PLAN.md — DL Minutiae Extractor (AiFeatureExtractor)
 - [ ] 02-05-PLAN.md — Fallback Minutiae Editor (React canvas editor)

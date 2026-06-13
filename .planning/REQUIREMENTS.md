@@ -5,6 +5,10 @@
 
 ## v1 Requirements
 
+### AI / ML Infrastructure
+
+- [x] **AI-INFRA**: AI module structure, ModelManager, GPU detection, AiConfig, AlgorithmOrigin AI values
+
 ### Matching & Algoritmo AFIS
 
 - [ ] **AFIS-01**: Investigar y documentar algoritmo de matching óptimo (mejorar actual vs implementar NIST)
@@ -74,6 +78,7 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| AI-INFRA | Phase 2 | ✅ Complete |
 | AFIS-01 | Phase 1 | Pending |
 | AFIS-02 | Phase 1 | Pending |
 | AUTH-01 | Phase 2 | Pending |
@@ -103,8 +108,8 @@
 | REF-04 | Phase 5 | Pending |
 
 **Coverage:**
-- v1 requirements: 27 total
-- Mapped to phases: 27
+- v1 requirements: 28 total
+- Mapped to phases: 28
 - Unmapped: 0 ✓
 
 ---
