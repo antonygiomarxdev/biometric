@@ -2,5 +2,13 @@
 
 from .config import AiConfig
 from .model_manager import ModelManager
+from src.processing.enhancers.ai import SegmentationEnhancer, EnhancementEnhancer
+from src.processing.extractor import AiFeatureExtractor
 
-__all__ = ["AiConfig", "ModelManager"]
+__all__ = [
+    "ModelManager",
+    "AiConfig",
+    "SegmentationEnhancer",
+    "EnhancementEnhancer",
+    "AiFeatureExtractor",
+]
