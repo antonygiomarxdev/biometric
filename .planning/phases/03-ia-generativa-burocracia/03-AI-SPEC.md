@@ -106,6 +106,22 @@ Source: Chain of Custody Regulations / Criminal Procedure Code
 pip install llama-index llama-index-core llama-index-llms-ollama sqlalchemy psycopg2-binary pydantic
 ```
 
+
+### Model Factory Pattern (Local vs Remote)
+```python
+from llama_index.llms.ollama import Ollama
+from llama_index.llms.openai import OpenAI
+from src.core.config import config
+
+def get_llm():
+    if config.llm_provider == "local":
+        return Ollama(model=config.local_model_name, request_timeout=120.0)
+    elif config.llm_provider == "openai":
+        return OpenAI(model=config.remote_model_name, api_key=config.openai_api_key)
+    # Add other providers as needed
+    raise ValueError("Unsupported provider")
+```
+
 ### Core Imports
 ```python
 from llama_index.core import SQLDatabase

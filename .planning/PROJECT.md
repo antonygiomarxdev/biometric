@@ -89,7 +89,7 @@ Nuestra ventaja competitiva radica en democratizar tecnología de punta que los 
 
 ## Constraints
 
-- **On-premise:** Sin cloud, datos nunca salen del laboratorio
+- **Deployment Flexible (Local/Cloud):** El sistema debe soportar ejecución on-premise (datos nunca salen) usando modelos locales, pero la arquitectura debe ser agnóstica y soportar conexión a modelos remotos/cloud mediante configuración.
 - **Perito decide:** El sistema asiste, no reemplaza al experto
 - **Auditable:** Cada operación trazable para uso judicial
 - **Idioma:** Español (usuarios en Nicaragua)
