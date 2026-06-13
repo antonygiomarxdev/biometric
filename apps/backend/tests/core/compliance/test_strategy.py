@@ -155,6 +155,12 @@ class TestProtocolStructural:
                 return data
             def deanonymize_prompt_data(self, data: dict[str, Any]) -> dict[str, Any]:
                 return data
+            def is_masking_active(self) -> bool:
+                return False
+            def anonymize_text(self, text: str) -> str:
+                return text
+            def deanonymize_text(self, text: str) -> str:
+                return text
 
         instance: IComplianceStrategy = CustomStrategy()
         assert isinstance(instance, IComplianceStrategy)
