@@ -10,3 +10,5 @@ scipy
 scikit-image
 sqlalchemy
 python-multipart
+uuid6
+alembic
