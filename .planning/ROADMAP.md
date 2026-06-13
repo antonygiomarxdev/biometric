@@ -28,10 +28,15 @@ Plans:
 **Objetivo:** Reemplazar el procesamiento tradicional con Deep Learning para que el sistema funcione bien con fotos de la escena del crimen, no solo de escáner.
 **Valor:** Aumenta radicalmente el "Hit Rate" en huellas de mala calidad.
 
-1. **Segmentación IA (U-Net/CNN):** Recorte automático de la huella, eliminando el fondo.
-2. **Enhancement (GAN):** Integración de modelo generativo para limpiar y reconstruir latentes.
-3. **Extracción Deep Learning:** Reemplazo de la extracción tradicional por una red neuronal (ej. MinutiaeNet).
-4. **Editor de Fallback:** Interfaz manual para que el perito edite minucias si la IA falla (5% de los casos).
+**Plans:** 6 plans
+
+Plans:
+- [ ] 02-01-PLAN.md — Enhancement Spike (U-Net vs alternative evaluation)
+- [ ] 02-02-PLAN.md — AI Infrastructure (ModelManager, GPU detection, config, types)
+- [ ] 02-03-PLAN.md — AI Enhancers (SegmentationEnhancer + EnhancementEnhancer)
+- [ ] 02-04-PLAN.md — DL Minutiae Extractor (AiFeatureExtractor)
+- [ ] 02-05-PLAN.md — Fallback Minutiae Editor (React canvas editor)
+- [ ] 02-06-PLAN.md — Pipeline Integration & Benchmark (AI vs traditional on SOCOFing)
 
 ### Fase 3: IA Generativa y Burocracia Forense (El Cerebro)
 
