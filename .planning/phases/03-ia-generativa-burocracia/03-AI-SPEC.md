@@ -107,19 +107,43 @@ pip install llama-index llama-index-core llama-index-llms-ollama sqlalchemy psyc
 ```
 
 
-### Model Factory Pattern (Local vs Remote)
+### Extensible LLM Provider Architecture (Adapter Pattern)
+Para garantizar soporte a múltiples proveedores (locales y remotos) y diferentes estrategias de configuración (temperatura, reintentos), se debe implementar un Factory basado en Adapters.
+
 ```python
-from llama_index.llms.ollama import Ollama
-from llama_index.llms.openai import OpenAI
+from typing import Protocol
+from llama_index.core.llms.llm import LLM
 from src.core.config import config
 
-def get_llm():
-    if config.llm_provider == "local":
-        return Ollama(model=config.local_model_name, request_timeout=120.0)
-    elif config.llm_provider == "openai":
+class ILLMProvider(Protocol):
+    def get_llm(self, use_case: str = "default") -> LLM:
+        ...
+
+class OllamaProvider:
+    def get_llm(self, use_case: str = "default") -> LLM:
+        from llama_index.llms.ollama import Ollama
+        # Configuración específica por caso de uso (ej. temp=0 para SQL, temp=0.7 para Reportes)
+        timeout = 120.0 if use_case == "sql" else 60.0
+        return Ollama(model=config.local_model_name, request_timeout=timeout)
+
+class OpenAIProvider:
+    def get_llm(self, use_case: str = "default") -> LLM:
+        from llama_index.llms.openai import OpenAI
         return OpenAI(model=config.remote_model_name, api_key=config.openai_api_key)
-    # Add other providers as needed
-    raise ValueError("Unsupported provider")
+
+class LLMFactory:
+    _providers = {
+        "local": OllamaProvider(),
+        "openai": OpenAIProvider(),
+        # Fácilmente extensible con AzureProvider, AnthropicProvider, etc.
+    }
+    
+    @classmethod
+    def create(cls, use_case: str = "default") -> LLM:
+        provider = cls._providers.get(config.llm_provider)
+        if not provider:
+            raise ValueError(f"Provider {config.llm_provider} not registered")
+        return provider.get_llm(use_case)
 ```
 
 ### Core Imports
