@@ -27,7 +27,7 @@ router = APIRouter(
 
 
 @router.get("/{case_id}")
-async def generar_dictamen(case_id: UUID, db: Session = Depends(get_db)) -> Response:
+async def generate_report(case_id: UUID, db: Session = Depends(get_db)) -> Response:
     """
     Generate a signed forensic dictamen (PDF) for the given case.
 

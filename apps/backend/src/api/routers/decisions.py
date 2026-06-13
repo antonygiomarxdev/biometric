@@ -84,7 +84,7 @@ class DecisionListResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-async def _require_perito_role() -> None:
+async def _require_examiner_role() -> None:
     """
     Ensure the caller has the ``Perito`` role (T-01-04).
 
@@ -163,7 +163,7 @@ async def get_decision(
     "/",
     response_model=DecisionResponse,
     status_code=201,
-    dependencies=[Depends(_require_perito_role)],
+    dependencies=[Depends(_require_examiner_role)],
 )
 async def create_decision(
     body: DecisionCreate,

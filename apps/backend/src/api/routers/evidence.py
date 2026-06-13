@@ -126,7 +126,7 @@ def _validate_image(file: UploadFile) -> None:
 
 
 @router.get("/", response_model=EvidenceListResponse)
-async def list_evidencias(
+async def list_evidence(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     case_id: uuid.UUID | None = Query(None, description="Filter by case"),
