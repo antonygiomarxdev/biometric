@@ -252,6 +252,24 @@ async def create_evidence(
     return ev
 
 
+@router.get("/{evidence_id}/image")
+async def get_evidence_image(  # noqa: F821
+    evidence_id: uuid.UUID,
+    db: Session = Depends(get_db),
+) -> "Response":
+    """Serve the evidence image from MinIO object storage."""
+    from fastapi.responses import Response
+    from src.api.errors import NotFoundError
+
+    ev = db.get(EvidenceModel, evidence_id)
+    if not ev or not ev.image_path:
+        raise NotFoundError("Image not found")
+    image_data = storage.download_file(ev.image_path)
+    if image_data is None:
+        raise NotFoundError("Image not found in storage")
+    return Response(content=image_data, media_type="image/png")
+
+
 @router.delete("/{evidence_id}", status_code=204)
 async def delete_evidence(
     evidence_id: uuid.UUID,
