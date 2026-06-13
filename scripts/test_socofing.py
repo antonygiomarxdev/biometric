@@ -236,16 +236,16 @@ def interactive_search():
 
 def main():
     """Función principal."""
-    from src.core.gpu_utils import GPUConfig
+    
     
     # TEMPORAL: Deshabilitar GPU porque el código actual tiene mucho overhead
     # TODO: Optimizar código GPU para mantener datos en GPU durante todo el pipeline
-    # GPUConfig.disable() # Comentado para usar la nueva lógica optimizada
+    # GPU disabled permanently (CPU-only) # Comentado para usar la nueva lógica optimizada
     
     print("="*60)
     print("🔬 TEST SOCOFING - Sistema Biométrico")
     print("="*60)
-    print(f"⚙️  Backend: {GPUConfig.get_backend()}")
+    print("⚙️  Backend: CPU (NumPy)")
     print("="*60)
     
     # Setup inicial

@@ -20,7 +20,7 @@ def identify_image(image_path: str):
     print("="*70)
     print("🔍 IDENTIFICACIÓN DE HUELLA DACTILAR")
     print("="*70)
-    print(f"⚙️  Backend: {GPUConfig.get_backend()}")
+    print("⚙️  Backend: CPU (NumPy)")
     print("="*70)
     print(f"\n📸 Imagen: {image_path}\n")
     
