@@ -17,8 +17,6 @@ except ImportError:
     logging.warning("python-dotenv not installed, skipping .env loading. Make sure to set environment variables in production.")    
 
 @dataclass(frozen=True)
-
-@dataclass(frozen=True)
 class JurisdictionConfig:
     """
     Global extensibility configuration for legal frameworks.
@@ -28,6 +26,7 @@ class JurisdictionConfig:
     expert_title: str = field(default_factory=lambda: os.getenv("JURISDICTION_EXPERT_TITLE", "Perito Forense"))
     legal_framework: str = field(default_factory=lambda: os.getenv("JURISDICTION_LEGAL_FRAMEWORK", "Código Procesal Penal"))
 
+@dataclass(frozen=True)
 class Config:
     """Global application configuration (Immutable)."""
     
@@ -80,6 +79,13 @@ class Config:
     minio_secret_key: str = field(default_factory=lambda: os.getenv("MINIO_SECRET_KEY", "minioadmin"))
     minio_bucket: str = field(default_factory=lambda: os.getenv("MINIO_BUCKET", "fingerprints"))
     minio_secure: bool = field(default_factory=lambda: os.getenv("MINIO_SECURE", "false").lower() == "true")
+
+    # Compliance / Privacy Strategy
+    compliance_strategy: str = field(
+        default_factory=lambda: os.getenv(
+            "COMPLIANCE_STRATEGY", "base"
+        )
+    )
 
     # Authentication / JWT
     jwt_secret_key: str = field(
