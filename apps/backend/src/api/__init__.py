@@ -1,16 +1,16 @@
-"""Módulo de API (REST y CLI)."""
+"""API package — REST routers and CLI."""
 
 __all__ = ["app"]
 
 
-def __getattr__(name):
+def __getattr__(name: str):
     """Lazy-load ``app`` to break the circular import chain.
 
     ``src.api.dependencies`` is imported by ``auth_service``, which would
-    trigger ``src.api.__init__`` before ``src.api.rest`` (and thus the router
-    modules) are ready.  Deferring the import avoids the cycle.
+    trigger ``src.api.__init__`` before ``main`` (and the router modules)
+    are ready.  Deferring the import avoids the cycle.
     """
     if name == "app":
-        from .rest import app  # noqa: F811
+        from src.main import app  # noqa: F811
         return app
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
