@@ -37,7 +37,7 @@ Plans:
 - [x] 02-03-PLAN.md — AI Enhancers (SegmentationEnhancer + EnhancementEnhancer)
 - [x] 02-04-PLAN.md — DL Minutiae Extractor (AiFeatureExtractor)
 - [ ] 02-05-PLAN.md — Fallback Minutiae Editor (React canvas editor)
-- [ ] 02-06-PLAN.md — Pipeline Integration & Benchmark (AI vs traditional on SOCOFing)
+- [x] 02-06-PLAN.md — Pipeline Integration & Benchmark (AI vs traditional on SOCOFing)
 
 ### Fase 3: IA Generativa y Burocracia Forense (El Cerebro)
 
