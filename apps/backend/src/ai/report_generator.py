@@ -10,7 +10,7 @@ The pipeline:
 2. Wrap it with ``as_structured_llm(DictamenPericial)`` so every
    completion is validated against the Pydantic model automatically.
 3. Build a system prompt that instructs the model to act as a
-   Nicaraguan forensic expert (``Perito informático``) producing
+   forensic expert configured for the current jurisdiction (``Perito informático``) producing
    formal legal text.
 4. Call ``acomplete`` with the factual data (SQL results) and
    parse the structured output.
@@ -43,10 +43,12 @@ _MAX_RETRIES: int = 3
 # The system prompt is written in formal Spanish (legal domain language)
 # to shape the LLM's persona and tone. The ``{sql_results}`` placeholder
 # is filled with actual case data retrieved from the database.
-_SYSTEM_PROMPT: str = (
-    "Eres un Perito informático experto en la legislación de la República "
-    "de Nicaragua. Tu función es redactar Dictámenes Periciales forenses "
-    "con un tono formal, objetivo y técnicamente riguroso.\n\n"
+from src.core.config import config
+
+_SYSTEM_PROMPT_TEMPLATE: str = (
+    "Eres un {expert_title} experto en la legislación de {country} "
+    "(basado en el {legal_framework}). Tu función es redactar Dictámenes "
+    "Periciales forenses con un tono formal, objetivo y técnicamente riguroso.\n\n"
     "Debes cumplir estrictamente las siguientes reglas:\n"
     "1. Usa lenguaje jurídico-técnico propio de la criminalística.\n"
     "2. No uses frases conversacionales, especulativas o propias de un "
@@ -76,7 +78,7 @@ async def generate_dictamen(
     1. Creates a report-optimised LLM via ``LLMFactory.create("report")``.
     2. Wraps it with ``as_structured_llm(DictamenPericial)`` so the
        output is automatically validated against the Pydantic schema.
-    3. Builds a prompt instructing the model to act as a Nicaraguan
+    3. Builds a prompt instructing the model to act as a configured
        forensic expert.
     4. Calls ``acomplete`` and returns the parsed ``DictamenPericial``.
     5. Retries up to ``_MAX_RETRIES`` (3) times if a
@@ -101,9 +103,13 @@ async def generate_dictamen(
 
     for attempt in range(1, _MAX_RETRIES + 1):
         try:
-            completion = await structured_llm.acomplete(
-                _SYSTEM_PROMPT.format(sql_results=sql_results),
+            prompt = _SYSTEM_PROMPT_TEMPLATE.format(
+                expert_title=config.jurisdiction.expert_title,
+                country=config.jurisdiction.country,
+                legal_framework=config.jurisdiction.legal_framework,
+                sql_results=sql_results
             )
+            completion = await structured_llm.acomplete(prompt)
             result: DictamenPericial = completion.raw
             return result
         except ValidationError as exc:

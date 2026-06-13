@@ -17,6 +17,17 @@ except ImportError:
     logging.warning("python-dotenv not installed, skipping .env loading. Make sure to set environment variables in production.")    
 
 @dataclass(frozen=True)
+
+@dataclass(frozen=True)
+class JurisdictionConfig:
+    """
+    Global extensibility configuration for legal frameworks.
+    Allows the system to adapt to different countries' legal reporting standards.
+    """
+    country: str = field(default_factory=lambda: os.getenv("JURISDICTION_COUNTRY", "República de Nicaragua"))
+    expert_title: str = field(default_factory=lambda: os.getenv("JURISDICTION_EXPERT_TITLE", "Perito Forense"))
+    legal_framework: str = field(default_factory=lambda: os.getenv("JURISDICTION_LEGAL_FRAMEWORK", "Código Procesal Penal"))
+
 class Config:
     """Global application configuration (Immutable)."""
     
