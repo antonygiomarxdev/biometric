@@ -21,7 +21,7 @@ Plans:
 - [x] 01-05-PLAN.md — Legal Report Generator (PDF)
 - [x] 01-06-PLAN.md — Auth Service & Security Base
 - [x] 01-07-PLAN.md — API Wiring & Monolith Teardown
-- [ ] 01-08-PLAN.md — Forensic Frontend (UI)
+- [x] 01-08-PLAN.md — Forensic Frontend (UI)
 
 ### Fase 2: IA de Visión Computacional (El Músculo)
 
