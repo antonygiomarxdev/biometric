@@ -40,6 +40,11 @@ ai = [
     "onnxruntime-gpu>=1.15.0",
     "segmentation-models-pytorch>=0.3.0",
 ]
+tracing = [
+    "arize-phoenix>=17.0.0",
+    "opentelemetry-sdk>=1.25.0",
+    "openinference-instrumentation-llama-index>=4.0.0",
+]
 dev = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.21.0",

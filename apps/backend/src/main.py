@@ -17,6 +17,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from src.ai.tracing import setup_tracing
 from src.api.dependencies import lifespan
 from src.api.errors import ForensicError, IntegrityError, NotFoundError, ValidationError
 from src.api.routers import (
@@ -43,6 +44,10 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# Register AI tracing as a startup event. The flag check inside
+# ``setup_tracing()`` ensures it only activates when the config allows.
+setup_tracing()
 
 # ---------------------------------------------------------------------------
 # CORS middleware

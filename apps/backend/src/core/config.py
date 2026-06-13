@@ -102,6 +102,11 @@ class Config:
             "REMOTE_MODEL_NAME", "gpt-4"
         )
     )
+    # AI Tracing (OpenTelemetry / Arize Phoenix)
+    enable_ai_tracing: bool = field(
+        default_factory=lambda: os.getenv("ENABLE_AI_TRACING", "true").lower() in ("true", "1", "yes")
+    )
+
     openai_api_key: SecretStr = field(
         default_factory=lambda: SecretStr(
             os.getenv("OPENAI_API_KEY", "")
