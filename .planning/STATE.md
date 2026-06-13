@@ -2,22 +2,22 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 03-ia-generativa-burocracia
-status: completed
-last_updated: "2026-06-13T22:32:13.935Z"
+current_phase: 03
+status: executing
+last_updated: "2026-06-13T22:58:07.753Z"
 progress:
   total_phases: 3
-  completed_phases: 2
-  total_plans: 19
-  completed_plans: 18
-  percent: 67
+  completed_phases: 1
+   total_plans: 18
+   completed_plans: 15
+   percent: 35
 ---
 
 # State: Biometric
 
 **Last updated:** 2026-06-13
-**Current phase:** 03-ia-generativa-burocracia
-**Status:** Plan 05 completed (Observability & Eval Setup)
+**Current phase:** 03
+**Status:** Executing Phase 03
 
 ## Project Reference
 
@@ -31,12 +31,13 @@ See: `.planning/PROJECT.md`
 |-------|--------|----------|
 | 1. Flujo Core Forense | ✅ Completado | 100% |
 | 2. IA Visión Computacional | 🏃‍♂️ En progreso | 67% (4/6 planes) |
-| 3. IA Generativa (Dictámenes) | ✅ Completado | 100% (5/5 planes) |
-| 4. Despliegue On-Premise | ⏳ Pendiente | 0% |
+| 3. Global Compliance & Security | 🏃‍♂️ En progreso | 25% (1/4 planes) |
+| 4. IA Generativa (Dictámenes) | ✅ Completado | 100% (5/5 planes) |
+| 5. Despliegue On-Premise | ⏳ Pendiente | 0% |
 
 ## Current Work
 
-Phase 3 (IA Generativa/Dictámenes) — Completado ✅. Plan 05 finalizado: OpenTelemetry tracing with Arize Phoenix (local) for LLM call observability, plus Promptfoo configuration for automated evaluation of forensic report prompts. 5 planes ejecutados — fase completa. Next: Phase 4 (Despliegue On-Premise).
+Phase 3 (Global Compliance & Security Core) — Plan 01 completado: IComplianceStrategy protocol with BaseStrategy (no-op), ExtremePrivacyStrategy (aggressive PII scrubbing), and ComplianceFactory wired to Config. Next: Plan 03-02 (Log PII Scrubber).
 
 ## Completed Plans
 
@@ -51,6 +52,7 @@ Phase 3 (IA Generativa/Dictámenes) — Completado ✅. Plan 05 finalizado: Open
 | 03-ia-generativa-burocracia | 03 - Structured Dictamen | ✅ DictamenPericial Pydantic schema, async report generator with as_structured_llm, retry logic, 14 tests (TDD). |
 | 03-ia-generativa-burocracia | 04 - GenAI REST API Router | ✅ Two endpoints (/assistant, /report/{caso_id}), Spanish error messages, 6 router tests, wired into main.py. |
 | 03-ia-generativa-burocracia | 05 - Observability & Eval Setup | ✅ OpenTelemetry + Arize Phoenix tracing, Promptfoo eval config. |
+| 03-global-compliance-core | 01 - Strategy Pattern & Interfaces | ✅ IComplianceStrategy protocol, BaseStrategy, ExtremePrivacyStrategy, ComplianceFactory wired to Config. |
 
 ## Decisions Log
 
@@ -68,10 +70,10 @@ Phase 3 (IA Generativa/Dictámenes) — Completado ✅. Plan 05 finalizado: Open
 
 ## Next Actions
 
-1. ~~Plan 03-03: Dictamen pericial generation pipeline~~ ✅
-2. ~~Plan 03-04: GenAI REST API Router~~ ✅
-3. ~~Plan 03-05: Observability & Eval Setup~~ ✅
-4. Phase 4: Despliegue On-Premise
+1. ~~Plan 03-01: Strategy Pattern & Interfaces~~ ✅
+2. Plan 03-02: Log PII Scrubber
+3. Plan 03-03: AI Data Tokenizer (Masking)
+4. Plan 03-04: Storage Encryption
 
 ## Performance Metrics
 
@@ -86,3 +88,4 @@ Phase 3 (IA Generativa/Dictámenes) — Completado ✅. Plan 05 finalizado: Open
 | Phase 03-ia-generativa-burocracia P03 | 4min | 2 tasks (TDD) | 6 files |
 | Phase 03-ia-generativa-burocracia P04 | 3min | 2 tasks (1 TDD) | 5 files |
 | Phase 03-ia-generativa-burocracia P05 | 15min | 2 tasks | 5 files |
+| 03-global-compliance-core | 01 | ~15min | 2 tasks (1 TDD) | 10 files |
