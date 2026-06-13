@@ -4,12 +4,12 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 03
 status: executing
-last_updated: "2026-06-13T23:07:43.266Z"
+last_updated: "2026-06-13T23:14:59.618Z"
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 18
-  completed_plans: 15
+  completed_plans: 17
   percent: 33
 ---
 
@@ -17,7 +17,7 @@ progress:
 
 **Last updated:** 2026-06-13
 **Current phase:** 03
-**Status:** Executing Phase 03 — Plan 02 complete
+**Status:** Executing Phase 03 — Plan 03 complete
 
 ## Project Reference
 
@@ -31,13 +31,13 @@ See: `.planning/PROJECT.md`
 |-------|--------|----------|
 | 1. Flujo Core Forense | ✅ Completado | 100% |
 | 2. IA Visión Computacional | 🏃‍♂️ En progreso | 67% (4/6 planes) |
-| 3. Global Compliance & Security | 🏃‍♂️ En progreso | 50% (2/4 planes) |
+| 3. Global Compliance & Security | 🏃‍♂️ En progreso | 75% (3/4 planes) |
 | 4. IA Generativa (Dictámenes) | ✅ Completado | 100% (5/5 planes) |
 | 5. Despliegue On-Premise | ⏳ Pendiente | 0% |
 
 ## Current Work
 
-Phase 3 (Global Compliance & Security Core) — Plan 02 completado: Log PII Scrubber with ComplianceLogFormatter, PIIFilter, and setup_compliance_logging wired into FastAPI and CLI. Next: Plan 03-03 (AI Data Tokenizer / Masking).
+Phase 3 (Global Compliance & Security Core) — Plan 03 completado: AI Data Tokenizer with DataMasker (bidirectional text-level PII tokenizer) and strategy protocol extensions. Next: Plan 03-04 (Storage Encryption).
 
 ## Completed Plans
 
@@ -54,6 +54,7 @@ Phase 3 (Global Compliance & Security Core) — Plan 02 completado: Log PII Scru
 | 03-ia-generativa-burocracia | 05 - Observability & Eval Setup | ✅ OpenTelemetry + Arize Phoenix tracing, Promptfoo eval config. |
 | 03-global-compliance-core | 01 - Strategy Pattern & Interfaces | ✅ IComplianceStrategy protocol, BaseStrategy, ExtremePrivacyStrategy, ComplianceFactory wired to Config. |
 | 03-global-compliance-core | 02 - Log PII Scrubber | ✅ ComplianceLogFormatter, PIIFilter, setup_compliance_logging wired into FastAPI and CLI. |
+| 03-global-compliance-core | 03 - AI Data Tokenizer | ✅ DataMasker with typed tokenization (PERSON/EMAIL/CASE/UUID), thread-safe, wired into ExtremePrivacyStrategy. |
 
 ## Decisions Log
 
@@ -68,12 +69,13 @@ Phase 3 (Global Compliance & Security Core) — Plan 02 completado: Log PII Scru
 - **D-11 (Dictamen schema & generator):** Prompt in Spanish legal language (not English) — LLM output follows prompt language. Retry only on `ValidationError` (other exceptions propagate). `PromptTemplate` not needed with `as_structured_llm.acomplete`. Mitigates T-03-06 (schema enforcement) and T-03-07 (exact ID/hash rule).
 - **D-12 (Local-only Phoenix tracing):** `phoenix.launch_app()` starts a local collector vs. pointing to external SaaS, satisfying T-03-11 (on-premise compliance for forensic case data).
 - **D-13 (Config-gated tracing):** `enable_ai_tracing` flag (bool env var, default: true) allows disabling tracing in production environments without a Phoenix collector. Graceful degradation: logs warning and skips if packages missing.
+- **D-14 (DataMasker text-level tokenization):** DataMasker handles text-level PII tokenization independently from dict-level `anonymize_prompt_data`. Token types have semantic prefixes (PERSON, EMAIL, CASE, UUID). Thread-safe via `threading.Lock`. Strategy protocol extended with `is_masking_active()`, `anonymize_text()`, `deanonymize_text()`.
 
 ## Next Actions
 
 1. ~~Plan 03-01: Strategy Pattern & Interfaces~~ ✅
 2. ~~Plan 03-02: Log PII Scrubber~~ ✅
-3. Plan 03-03: AI Data Tokenizer (Masking)
+3. ~~Plan 03-03: AI Data Tokenizer (Masking)~~ ✅
 4. Plan 03-04: Storage Encryption
 
 ## Performance Metrics
@@ -91,3 +93,4 @@ Phase 3 (Global Compliance & Security Core) — Plan 02 completado: Log PII Scru
 | Phase 03-ia-generativa-burocracia P05 | 15min | 2 tasks | 5 files |
 | 03-global-compliance-core | 01 | ~15min | 2 tasks (1 TDD) | 10 files |
 | 03-global-compliance-core | 02 | 5 min | 2 tasks (1 TDD) | 6 files |
+| 03-global-compliance-core | 03 | 24 min | 1 task (TDD) | 7 files |

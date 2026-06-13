@@ -36,6 +36,13 @@
 - [ ] **SEC-01**: Eliminar bucket público de MinIO
 - [ ] **SEC-02**: Validación server-side de imágenes
 
+### Global Compliance & Privacy
+
+- [x] **COMPLIANCE-01**: Strategy pattern with IComplianceStrategy protocol, BaseStrategy, ExtremePrivacyStrategy
+- [x] **COMPLIANCE-02**: Log PII scrubber with ComplianceLogFormatter, PIIFilter
+- [x] **COMPLIANCE-03**: AI Data Tokenizer (DataMasker) with bidirectional text-level PII tokenization
+- [ ] **COMPLIANCE-04**: Storage encryption for MinIO/PostgreSQL
+
 ### Infraestructura y CI/CD
 
 - [ ] **INFRA-01**: Pipeline de CI (GitHub Actions + tests + lint + typecheck)
@@ -104,6 +111,10 @@
 | AUDIT-02 | Phase 2 | Pending |
 | SEC-01 | Phase 2 | Pending |
 | SEC-02 | Phase 2 | Pending |
+| COMPLIANCE-01 | Phase 3 | ✅ Complete |
+| COMPLIANCE-02 | Phase 3 | ✅ Complete |
+| COMPLIANCE-03 | Phase 3 | ✅ Complete |
+| COMPLIANCE-04 | Phase 3 | Pending |
 | INFRA-01 | Phase 3 | Pending |
 | INFRA-02 | Phase 3 | Pending |
 | INFRA-03 | Phase 3 | Pending |
