@@ -7,9 +7,8 @@ import numpy as np
 from dataclasses import replace
 
 from src.core.types import MinutiaCandidate, NormalizedFingerprint, AlgorithmOrigin, MinutiaType
-from src.core.interfaces import INormalizer
 
-class MinutiaNormalizer(INormalizer):
+class MinutiaNormalizer:
     """
     Implementación estándar de normalización geométrica.
     """

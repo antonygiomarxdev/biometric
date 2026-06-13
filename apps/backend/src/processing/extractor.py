@@ -19,14 +19,13 @@ from skimage.morphology import convex_hull_image, erosion, square
 from src.ai.config import AiConfig
 from src.ai.extraction import ExtractionProcessor
 from src.ai.model_manager import ModelManager
-from src.core.interfaces import IFeatureExtractor
 from src.core.metrics import timed
 from src.core.types import AlgorithmOrigin, MinutiaCandidate, MinutiaType
 
 logger = logging.getLogger("processing.extractor")
 
 
-class SkeletonMinutiaeExtractor(IFeatureExtractor):
+class SkeletonMinutiaeExtractor:
     """
     Extractor basado en esqueleto (Crossing Number).
     """
@@ -494,7 +493,7 @@ class SkeletonMinutiaeExtractor(IFeatureExtractor):
         return filtered
 
 
-class GradientRidgeExtractor(IFeatureExtractor):
+class GradientRidgeExtractor:
     """
     Extractor basado en Harris Corner Detection para encontrar puntos de interés (bifurcaciones/terminaciones)
     directamente en la imagen mejorada, sin esqueletización.
@@ -538,7 +537,7 @@ class GradientRidgeExtractor(IFeatureExtractor):
         return candidates
 
 
-class AiFeatureExtractor(IFeatureExtractor):
+class AiFeatureExtractor:
     """Deep-learning minutiae extractor using ONNX Runtime.
 
     Replaces the traditional skeletonisation + Crossing Number approach

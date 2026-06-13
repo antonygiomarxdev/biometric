@@ -1,4 +1,11 @@
-"""Instrumentación de performance."""
+"""
+Instrumentación de performance en memoria.
+
+NOTA ARQUITECTÓNICA: Este módulo es útil para benchmarks locales
+y scripts de consola. En un entorno de producción distribuido
+(múltiples workers de Uvicorn/Gunicorn), este estado en memoria
+no se compartirá. Para producción real, migrar a OpenTelemetry.
+"""
 
 import time
 import logging

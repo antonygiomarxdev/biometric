@@ -1,60 +1,84 @@
 """
 Interfaces base para el pipeline biométrico.
-Clean Code: Segregación de interfaces (ISP) e Inversión de dependencias (DIP).
+Clean Architecture: Dependency Inversion via Structural Subtyping (Protocols).
+
+Python moderno (3.8+) usa Protocols en lugar de ABCs (Abstract Base Classes).
+Esto permite duck-typing seguro estáticamente: las implementaciones (ej. CpuEnhancer)
+no necesitan heredar explícitamente de IEnhancer, solo necesitan implementar
+la firma del método `enhance`. Esto desacopla totalmente las capas.
 """
-from abc import ABC, abstractmethod
-from typing import List, Tuple
+
+from typing import Protocol, List, Tuple
 import numpy as np
 
 from src.core.types import MinutiaCandidate, NormalizedFingerprint, MatchResult
 
-class IEnhancer(ABC):
-    """Protocolo para estrategias de mejora de imagen (CPU/GPU)."""
+
+class IEnhancer(Protocol):
+    """Protocolo para estrategias de mejora de imagen (CPU/IA)."""
     
-    @abstractmethod
     def enhance(self, img: np.ndarray, resize: bool = True) -> np.ndarray:
         """
         Mejora la calidad de la huella.
         Args:
             img: Imagen en escala de grises (uint8).
+            resize: Si debe redimensionar la imagen a las dimensiones estándar.
         Returns:
-            Imagen binaria o mejorada.
+            Imagen mejorada (generalmente binaria o normalizada).
         """
-        pass
+        ...
 
-class IFeatureExtractor(ABC):
+
+class IFeatureExtractor(Protocol):
     """Protocolo para extracción de características."""
     
-    @abstractmethod
     def extract(self, image: np.ndarray) -> List[MinutiaCandidate]:
         """
         Extrae minucias de una imagen procesada.
+        Args:
+            image: Imagen procesada.
+        Returns:
+            Lista de candidatos a minucias.
         """
-        pass
+        ...
 
-class INormalizer(ABC):
+
+class INormalizer(Protocol):
     """Protocolo para normalización y limpieza de minucias."""
     
-    @abstractmethod
     def normalize(self, minutiae: List[MinutiaCandidate], img_shape: Tuple[int, int]) -> NormalizedFingerprint:
         """
-        Ordena, filtra y normaliza coordenadas, retornando una huella normalizada.
+        Ordena, filtra y normaliza coordenadas.
+        Args:
+            minutiae: Lista de minucias crudas.
+            img_shape: Dimensiones de la imagen original (alto, ancho).
+        Returns:
+            Estructura inmutable con minucias finales y orientaciones globales.
         """
-        pass
+        ...
 
-class IMatcher(ABC):
-    """Protocolo para comparación de vectores."""
+
+class IMatcher(Protocol):
+    """Protocolo para el motor de búsqueda biométrica."""
     
-    @abstractmethod
     async def match(self, probe: np.ndarray, top_k: int = 5) -> MatchResult:
         """
-        Busca coincidencias en la base de datos.
+        Busca coincidencias para un vector único.
+        Args:
+            probe: Vector de características a buscar.
+            top_k: Número máximo de resultados a retornar.
+        Returns:
+            El mejor resultado encontrado.
         """
-        pass
+        ...
     
-    @abstractmethod
     async def match_batch(self, probes: np.ndarray, top_k: int = 5) -> List[MatchResult]:
         """
-        Busca coincidencias en lote.
+        Busca coincidencias para múltiples vectores en lote.
+        Args:
+            probes: Matriz de vectores.
+            top_k: Resultados por vector.
+        Returns:
+            Lista de resultados correspondientes.
         """
-        pass
+        ...
