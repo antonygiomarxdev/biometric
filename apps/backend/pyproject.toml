@@ -33,6 +33,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+ai = [
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "onnxruntime>=1.15.0",
+    "onnxruntime-gpu>=1.15.0",
+    "segmentation-models-pytorch>=0.3.0",
+]
 dev = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.21.0",
