@@ -4,20 +4,20 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 03-ia-generativa-burocracia
 status: completed
-last_updated: "2026-06-13T22:16:28.480Z"
+last_updated: "2026-06-13T22:23:19.330Z"
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 19
   completed_plans: 17
-  percent: 36
+  percent: 33
 ---
 
 # State: Biometric
 
 **Last updated:** 2026-06-13
 **Current phase:** 03-ia-generativa-burocracia
-**Status:** Plan 03 completed (Structured Dictamen Generation)
+**Status:** Plan 04 completed (GenAI REST API Router)
 
 ## Project Reference
 
@@ -31,12 +31,12 @@ See: `.planning/PROJECT.md`
 |-------|--------|----------|
 | 1. Flujo Core Forense | ✅ Completado | 100% |
 | 2. IA Visión Computacional | 🏃‍♂️ En progreso | 67% (4/6 planes) |
-| 3. IA Generativa (Dictámenes) | 🏃‍♂️ En progreso | 60% (3/5 planes) |
+| 3. IA Generativa (Dictámenes) | 🏃‍♂️ En progreso | 80% (4/5 planes) |
 | 4. Despliegue On-Premise | ⏳ Pendiente | 0% |
 
 ## Current Work
 
-Phase 3 (IA Generativa/Dictámenes) — Plan 03 completado. DictamenPericial Pydantic schema (Evidencia + DictamenPericial). Async report generator (generate_dictamen) con as_structured_llm, retry loop (max 3) en ValidationError, prompt en español legal (Perito informático Nicaragua). 14 tests, TDD. Next: Plan 04 (FastAPI router integration & genai endpoints).
+Phase 3 (IA Generativa/Dictámenes) — Plan 04 completado. GenAI REST API router (/api/v1/genai) with POST /assistant (Text-to-SQL) and POST /report/{caso_id} (report generation) endpoints. Spanish error messages for LLM unavailability. 6 router tests (TDD). Wired into main FastAPI application. Next: Plan 05 (frontend integration, auth middleware, guardrails).
 
 ## Completed Plans
 
@@ -49,6 +49,7 @@ Phase 3 (IA Generativa/Dictámenes) — Plan 03 completado. DictamenPericial Pyd
 | 03-ia-generativa-burocracia | 01 - LLM Factory | ✅ LLMFactory with ILLMProvider Protocol, Ollama/OpenAI providers, use_case profiles, 15 tests. |
 | 03-ia-generativa-burocracia | 02 - Text-to-SQL | ✅ Read-only DB engine, NLP assistant with NLSQLTableQueryEngine, 5 tests (TDD). |
 | 03-ia-generativa-burocracia | 03 - Structured Dictamen | ✅ DictamenPericial Pydantic schema, async report generator with as_structured_llm, retry logic, 14 tests (TDD). |
+| 03-ia-generativa-burocracia | 04 - GenAI REST API Router | ✅ Two endpoints (/assistant, /report/{caso_id}), Spanish error messages, 6 router tests, wired into main.py. |
 
 ## Decisions Log
 
@@ -65,7 +66,7 @@ Phase 3 (IA Generativa/Dictámenes) — Plan 03 completado. DictamenPericial Pyd
 ## Next Actions
 
 1. ~~Plan 03-03: Dictamen pericial generation pipeline~~ ✅
-2. Plan 03-04: Evaluate and refine generation quality + FastAPI router integration
+2. ~~Plan 03-04: GenAI REST API Router~~ ✅
 3. Plan 03-05: Guardrails and production hardening
 
 ## Performance Metrics
@@ -79,3 +80,4 @@ Phase 3 (IA Generativa/Dictámenes) — Plan 03 completado. DictamenPericial Pyd
 | Phase 03-ia-generativa-burocracia P01 | 3min | 2 tasks | 7 files |
 | Phase 03-ia-generativa-burocracia P02 | 2min | 2 tasks (TDD) | 5 files |
 | Phase 03-ia-generativa-burocracia P03 | 4min | 2 tasks (TDD) | 6 files |
+| Phase 03-ia-generativa-burocracia P04 | 3min | 2 tasks (1 TDD) | 5 files |

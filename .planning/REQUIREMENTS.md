@@ -18,6 +18,7 @@
 
 - [x] **GENAI-02**: Implementar motor Text-to-SQL (NLSQLTableQueryEngine) con conexión read-only y scoping explícito de tablas
 - [x] **GENAI-03**: Implementar generación estructurada del Dictamen Pericial con esquema Pydantic y generación LLM vía as_structured_llm
+- [x] **GENAI-04**: Exponer el asistente NLP y generador de dictámenes como endpoints REST (/api/v1/genai/assistant, /api/v1/genai/report/{caso_id})
 
 ### Matching & Algoritmo AFIS
 
@@ -93,6 +94,7 @@
 | AI-ENH | Phase 2 | ✅ Complete |
 | GENAI-02 | Phase 3 | ✅ Complete |
 | GENAI-03 | Phase 3 | ✅ Complete |
+| GENAI-04 | Phase 3 | ✅ Complete |
 | AFIS-01 | Phase 1 | Pending |
 | AFIS-02 | Phase 1 | Pending |
 | AUTH-01 | Phase 2 | Pending |
@@ -122,10 +124,10 @@
 | REF-04 | Phase 5 | Pending |
 
 **Coverage:**
-- v1 requirements: 28 total
-- Mapped to phases: 28
+- v1 requirements: 29 total
+- Mapped to phases: 29
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2025-06-12*
-*Last updated: 2025-06-12 after initial definition*
+*Last updated: 2026-06-13*

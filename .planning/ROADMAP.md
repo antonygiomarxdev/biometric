@@ -51,7 +51,7 @@ Plans:
 - [x] 03-01-PLAN.md — Core LLM Infrastructure Foundation
 - [x] 03-02-PLAN.md — Text-to-SQL Engine for NLP Assistant
 - [x] 03-03-PLAN.md — Structured Content Generation for Forensic Report
-- [ ] 03-04-PLAN.md — FastAPI Router Integration & GenAI Endpoints
+- [x] 03-04-PLAN.md — FastAPI Router Integration & GenAI Endpoints
 - [ ] 03-05-PLAN.md — Evaluation, Tracing, and CI/CD Setup
 
 ### Fase 4: Despliegue, Infraestructura y Operación Policial
