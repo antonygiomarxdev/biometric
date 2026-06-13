@@ -39,7 +39,17 @@ Plans:
 - [ ] 02-05-PLAN.md — Fallback Minutiae Editor (React canvas editor)
 - [x] 02-06-PLAN.md — Pipeline Integration & Benchmark (AI vs traditional on SOCOFing)
 
-### Fase 3: IA Generativa y Burocracia Forense (El Cerebro)
+### Fase 3: Global Compliance & Security Core (Cross-Cutting)
+
+**Objetivo:** Implementar una arquitectura de cumplimiento dinámico que garantice la privacidad de datos (PII), auditoría criptográfica y seguridad de almacenamiento adaptables a cualquier jurisdicción global (GDPR, leyes LATAM).
+**Valor:** Blindaje legal del sistema ante auditorías forenses internacionales (ISO 27037). Pre-requisito crítico antes de integrar modelos generativos de IA.
+
+1. **Compliance Strategy Pattern:** Motor central que dicta reglas de privacidad según el país configurado.
+2. **Log PII Scrubber:** Interceptor de logs que censura información de identificación personal en tiempo real.
+3. **AI Data Anonymization:** Sistema de tokenización bidireccional (Juan -> [PERSON_1]) para evitar fuga de datos hacia los LLMs.
+4. **Encrypted Storage Hooks:** Encriptación a nivel de aplicación (Client-Side Encryption) antes de enviar evidencias a MinIO.
+
+### Fase 4: IA Generativa y Burocracia Forense (El Cerebro)
 
 **Objetivo:** Automatizar la redacción y generación del dictamen pericial.
 **Valor:** Le devuelve al perito el 50% de su tiempo, automatizando el papeleo legal.
@@ -54,7 +64,7 @@ Plans:
 - [x] 03-04-PLAN.md — FastAPI Router Integration & GenAI Endpoints
 - [x] 03-05-PLAN.md — Evaluation, Tracing, and CI/CD Setup
 
-### Fase 4: Despliegue, Infraestructura y Operación Policial
+### Fase 5: Despliegue, Infraestructura y Operación Policial
 
 **Objetivo:** Sistema listo para producción on-premise y soporte a hardware físico.
 **Valor:** Sistema autónomo, seguro y extensible a las calles.
@@ -67,5 +77,5 @@ Plans:
 ---
 ## Fases Futuras (Post-Fase 4)
 
-- **Fase 5:** Reconocimiento Facial (Multimodal)
-- **Fase 6:** Sincronización entre múltiples laboratorios regionales.
+- **Fase 6:** Reconocimiento Facial (Multimodal)
+- **Fase 7:** Sincronización entre múltiples laboratorios regionales.
