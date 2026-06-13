@@ -263,3 +263,109 @@ def sample_fingerprint() -> np.ndarray:
     noise = np.random.randint(0, 40, (256, 256), dtype=np.uint8)
     img = np.clip(img.astype(np.int16) + noise, 0, 255).astype(np.uint8)
     return img
+
+# ── AiFeatureExtractor tests ────────────────────────────────────────────
+
+
+class TestAiFeatureExtractor:
+
+    def test_implements_ifeature_extractor(self) -> None:
+        """AiFeatureExtractor is an instance of IFeatureExtractor."""
+        from src.processing.extractor import AiFeatureExtractor
+
+        extractor = AiFeatureExtractor(MockModelManager())
+        assert isinstance(extractor, IFeatureExtractor)
+
+    def test_extract_algorithm_origin(
+        self,
+        mock_model_manager: MockModelManager,
+        sample_fingerprint: np.ndarray,
+    ) -> None:
+        """All returned candidates have AlgorithmOrigin.DEEP_LEARNING."""
+        from src.processing.extractor import AiFeatureExtractor
+
+        extractor = AiFeatureExtractor(mock_model_manager)
+        candidates = extractor.extract(sample_fingerprint)
+        for m in candidates:
+            assert m.origin == AlgorithmOrigin.DEEP_LEARNING, (
+                f"Expected DEEP_LEARNING, got {m.origin}"
+            )
+
+    def test_extract_blank_image(
+        self,
+        mock_model_manager: MockModelManager,
+    ) -> None:
+        """Blank image returns empty list, not crash."""
+        from src.processing.extractor import AiFeatureExtractor
+
+        extractor = AiFeatureExtractor(mock_model_manager)
+        blank = np.zeros((512, 512), dtype=np.uint8)
+        candidates = extractor.extract(blank)
+        assert isinstance(candidates, list)
+
+    def test_extract_empty_image(self) -> None:
+        """None-size or zero-size image returns empty list."""
+        from src.processing.extractor import AiFeatureExtractor
+
+        extractor = AiFeatureExtractor(MockModelManager())
+        empty = np.zeros((0, 0), dtype=np.uint8)
+        candidates = extractor.extract(empty)
+        assert candidates == []
+
+    def test_extract_confidence_range(
+        self,
+        mock_model_manager: MockModelManager,
+        sample_fingerprint: np.ndarray,
+    ) -> None:
+        """All returned confidence values are in [0.0, 1.0]."""
+        from src.processing.extractor import AiFeatureExtractor
+
+        extractor = AiFeatureExtractor(mock_model_manager)
+        candidates = extractor.extract(sample_fingerprint)
+        for m in candidates:
+            assert 0.0 <= m.confidence <= 1.0, (
+                f"Confidence {m.confidence} out of range"
+            )
+
+    def test_extract_model_failure(
+        self,
+        sample_fingerprint: np.ndarray,
+    ) -> None:
+        """ModelManager exception is caught and returns empty list."""
+        from src.processing.extractor import AiFeatureExtractor
+
+        class FailingModelManager:
+            def run_extraction(self, image: np.ndarray) -> np.ndarray:
+                msg = "Model inference failed"
+                raise RuntimeError(msg)
+
+        extractor = AiFeatureExtractor(FailingModelManager())  # type: ignore[arg-type]
+        # Should not raise
+        candidates = extractor.extract(sample_fingerprint)
+        assert candidates == []
+
+    def test_extract_output_type(
+        self,
+        mock_model_manager: MockModelManager,
+        sample_fingerprint: np.ndarray,
+    ) -> None:
+        """Extract returns list[MinutiaCandidate]."""
+        from src.processing.extractor import AiFeatureExtractor
+
+        extractor = AiFeatureExtractor(mock_model_manager)
+        candidates = extractor.extract(sample_fingerprint)
+        assert isinstance(candidates, list)
+        if candidates:
+            assert isinstance(candidates[0], MinutiaCandidate)
+
+    def test_extract_model_manager_called(
+        self,
+        mock_model_manager: MockModelManager,
+        sample_fingerprint: np.ndarray,
+    ) -> None:
+        """ModelManager.run_extraction is invoked during extract."""
+        from src.processing.extractor import AiFeatureExtractor
+
+        extractor = AiFeatureExtractor(mock_model_manager)
+        extractor.extract(sample_fingerprint)
+        assert mock_model_manager._call_count >= 1  # noqa: SLF001

@@ -1,14 +1,24 @@
 """
 Extracción de características (minucias).
 Clean Code: Implementación de IFeatureExtractor con tipos estrictos.
+
+Available extractors
+--------------------
+* :class:`SkeletonMinutiaeExtractor` — traditional Crossing Number on skeleton
+* :class:`GradientRidgeExtractor` — Harris-corner-based validation cross-check
+* :class:`AiFeatureExtractor` — deep-learning extraction via ONNX Runtime
 """
 
 import logging
 import math
 
+import cv2
 import numpy as np
 from skimage.morphology import convex_hull_image, erosion, square
 
+from src.ai.config import AiConfig
+from src.ai.extraction import ExtractionProcessor
+from src.ai.model_manager import ModelManager
 from src.core.interfaces import IFeatureExtractor
 from src.core.metrics import timed
 from src.core.types import AlgorithmOrigin, MinutiaCandidate, MinutiaType
@@ -526,6 +536,75 @@ class GradientRidgeExtractor(IFeatureExtractor):
             )
 
         return candidates
+
+
+class AiFeatureExtractor(IFeatureExtractor):
+    """Deep-learning minutiae extractor using ONNX Runtime.
+
+    Replaces the traditional skeletonisation + Crossing Number approach
+    with a neural network that detects minutiae directly from enhanced
+    fingerprint images.  The :class:`SkeletonMinutiaeExtractor` remains
+    available as a fallback.
+
+    Architecture
+    ------------
+    Input → :meth:`ExtractionProcessor.preprocess` → canvas padding →
+    :meth:`ModelManager.run_extraction` → ONNX inference →
+    :meth:`ExtractionProcessor.postprocess` → NMS + coordinate remap →
+    ``list[MinutiaCandidate]``
+    """
+
+    def __init__(
+        self,
+        model_manager: ModelManager,
+        processor: ExtractionProcessor | None = None,
+    ) -> None:
+        """Initialise the AI extractor.
+
+        Args:
+            model_manager: Initialised :class:`ModelManager` with a loaded
+                extraction model.
+            processor: Optional custom :class:`ExtractionProcessor`. A
+                default instance is created when ``None``.
+        """
+        self.model_manager = model_manager
+        self.processor = processor or ExtractionProcessor(AiConfig())
+
+    @timed("extract_minutiae_dl")
+    def extract(self, image: np.ndarray) -> list[MinutiaCandidate]:
+        """Extract minutiae using the DL model inference pipeline.
+
+        Handles grayscale conversion, blank-image guard, and model
+        failure gracefully (returns empty list instead of raising).
+
+        Args:
+            image: Grayscale (H, W) or BGR (H, W, 3) uint8 image.
+
+        Returns:
+            List of :class:`MinutiaCandidate` with
+            :attr:`AlgorithmOrigin.DEEP_LEARNING`, or an empty list on
+            failure.
+        """
+        if image is None or image.size == 0:
+            logger.warning("Empty image passed to AiFeatureExtractor")
+            return []
+
+        # Convert BGR to grayscale if needed
+        if image.ndim == 3:
+            if image.shape[2] == 3:
+                image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            elif image.shape[2] == 1:
+                image = image[:, :, 0]
+
+        original_shape = image.shape[:2]
+        try:
+            input_tensor = self.processor.preprocess(image)
+            raw_output = self.model_manager.run_extraction(input_tensor)
+            candidates = self.processor.postprocess(raw_output, original_shape)
+            return candidates
+        except Exception:
+            logger.exception("DL extraction failed")
+            return []
 
 
 # Alias para compatibilidad
