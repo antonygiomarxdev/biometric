@@ -44,10 +44,14 @@ Plans:
 **Objetivo:** Automatizar la redacción y generación del dictamen pericial.
 **Valor:** Le devuelve al perito el 50% de su tiempo, automatizando el papeleo legal.
 
-1. **Motor de Reportes:** Generación de PDF forense estándar.
-2. **GenAI Reportes:** Integración de LLM (local o API segura) para redactar el dictamen legal a partir de los datos técnicos del match.
-3. **Dashboard Analítico:** Estadísticas del laboratorio.
-4. **Asistente (NLP):** Consultas en lenguaje natural sobre la base de datos (ej. "Cadena de custodia de caso X").
+**Plans:** 5 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — Core LLM Infrastructure Foundation
+- [ ] 03-02-PLAN.md — Text-to-SQL Engine for NLP Assistant
+- [ ] 03-03-PLAN.md — Structured Content Generation for Forensic Report
+- [ ] 03-04-PLAN.md — FastAPI Router Integration & GenAI Endpoints
+- [ ] 03-05-PLAN.md — Evaluation, Tracing, and CI/CD Setup
 
 ### Fase 4: Despliegue, Infraestructura y Operación Policial
 
