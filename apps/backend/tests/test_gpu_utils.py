@@ -1,7 +1,6 @@
 import os
 from unittest import mock
 import pytest
-from src.core.gpu_utils import GPU_AVAILABLE, is_gpu_enabled, get_device_info
 
 def test_gpu_available_flag():
     """GPU_AVAILABLE is a bool (import-level check)."""
@@ -35,7 +34,6 @@ def test_gpu_detection_without_torch():
     sys.modules['torch'] = None
     
     try:
-        from src.core.gpu_utils import _detect_gpu
         assert isinstance(_detect_gpu(), bool)
     finally:
         # Restore torch
