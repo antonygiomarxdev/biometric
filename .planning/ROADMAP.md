@@ -47,8 +47,9 @@ Plans:
 **Plans:** 5 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Core LLM Infrastructure Foundation
-- [ ] 03-02-PLAN.md — Text-to-SQL Engine for NLP Assistant
+
+- [x] 03-01-PLAN.md — Core LLM Infrastructure Foundation
+- [x] 03-02-PLAN.md — Text-to-SQL Engine for NLP Assistant
 - [ ] 03-03-PLAN.md — Structured Content Generation for Forensic Report
 - [ ] 03-04-PLAN.md — FastAPI Router Integration & GenAI Endpoints
 - [ ] 03-05-PLAN.md — Evaluation, Tracing, and CI/CD Setup

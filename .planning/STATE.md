@@ -3,21 +3,21 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 current_phase: 03-ia-generativa-burocracia
-status: in_progress
-last_updated: "2026-06-13T22:04:00.000Z"
+status: completed
+last_updated: "2026-06-13T22:09:25.563Z"
 progress:
-  total_phases: 4
+  total_phases: 3
   completed_phases: 1
-  total_plans: 20
-  completed_plans: 15
-  percent: 39
+  total_plans: 19
+  completed_plans: 16
+  percent: 33
 ---
 
 # State: Biometric
 
 **Last updated:** 2026-06-13
 **Current phase:** 03-ia-generativa-burocracia
-**Status:** Plan 01 completed (LLM Factory)
+**Status:** Plan 02 completed (Text-to-SQL Assistant)
 
 ## Project Reference
 
@@ -36,7 +36,7 @@ See: `.planning/PROJECT.md`
 
 ## Current Work
 
-Phase 3 (IA Generativa/Dictámenes) — Plan 01 completado. LLMFactory con ILLMProvider Protocol, OllamaProvider (local), OpenAIProvider (remoto), y perfiles de use_case (sql, default). Config actualizada con SecretStr para API key. Next: Plan 02 (Text-to-SQL query engine).
+Phase 3 (IA Generativa/Dictámenes) — Plan 02 completado. Read-only DB engine (get_readonly_engine) con postgresql_readonly=True. NLP Assistant (ask_assistant) con NLSQLTableQueryEngine, tabla explícita peritajes/evidencia, async-first. 5 tests, TDD. Next: Plan 03 (Dictamen pericial generation pipeline).
 
 ## Completed Plans
 
@@ -47,6 +47,7 @@ Phase 3 (IA Generativa/Dictámenes) — Plan 01 completado. LLMFactory con ILLMP
 | 02-ia-vision-computacional | 03 - AI Enhancement & Segmentation | ✅ SegmentationEnhancer, EnhancementEnhancer, factory AI-first con CPU fallback. |
 | 02-ia-vision-computacional | 04 - DL Minutiae Extraction | ✅ ExtractionProcessor (pre/post), AiFeatureExtractor (IFeatureExtractor), 20 tests. |
 | 03-ia-generativa-burocracia | 01 - LLM Factory | ✅ LLMFactory with ILLMProvider Protocol, Ollama/OpenAI providers, use_case profiles, 15 tests. |
+| 03-ia-generativa-burocracia | 02 - Text-to-SQL | ✅ Read-only DB engine, NLP assistant with NLSQLTableQueryEngine, 5 tests (TDD). |
 
 ## Decisions Log
 
@@ -56,12 +57,14 @@ Phase 3 (IA Generativa/Dictámenes) — Plan 01 completado. LLMFactory con ILLMP
 - **D-06 (Enhancement letterbox):** EnhancementProcessor uses letterbox padding (aspect-ratio preserving) for enhancement model; SegmentationProcessor uses centre-pad for segmentation model.
 - **D-07 (Extraction output scaling):** ExtractionProcessor computes scale factors from output spatial dims to canvas size before offset subtraction — handles model outputs at different resolutions than the 512×512 input canvas.
 - **D-08 (LLM Factory Adapter Pattern):** ILLMProvider uses Protocol duck typing (not ABC) so providers are structurally typed. LLMFactory routes via config.llm_provider with use_case profiles (sql=120s timeout, default=60s). SecretStr for openai_api_key per T-03-01.
+- **D-09 (Read-only DB enforcement):** SQLAlchemy engine uses `execution_options={"isolation_level": "AUTOCOMMIT", "postgresql_readonly": True}` to prevent writes at the driver level — enforces T-03-03.
+- **D-10 (Double table scoping):** Both `SQLDatabase(include_tables=[...])` and `NLSQLTableQueryEngine(tables=[...])` specify `["peritajes", "evidencia"]`. This is intentional double-coverage: `include_tables` limits schema exposure, `tables` limits LLM prompt context (T-03-04).
 
 ## Next Actions
 
-1. Plan 03-02: Text-to-SQL query engine integration (NLSQLTableQueryEngine)
-2. Plan 03-03: Dictamen pericial generation pipeline
-3. Plan 03-04: Evaluate and refine generation quality
+1. Plan 03-03: Dictamen pericial generation pipeline
+2. Plan 03-04: Evaluate and refine generation quality
+3. Plan 03-05: Guardrails and production hardening
 
 ## Performance Metrics
 
@@ -72,3 +75,4 @@ Phase 3 (IA Generativa/Dictámenes) — Plan 01 completado. LLMFactory con ILLMP
 | Phase 02-ia-vision-computacional | P03 AI Segmentation & Enhancement | 4 min | 3 tasks, 7 files |
 | Phase 02-ia-vision-computacional | P04 DL Minutiae Extraction | 8 min | 2 tasks (TDD), 3 files |
 | Phase 03-ia-generativa-burocracia P01 | 3min | 2 tasks | 7 files |
+| Phase 03-ia-generativa-burocracia P02 | 2min | 2 tasks (TDD) | 5 files |

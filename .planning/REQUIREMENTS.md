@@ -14,6 +14,10 @@
 - [x] **AI-SEG**: AI fingerprint segmentation (U-Net ONNX) — SegmentationEnhancer implementing IEnhancer
 - [x] **AI-ENH**: AI fingerprint enhancement (U-Net MobileNetV2 ONNX) — EnhancementEnhancer implementing IEnhancer
 
+### Generative AI — Text-to-SQL
+
+- [x] **GENAI-02**: Implementar motor Text-to-SQL (NLSQLTableQueryEngine) con conexión read-only y scoping explícito de tablas
+
 ### Matching & Algoritmo AFIS
 
 - [ ] **AFIS-01**: Investigar y documentar algoritmo de matching óptimo (mejorar actual vs implementar NIST)
@@ -86,6 +90,7 @@
 | AI-INFRA | Phase 2 | ✅ Complete |
 | AI-SEG | Phase 2 | ✅ Complete |
 | AI-ENH | Phase 2 | ✅ Complete |
+| GENAI-02 | Phase 3 | ✅ Complete |
 | AFIS-01 | Phase 1 | Pending |
 | AFIS-02 | Phase 1 | Pending |
 | AUTH-01 | Phase 2 | Pending |
