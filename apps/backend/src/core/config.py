@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from typing import Literal, Optional
 import logging
 
+from pydantic import SecretStr
+
 logging.basicConfig(level=logging.INFO)
 
 # Try to load .env for local development
@@ -81,6 +83,28 @@ class Config:
     jwt_access_token_expire_minutes: int = field(
         default_factory=lambda: int(
             os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30")
+        )
+    )
+
+    # Generative AI / LLM
+    llm_provider: Literal["local", "openai"] = field(
+        default_factory=lambda: os.getenv(
+            "LLM_PROVIDER", "local"  # type: ignore[return-value]
+        )
+    )
+    local_model_name: str = field(
+        default_factory=lambda: os.getenv(
+            "LOCAL_MODEL_NAME", "llama3.1:latest"
+        )
+    )
+    remote_model_name: str = field(
+        default_factory=lambda: os.getenv(
+            "REMOTE_MODEL_NAME", "gpt-4"
+        )
+    )
+    openai_api_key: SecretStr = field(
+        default_factory=lambda: SecretStr(
+            os.getenv("OPENAI_API_KEY", "")
         )
     )
 
