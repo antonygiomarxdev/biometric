@@ -44,10 +44,13 @@ Plans:
 **Objetivo:** Implementar una arquitectura de cumplimiento dinámico que garantice la privacidad de datos (PII), auditoría criptográfica y seguridad de almacenamiento adaptables a cualquier jurisdicción global (GDPR, leyes LATAM).
 **Valor:** Blindaje legal del sistema ante auditorías forenses internacionales (ISO 27037). Pre-requisito crítico antes de integrar modelos generativos de IA.
 
-1. **Compliance Strategy Pattern:** Motor central que dicta reglas de privacidad según el país configurado.
-2. **Log PII Scrubber:** Interceptor de logs que censura información de identificación personal en tiempo real.
-3. **AI Data Anonymization:** Sistema de tokenización bidireccional (Juan -> [PERSON_1]) para evitar fuga de datos hacia los LLMs.
-4. **Encrypted Storage Hooks:** Encriptación a nivel de aplicación (Client-Side Encryption) antes de enviar evidencias a MinIO.
+**Plans:** 4 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — Strategy Pattern & Interfaces
+- [ ] 03-02-PLAN.md — Log PII Scrubber
+- [ ] 03-03-PLAN.md — AI Data Tokenizer (Masking)
+- [ ] 03-04-PLAN.md — Storage Encryption
 
 ### Fase 4: IA Generativa y Burocracia Forense (El Cerebro)
 
