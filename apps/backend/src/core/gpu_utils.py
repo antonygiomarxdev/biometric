@@ -1,4 +1,4 @@
-"""Utilidades para aceleración GPU con fallback automático a CPU."""
+"""GPU acceleration utilities with automatic CPU fallback."""
 
 import logging
 import os
@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 import numpy as np
 
-# Definición de tipos
+# Type definitions
 ArrayLike = Union[np.ndarray, "cp.ndarray"] # type: ignore
 
 # Intentar importar CuPy
@@ -18,9 +18,9 @@ try:
     
     # Verificar que hay GPU disponible
     try:
-        # Intentar operación simple en GPU para verificar que CUDA funciona
+        # Try a simple GPU operation to verify CUDA works
         test_array = cp.array([1, 2, 3])
-        _ = cp.sum(test_array)  # Forzar compilación
+        _ = cp.sum(test_array)  # Force compilation
         cp.cuda.Device(0).compute_capability
         GPU_AVAILABLE = True
         logger.info("✅ GPU detectada y CuPy disponible")
@@ -30,7 +30,7 @@ try:
         CUPY_AVAILABLE = False
         logger.warning(f"⚠️ CuPy instalado pero CUDA no disponible: {type(e).__name__}")
         logger.info("ℹ️ Usando CPU (NumPy) - Para usar GPU instala CUDA Toolkit")
-        # Reemplazar cp con numpy para fallback
+        # Replace cp with numpy for fallback
         import numpy as cp # type: ignore
         
 except ImportError:
@@ -41,7 +41,7 @@ except ImportError:
 
 
 class GPUConfig:
-    """Configuración global de GPU."""
+    """Global GPU configuration."""
     
     # Puede ser forzado por variable de entorno
     _force_cpu = os.getenv("FORCE_CPU", "0") == "1"
@@ -49,12 +49,12 @@ class GPUConfig:
     
     @classmethod
     def is_enabled(cls) -> bool:
-        """Retorna True si GPU está habilitada."""
+        """Returns True if GPU is enabled."""
         return cls._enabled
     
     @classmethod
     def enable(cls):
-        """Habilitar GPU si está disponible."""
+        """Enable GPU if available."""
         if GPU_AVAILABLE:
             cls._enabled = True
             logger.info("✅ GPU habilitada")
@@ -63,20 +63,20 @@ class GPUConfig:
     
     @classmethod
     def disable(cls):
-        """Deshabilitar GPU (forzar CPU)."""
+        """Disable GPU (force CPU)."""
         cls._enabled = False
         logger.info("ℹ️ GPU deshabilitada, usando CPU")
     
     @classmethod
     def get_backend(cls) -> str:
-        """Retorna el backend actual."""
+        """Returns the current backend."""
         if cls._enabled:
             return "GPU (CuPy)"
         return "CPU (NumPy)"
     
     @classmethod
-    def get_device_info(cls) -> dict:
-        """Información del dispositivo."""
+    def get_device_info(cls) -> dict[str, Any]:
+        """Device information."""
         if not cls._enabled or not GPU_AVAILABLE:
             return {
                 "backend": "CPU",
@@ -89,7 +89,7 @@ class GPUConfig:
             mem_info = device.mem_info
             compute_cap = device.compute_capability
             
-            # Intentar obtener nombre del dispositivo (puede no estar disponible en todas las versiones)
+            # Try to get device name (may not be available in all versions)
             device_name = "NVIDIA GPU"
             try:
                 import pynvml
@@ -97,7 +97,7 @@ class GPUConfig:
                 handle = pynvml.nvmlDeviceGetHandleByIndex(0)
                 device_name = pynvml.nvmlDeviceGetName(handle).decode()
             except:
-                pass  # Si pynvml no está disponible, usar nombre genérico
+                pass  # If pynvml is not available, use generic name
             
             return {
                 "backend": "GPU",
@@ -119,24 +119,24 @@ class GPUConfig:
 
 def get_array_module(arr: Optional[ArrayLike] = None):
     """
-    Retorna el módulo apropiado (cupy o numpy) según configuración.
+    Returns the appropriate module (cupy or numpy) based on configuration.
     
-    Si se pasa un array, detecta automáticamente su tipo.
+    If an array is passed, it automatically detects its type.
     """
     if arr is not None:
-        # Detectar el módulo del array
+        # Detect the array's module
         if CUPY_AVAILABLE and hasattr(arr, "__module__") and arr.__module__ == "cupy":
              return cp
         return np
     
-    # Usar configuración global
+    # Use global configuration
     if GPUConfig.is_enabled():
         return cp
     return np
 
 
 def to_gpu(arr: ArrayLike) -> ArrayLike:
-    """Mueve array a GPU si está habilitada."""
+    """Move array to GPU if enabled."""
     if not GPUConfig.is_enabled():
         return arr
     
@@ -146,24 +146,24 @@ def to_gpu(arr: ArrayLike) -> ArrayLike:
 
 
 def to_cpu(arr: ArrayLike) -> np.ndarray:
-    """Mueve array a CPU (convierte CuPy a NumPy)."""
+    """Move array to CPU (converts CuPy to NumPy)."""
     if CUPY_AVAILABLE and hasattr(arr, "device"): # Check for cupy array
         return cp.asnumpy(arr)
     return np.asarray(arr)
 
 
 def ensure_cpu(arr: ArrayLike) -> np.ndarray:
-    """Asegura que el array esté en CPU como NumPy."""
+    """Ensure the array is on CPU as NumPy."""
     return to_cpu(arr)
 
 
 def ensure_gpu(arr: np.ndarray) -> ArrayLike:
-    """Asegura que el array esté en GPU si está habilitada."""
+    """Ensure the array is on GPU if enabled."""
     return to_gpu(arr)
 
 
 class GPUArray:
-    """Wrapper que maneja arrays en GPU/CPU transparentemente."""
+    """Wrapper that handles GPU/CPU arrays transparently."""
     
     def __init__(self, data: ArrayLike):
         xp = get_array_module()
@@ -175,20 +175,20 @@ class GPUArray:
     
     @property
     def data(self) -> ArrayLike:
-        """Retorna el array (GPU o CPU)."""
+        """Returns the array (GPU or CPU)."""
         return self._data
     
     @property
     def xp(self):
-        """Retorna el módulo (cupy o numpy)."""
+        """Returns the module (cupy or numpy)."""
         return self._xp
     
     def to_cpu(self) -> np.ndarray:
-        """Convierte a NumPy en CPU."""
+        """Converts to NumPy on CPU."""
         return to_cpu(self._data)
     
     def to_gpu(self) -> "GPUArray":
-        """Convierte a CuPy en GPU."""
+        """Converts to CuPy on GPU."""
         if not GPUConfig.is_enabled():
             return self
         self._data = to_gpu(self._data)
@@ -209,11 +209,11 @@ class GPUArray:
 
 
 # Aliases para compatibilidad
-xp = get_array_module()  # Módulo por defecto
+xp = get_array_module()  # Default module
 
 
 def print_gpu_status():
-    """Imprime el estado de la GPU."""
+    """Print GPU status."""
     info = GPUConfig.get_device_info()
     
     print("\n" + "="*70)

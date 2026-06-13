@@ -38,7 +38,7 @@ class AuditLogEntry(BaseModel):
     table_name: str
     record_id: str
     action: str
-    payload: dict
+    payload: dict[str, Any]
     previous_hash: Optional[str] = None
     current_hash: str
     created_at: str

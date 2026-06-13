@@ -1,5 +1,5 @@
 """
-Implementación de Enhancer en CPU optimizada.
+Optimized CPU Enhancer implementation.
 """
 
 import logging
@@ -31,17 +31,17 @@ class CpuEnhancer(BaseEnhancer):
             img = cv2.resize(img, (new_cols, new_rows))
             logger.debug(f"Imagen redimensionada a: {img.shape}")
 
-        # 1. Normalización
+        # 1. Normalization
         normim = self._normalize(img)
         logger.debug(
             f"Normalización - mean: {np.mean(normim):.3f}, std: {np.std(normim):.3f}"
         )
 
-        # 2. Orientación
+        # 2. Orientation
         orientim = self._ridge_orient(normim)
         logger.debug(f"Orientación calculada - shape: {orientim.shape}")
 
-        # 3. Frecuencia
+        # 3. Frequency
         mean_freq = self._ridge_freq(normim, orientim)
         logger.debug(f"Frecuencia media: {mean_freq:.3f}")
 
@@ -51,7 +51,7 @@ class CpuEnhancer(BaseEnhancer):
             )
             mean_freq = 0.1  # Valor por defecto
 
-        # 4. Filtrado Gabor (Optimizado)
+        # 4. Gabor filtering (Optimized)
         binim = self._ridge_filter(normim, orientim, mean_freq)
 
         result = np.uint8(binim * 255)
@@ -76,7 +76,7 @@ class CpuEnhancer(BaseEnhancer):
 
     def _ridge_orient(self, normim: np.ndarray) -> np.ndarray:
         rows, cols = normim.shape
-        # Gradientes gaussianos
+        # Gaussian gradients
         sze = int(np.fix(6 * self.config.gradient_sigma))
         if sze % 2 == 0:
             sze += 1
@@ -91,7 +91,7 @@ class CpuEnhancer(BaseEnhancer):
         Gyy = Gy**2
         Gxy = Gx * Gy
 
-        # Suavizado
+        # Smoothing
         sze = int(np.fix(6 * self.config.block_sigma))
         if sze % 2 == 0:
             sze += 1
@@ -119,11 +119,11 @@ class CpuEnhancer(BaseEnhancer):
         return orientim
 
     def _ridge_freq(self, normim: np.ndarray, orientim: np.ndarray) -> float:
-        """Estima la frecuencia promedio de las crestas."""
+        """Estimates the average ridge frequency."""
         rows, cols = normim.shape
         freq = np.zeros((rows, cols))
 
-        # Parámetros de configuración
+        # Configuration parameters
         blk_size = self.config.ridge_freq_blksze
         wind_size = self.config.ridge_freq_windsze
         min_wave = self.config.min_wave_length
@@ -139,7 +139,7 @@ class CpuEnhancer(BaseEnhancer):
                 )
                 freq[r : r + blk_size, c : c + blk_size] = freq_block
 
-        # Filtrar frecuencias inválidas y promediar
+        # Filter invalid frequencies and average
         freq_1d = freq.flatten()
         ind = np.where(freq_1d > 0)[0]
 
@@ -151,27 +151,27 @@ class CpuEnhancer(BaseEnhancer):
         return float(mean_freq)
 
     def _frequest(self, blkim, blkor, blk_size, wind_size, min_wave, max_wave):
-        # 1. Orientación promedio del bloque
+        # 1. Average block orientation
         cosorient = np.mean(np.cos(2 * blkor))
         sinorient = np.mean(np.sin(2 * blkor))
         orient = np.arctan2(sinorient, cosorient) / 2
 
-        # 2. Rotar el bloque para alinear crestas verticalmente
-        # Rotar -orient + 90 (o simplemente ajustar según el sistema de coords)
-        # ndimage.rotate rota counter-clockwise
+        # 2. Rotate the block to align ridges vertically
+        # Rotate -orient + 90 (or simply adjust according to coordinate system)
+        # ndimage.rotate rotates counter-clockwise
         rotim = ndimage.rotate(
             blkim, orient * 180 / np.pi + 90, reshape=False, mode="nearest"
         )
 
-        # 3. Recortar para evitar artefactos de rotación
+        # 3. Crop to avoid rotation artifacts
         cropsze = int(np.fix(blk_size / np.sqrt(2)))
         offset = int(np.fix((blk_size - cropsze) / 2))
         rotim = rotim[offset : offset + cropsze, offset : offset + cropsze]
 
-        # 4. Proyección en eje X (sumar columnas)
+        # 4. Projection on X axis (sum columns)
         proj = np.sum(rotim, axis=0)
 
-        # 5. Dilatación para encontrar picos
+        # 5. Dilation to find peaks
         dilation = ndimage.grey_dilation(proj, wind_size, structure=np.ones(wind_size))
         temp = np.abs(dilation - proj)
 
@@ -183,7 +183,7 @@ class CpuEnhancer(BaseEnhancer):
         if cols_maxind < 2:
             return 0.0
 
-        # 6. Calcular longitud de onda promedio
+        # 6. Calculate average wavelength
         wave_length = (maxind[-1] - maxind[0]) / (cols_maxind - 1)
         if min_wave <= wave_length <= max_wave:
             return 1.0 / wave_length
@@ -193,11 +193,11 @@ class CpuEnhancer(BaseEnhancer):
     def _ridge_filter(
         self, normim: np.ndarray, orientim: np.ndarray, freq: float
     ) -> np.ndarray:
-        # Optimización Vectorizada: Banco de Filtros
+        # Vectorized Optimization: Filter Bank
         angle_inc = self.config.angle_inc
         num_filters = int(180 / angle_inc)
 
-        # 1. Precomputar filtros
+        # 1. Precompute filters
         filters = []
         sigmax = 1 / freq * self.config.relative_scale_factor_x
         sigmay = 1 / freq * self.config.relative_scale_factor_y
@@ -214,13 +214,13 @@ class CpuEnhancer(BaseEnhancer):
             angle = -(i * angle_inc + 90)
             filters.append(ndimage.rotate(ref_filter, angle, reshape=False))
 
-        # 2. Convolucionar imagen con TODOS los filtros (Tensor 3D idealmente, aquí bucle de capas)
+        # 2. Convolve image with ALL filters (ideally 3D tensor, here layer loop)
         filtered_layers = np.zeros((num_filters, *normim.shape))
         for i, kern in enumerate(filters):
             filtered_layers[i] = signal.convolve2d(normim, kern, mode="same")
 
-        # 3. Seleccionar respuesta según orientación pixel a pixel
-        # Convertir orientación continua a índice discreto [0, num_filters-1]
+        # 3. Select response based on pixel-wise orientation
+        # Convert continuous orientation to discrete index [0, num_filters-1]
         orient_deg = orientim * 180 / np.pi
         orient_idx = np.round(orient_deg / angle_inc).astype(int)
         orient_idx = orient_idx % num_filters

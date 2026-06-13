@@ -1,9 +1,8 @@
 """
-Repositorio y Matching Híbrido.
-Clean Code: Implementación de IMatcher y Repositorio con soporte Async/Batch.
+Hybrid Repository and Matching.
+Clean Code: IMatcher and Repository implementation with Async/Batch support.
 """
 
-import asyncio
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -20,13 +19,13 @@ from src.storage.vector_index import VectorIndex, vector_index
 
 class FingerprintRepository(IMatcher):
     """
-    Repositorio que implementa lógica de matching híbrido (L2 + Coseno).
+    Repository implementing hybrid matching logic (L2 + Cosine).
     """
 
     def __init__(self, index: VectorIndex = vector_index):
         self.db_manager = db_manager
         self.vector_index = index
-        # Configuración de pesos para score combinado
+        # Weight configuration for combined score
         self.w_l2 = 0.7
         self.w_cos = 0.3
         self.threshold_l2 = 2000.0
@@ -41,9 +40,9 @@ class FingerprintRepository(IMatcher):
         image_path: Optional[str] = None,
         minutiae_data: Optional[dict] = None,
     ) -> int:
-        """Registra una huella normalizada."""
+        """Register a normalized fingerprint."""
         vector = fp.vector
-        # Normalizar vector a dimensión fija (256) para compatibilidad con el índice
+        # Normalize vector to fixed dimension (256) for index compatibility
         vector = MinutiaeVectorizer.pad_vector(vector, config.vector_dimension)
         idx_id = self.vector_index.add(vector)
 
@@ -69,29 +68,29 @@ class FingerprintRepository(IMatcher):
             session.close()
 
     async def match(self, probe: np.ndarray, top_k: int = 5) -> MatchResult:
-        """Matching unitario asíncrono."""
-        # En una app real usaríamos run_in_executor para operaciones DB bloqueantes
-        # Por simplicidad aquí llamamos directo, pero preparamos la firma async
+        """Single asynchronous matching."""
+        # In a real app we would use run_in_executor for blocking DB operations
+        # For simplicity we call directly, but we prepare the async signature
         return self._match_sync(probe, top_k)
 
     async def match_batch(
         self, probes: List[np.ndarray], top_k: int = 5
     ) -> List[MatchResult]:
-        """Matching batch."""
-        # Simulación de paralelismo para batch
+        """Batch matching."""
+        # Parallelism simulation for batch
         loop = asyncio.get_event_loop()
         tasks = [loop.run_in_executor(None, self._match_sync, p, top_k) for p in probes]
         return await asyncio.gather(*tasks)
 
     def identify(self, fp: NormalizedFingerprint, top_k: int = 5) -> MatchResult:
-        """Identifica una huella de forma síncrona (Wrapper para compatibilidad)."""
+        """Identify a fingerprint synchronously (Wrapper for compatibility)."""
         vector = fp.vector
-        # Normalizar vector a dimensión fija (256) para compatibilidad con el índice
+        # Normalize vector to fixed dimension (256) for index compatibility
         vector = MinutiaeVectorizer.pad_vector(vector, config.vector_dimension)
         return self._match_sync(vector, top_k)
 
     def count(self) -> int:
-        """Cuenta el número de registros en la base de datos."""
+        """Count the number of records in the database."""
         session = self.db_manager.get_session()
         try:
             return session.query(FingerprintRecord).count()
@@ -99,32 +98,32 @@ class FingerprintRepository(IMatcher):
             session.close()
 
     def _match_sync(self, probe: np.ndarray, top_k: int) -> MatchResult:
-        # Normalizar vector de búsqueda a dimensión fija (256) para compatibilidad
-        # Aunque vector_index.search también normaliza, es mejor hacerlo aquí para consistencia
+        # Normalize query vector to fixed dimension (256) for compatibility
+        # Although vector_index.search also normalizes, doing it here is better for consistency
         if len(probe) != config.vector_dimension:
             probe = MinutiaeVectorizer.pad_vector(probe, config.vector_dimension)
 
-        # 1. Búsqueda rápida por índice (L2)
-        # Traemos más candidatos (2x) para re-ranking
+        # 1. Fast index-based search (L2)
+        # Fetch more candidates (2x) for re-ranking
         candidates_k = top_k * 2
         ids, l2_dists = self.vector_index.search(probe, k=candidates_k)
 
         if not ids:
             return self._empty_result()
 
-        # 2. Re-ranking con métrica híbrida
+        # 2. Re-ranking with hybrid metric
         best_res = None
         best_score = -1.0
 
-        # Recuperación Batch de vectores para cálculo de Coseno
+        # Batch vector retrieval for Cosine computation
         candidates_vectors = self.vector_index.get_batch_by_ids(ids)
 
         for i, (idx, l2_dist) in enumerate(zip(ids, l2_dists)):
-            # Calcular score L2 normalizado
+            # Compute normalized L2 score
             norm_l2 = l2_dist / self.threshold_l2
             score_l2 = np.exp(-norm_l2 * 2.0)
 
-            # Cálculo de distancia Coseno Real
+            # Real Cosine distance calculation
             cand_vec = candidates_vectors[i]
 
             cosine_dist = 1.0
@@ -138,9 +137,9 @@ class FingerprintRepository(IMatcher):
                     sim = dot / (norm_a * norm_b)
                     cosine_dist = 1 - sim
 
-            # Score combinado (similitud, no distancia)
-            # Cosine similarity va de -1 a 1. Normalizamos a 0-1 (si son vectores positivos)
-            score_cos = 1.0 - cosine_dist  # Similitud
+            # Combined score (similarity, not distance)
+            # Cosine similarity ranges from -1 to 1. Normalize to 0-1 (if vectors are positive)
+            score_cos = 1.0 - cosine_dist  # Similarity
 
             combined = (self.w_l2 * score_l2) + (self.w_cos * score_cos)
 
@@ -153,13 +152,13 @@ class FingerprintRepository(IMatcher):
 
         idx, l2, cos, conf, comb = best_res
 
-        # Recuperar metadatos
+        # Retrieve metadata
         record = self.get_by_vector_index(idx)
 
-        # Decisión final basada en threshold
+        # Final decision based on threshold
         is_match = (
             l2 < self.threshold_l2
-        )  # Hard threshold en L2 sigue siendo la guardia principal
+        )  # Hard L2 threshold remains the main guard
 
         return MatchResult(
             matched=is_match,
@@ -173,12 +172,12 @@ class FingerprintRepository(IMatcher):
         )
 
     def _empty_result(self) -> MatchResult:
-        """Retorna un resultado vacío cuando no se encuentra match.
+        """Return an empty result when no match is found.
 
-        Usa un valor numérico muy grande en lugar de inf para compatibilidad JSON.
+        Uses a very large numeric value instead of inf for JSON compatibility.
         """
-        # Usar un valor muy grande pero finito para compatibilidad con JSON
-        # 1e10 es suficientemente grande para representar "sin match"
+        # Use a very large but finite value for JSON compatibility
+        # 1e10 is large enough to represent "no match"
         MAX_DISTANCE = 1e10
         return MatchResult(
             matched=False,
@@ -191,7 +190,7 @@ class FingerprintRepository(IMatcher):
         )
 
     def get_by_person_id(self, person_id: str) -> Optional[FingerprintRecord]:
-        """Recupera un registro por ID de persona."""
+        """Retrieve a record by person ID."""
         session = self.db_manager.get_session()
         try:
             return (
@@ -214,5 +213,5 @@ class FingerprintRepository(IMatcher):
             session.close()
 
 
-# Instancia global
+# Global instance
 repository = FingerprintRepository()

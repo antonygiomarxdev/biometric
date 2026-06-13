@@ -16,7 +16,6 @@ import logging
 from collections.abc import AsyncGenerator, AsyncIterator
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import asynccontextmanager
-from typing import Any
 
 from fastapi import FastAPI
 from sqlalchemy import Engine, create_engine

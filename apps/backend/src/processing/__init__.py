@@ -1,4 +1,4 @@
-"""Módulo de procesamiento de imágenes y extracción."""
+"""Image processing and feature extraction module."""
 
 from .enhancer import create_enhancer, IEnhancer
 from .extractor import MinutiaeExtractor

@@ -1,5 +1,5 @@
 """
-Implementación de Enhancer en GPU usando CuPy.
+GPU Enhancer implementation using CuPy.
 """
 import numpy as np
 import logging
@@ -15,34 +15,34 @@ class GpuEnhancer(BaseEnhancer):
     
     def __init__(self, config: EnhancerConfig):
         super().__init__(config)
-        self.xp = get_array_module() # cupy si está habilitado
+        self.xp = get_array_module() # cupy if enabled
         
     @timed("gpu_enhance")
     def enhance(self, img: np.ndarray, resize: bool = True) -> np.ndarray:
-        # Transferencia inicial a GPU
+        # Initial transfer to GPU
         img_gpu = ensure_gpu(img)
         xp = self.xp
         
         if resize:
-            # Resize en GPU puede requerir cupy.ndimage o custom kernel. 
-            # Por simplicidad y robustez, hacemos resize en CPU si cupy no tiene resize fácil
-            # O asumimos que img ya viene con tamaño correcto.
-            # Fallback a CPU para resize si es complejo
+            # Resize on GPU may require cupy.ndimage or custom kernel.
+            # For simplicity and robustness, we resize on CPU if cupy doesn't have easy resize
+            # Or we assume img already comes with the correct size.
+            # Fallback to CPU for resize if complex
             pass 
 
-        # 1. Normalización (Vectorizado en GPU)
+        # 1. Normalization (Vectorized on GPU)
         normim = self._normalize(img_gpu)
         
-        # 2. Orientación
+        # 2. Orientation
         orientim = self._ridge_orient(normim)
         
-        # 3. Frecuencia (Real con FFT)
+        # 3. Frequency (Real with FFT)
         mean_freq = self._ridge_freq(normim, orientim)
         
-        # 4. Filtrado Gabor (Tensorizado)
+        # 4. Gabor filtering (Tensorized)
         binim = self._ridge_filter(normim, orientim, mean_freq)
         
-        # Retorno a CPU
+        # Return to CPU
         return np.uint8(to_cpu(binim) * 255)
 
     def _normalize(self, img):
@@ -58,16 +58,16 @@ class GpuEnhancer(BaseEnhancer):
         import cupyx.scipy.signal as signal
         import cupyx.scipy.ndimage as ndimage
         
-        # Generar kernels en CPU y mover a GPU
+        # Generate kernels on CPU and move to GPU
         sze = int(np.fix(6 * self.config.gradient_sigma))
         if sze % 2 == 0: sze += 1
         gauss = to_gpu(cv2.getGaussianKernel(sze, self.config.gradient_sigma)) # cv2 returns numpy
         filter_gauss = gauss * gauss.T
         
-        # Gradient manual o usando libreria
+        # Manual gradient or using library
         # np.gradient equivalent in cupy?
-        # Simplemente usamos filtros Sobel o derivativa de Gaussiana
-        # Construccion manual de filtros derivativos
+        # We simply use Sobel filters or Gaussian derivative
+        # Manual construction of derivative filters
         ky, kx = xp.gradient(filter_gauss)
         
         Gx = signal.convolve2d(normim, kx, mode='same')
@@ -77,7 +77,7 @@ class GpuEnhancer(BaseEnhancer):
         Gyy = Gy**2
         Gxy = Gx*Gy
         
-        # Suavizado
+        # Smoothing
         sze = int(np.fix(6 * self.config.block_sigma))
         if sze % 2 == 0: sze += 1
         gauss = to_gpu(cv2.getGaussianKernel(sze, self.config.block_sigma))
@@ -96,13 +96,13 @@ class GpuEnhancer(BaseEnhancer):
 
     def _ridge_freq(self, normim, orientim) -> float:
         """
-        Estima la frecuencia dominante usando FFT en GPU.
-        Mucho más rápido que iterar bloques en Python.
+        Estimates the dominant frequency using FFT on GPU.
+        Much faster than iterating blocks in Python.
         """
         xp = self.xp
         
         # 1. FFT 2D
-        # Padding para potencia de 2 para máxima velocidad
+        # Pad to power of 2 for maximum speed
         rows, cols = normim.shape
         padded_rows = int(2**np.ceil(np.log2(rows)))
         padded_cols = int(2**np.ceil(np.log2(cols)))
@@ -111,22 +111,22 @@ class GpuEnhancer(BaseEnhancer):
         fft_shift = xp.fft.fftshift(fft)
         magnitude = xp.abs(fft_shift)
         
-        # 2. Máscara circular para ignorar DC y frecuencias muy bajas/altas
+        # 2. Circular mask to ignore DC and very low/high frequencies
         center_y, center_x = padded_rows // 2, padded_cols // 2
         y, x = xp.ogrid[:padded_rows, :padded_cols]
         r = xp.sqrt((x - center_x)**2 + (y - center_y)**2)
         
-        # Rango de frecuencias de interés (config)
-        # Convertir longitud de onda a radio en frecuencia
-        # Frecuencia f = 1/lambda
-        # En FFT, radio R corresponde a frecuencia f = R / N
+        # Frequency range of interest (config)
+        # Convert wavelength to frequency radius
+        # Frequency f = 1/lambda
+        # In FFT, radius R corresponds to frequency f = R / N
         # R = f * N = N / lambda
         min_r = padded_rows / self.config.max_wave_length
         max_r = padded_rows / self.config.min_wave_length
         
         mask = (r >= min_r) & (r <= max_r)
         
-        # 3. Encontrar radio promedio ponderado por energía
+        # 3. Find energy-weighted average radius
         masked_mag = magnitude * mask
         total_energy = xp.sum(masked_mag)
         
@@ -135,7 +135,7 @@ class GpuEnhancer(BaseEnhancer):
             
         weighted_r = xp.sum(r * masked_mag) / total_energy
         
-        # Convertir radio de vuelta a frecuencia espacial
+        # Convert radius back to spatial frequency
         # freq = R / N
         mean_freq = weighted_r / padded_rows
         
@@ -149,36 +149,36 @@ class GpuEnhancer(BaseEnhancer):
         angle_inc = self.config.angle_inc
         num_filters = int(180 / angle_inc)
         
-        # Crear filtro base en CPU y mover
+        # Create base filter on CPU and move
         sigmax = 1 / freq * self.config.relative_scale_factor_x
         sigmay = 1 / freq * self.config.relative_scale_factor_y
         sze = int(np.round(3 * max(sigmax, sigmay)))
         
-        # Meshgrid en CPU luego mover
+        # Meshgrid on CPU then move
         x, y = np.meshgrid(np.linspace(-sze, sze, 2*sze+1), np.linspace(-sze, sze, 2*sze+1))
         ref_filter = np.exp(-((x**2/sigmax**2 + y**2/sigmay**2))) * np.cos(2*np.pi*freq*x)
         ref_filter_gpu = to_gpu(ref_filter)
         
-        # Generar banco de filtros
+        # Generate filter bank
         filters = []
         for i in range(num_filters):
             angle = -(i * angle_inc + 90)
-            # ndimage.rotate en cupy
+            # ndimage.rotate in cupy
             filters.append(ndimage.rotate(ref_filter_gpu, angle, reshape=False))
             
-        # Convolución por lotes o bucle en GPU (mucho más rápido que CPU loop)
+        # Batch convolution or GPU loop (much faster than CPU loop)
         rows, cols = normim.shape
         filtered_layers = xp.zeros((num_filters, rows, cols), dtype=xp.float32)
         
         for i, kern in enumerate(filters):
             filtered_layers[i] = signal.convolve2d(normim, kern, mode='same')
             
-        # Selección
+        # Selection
         orient_deg = orientim * 180 / xp.pi
         orient_idx = xp.round(orient_deg / angle_inc).astype(int)
         orient_idx = orient_idx % num_filters
         
-        # Advanced indexing en GPU
+        # Advanced indexing on GPU
         r_idx, c_idx = xp.indices((rows, cols))
         final_img = filtered_layers[orient_idx, r_idx, c_idx]
         

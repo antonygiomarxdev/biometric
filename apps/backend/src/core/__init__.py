@@ -1,4 +1,4 @@
-"""Módulo core con configuración, modelos y métricas."""
+"""Core module: configuration, models, and metrics."""
 
 from .config import config, Config
 from .types import MinutiaCandidate, NormalizedFingerprint, MatchResult, Fingerprint, Minutiae

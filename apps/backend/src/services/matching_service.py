@@ -17,7 +17,6 @@ import asyncio
 import logging
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
-from typing import Any
 
 import numpy as np
 from sqlalchemy import text

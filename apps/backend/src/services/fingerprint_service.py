@@ -1,6 +1,6 @@
 """
-Servicio principal de procesamiento de huellas.
-Clean Code: Orquestador con inyección de dependencias y paralelismo.
+Main fingerprint processing service.
+Clean Code: Orchestrator with dependency injection and parallelism.
 """
 
 import concurrent.futures
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 class FingerprintService:
-    """Orquesta el pipeline completo de procesamiento de huellas."""
+    """Orchestrates the complete fingerprint processing pipeline."""
 
     def __init__(
         self,
@@ -34,7 +34,7 @@ class FingerprintService:
         self.extractor = extractor or SkeletonMinutiaeExtractor()
         self.normalizer = normalizer or MinutiaNormalizer()
 
-        # Configurar executor según hardware
+        # Configure executor based on hardware
         self.use_parallel = not GPUConfig.is_enabled()
         self._max_workers = None if self.use_parallel else 1
 
@@ -42,7 +42,7 @@ class FingerprintService:
         self, image: np.ndarray, fingerprint_id: str = "unknown", resize: bool = True
     ) -> NormalizedFingerprint:
         """
-        Procesa una imagen de huella completa: enhance + extract + normalize.
+        Process a complete fingerprint image: enhance + extract + normalize.
         """
         if image is None:
             raise ValueError("La imagen no puede ser None")
@@ -68,7 +68,7 @@ class FingerprintService:
                 f"dtype: {enhanced.dtype}, min: {enhanced.min()}, max: {enhanced.max()}"
             )
 
-            # 2. Extraction (El extractor maneja la skeletonización si es necesario)
+            # 2. Extraction (The extractor handles skeletonization if necessary)
             processing_logger.debug("Iniciando extracción de minutiae...")
             candidates = self.extractor.extract(enhanced)
             processing_logger.info(f"Minutiae extraídas: {len(candidates)}")
@@ -87,8 +87,8 @@ class FingerprintService:
                 f"Normalización completada - minutiae finales: {len(normalized_fp.minutiae)}"
             )
 
-            # Asignar ID real (Normalizer no lo sabe)
-            # normalized_fp es inmutable (dataclass frozen), necesitamos replace
+            # Assign real ID (Normalizer doesn't know it)
+            # normalized_fp is immutable (frozen dataclass), we need replace
             from dataclasses import replace
 
             normalized_fp = replace(normalized_fp, id=fingerprint_id)
@@ -102,16 +102,16 @@ class FingerprintService:
         batch_size: int = 8,
     ) -> List[Optional[NormalizedFingerprint]]:
         """
-        Procesa múltiples imágenes en batch.
-        Usa ProcessPoolExecutor si estamos en CPU para saturar cores.
+        Process multiple images in batch.
+        Uses ProcessPoolExecutor on CPU to saturate cores.
         """
         if fingerprint_ids is None:
             fingerprint_ids = ["unknown"] * len(images)
 
         results = [None] * len(images)
 
-        # Si hay GPU, procesamos secuencialmente (o en batch real si el enhancer lo soportara)
-        # para evitar contexto CUDA en múltiples procesos.
+        # If GPU is available, process sequentially (or real batch if enhancer supports it)
+        # to avoid CUDA context in multiple processes.
         if not self.use_parallel:
             for i, (img, fid) in enumerate(zip(images, fingerprint_ids)):
                 try:
@@ -120,7 +120,7 @@ class FingerprintService:
                     logger.error(f"Error procesando imagen {fid}: {e}")
             return results
 
-        # En CPU usamos multiprocesamiento
+        # On CPU we use multiprocessing
         with concurrent.futures.ProcessPoolExecutor(
             max_workers=self._max_workers
         ) as executor:
@@ -142,11 +142,11 @@ class FingerprintService:
 
     @staticmethod
     def _process_wrapper(img, fid):
-        # Método estático para pickling en multiprocessing
-        # Necesitamos instanciar un servicio fresco en el worker
-        # Ojo: esto crea overhead de inicialización por cada imagen si no se hace con cuidado.
-        # Mejor sería usar `initializer` en el Pool para crear el servicio una vez por worker.
-        # Por simplicidad aquí instanciamos. CpuEnhancer es ligero.
+        # Static method for pickling in multiprocessing
+        # We need to instantiate a fresh service in the worker
+        # Note: this creates initialization overhead per image if not done carefully.
+        # Better would be to use `initializer` in the Pool to create the service once per worker.
+        # For simplicity we instantiate here. CpuEnhancer is lightweight.
         service = FingerprintService()
         return service.process_image(img, fingerprint_id=fid)
 
@@ -159,7 +159,7 @@ class FingerprintService:
     def process_image_from_bytes(
         self, image_bytes: bytes, fingerprint_id: str = "unknown"
     ) -> NormalizedFingerprint:
-        """Procesa una imagen desde bytes."""
+        """Process an image from bytes."""
         logger.debug(f"Decodificando imagen desde bytes - tamaño: {len(image_bytes)} bytes")
         
         nparr = np.frombuffer(image_bytes, np.uint8)
@@ -177,17 +177,17 @@ class FingerprintService:
             f"min: {image.min()}, max: {image.max()}, mean: {image.mean():.2f}"
         )
         
-        # Validar que la imagen tenga un tamaño razonable
+        # Validate that the image has a reasonable size
         if image.size == 0:
             raise ValueError("La imagen decodificada está vacía")
         
         if image.shape[0] < 50 or image.shape[1] < 50:
             logger.warning(f"Imagen muy pequeña: {image.shape} - podría no tener suficiente detalle")
         
-        # Asegurar que resize=True se pase explícitamente (aunque es el default)
-        # Esto es importante porque algunas imágenes pequeñas necesitan ser redimensionadas
+        # Ensure resize=True is passed explicitly (even though it is the default)
+        # This is important because some small images need to be resized
         return self.process_image(image, fingerprint_id=fingerprint_id, resize=True)
 
 
-# Instancia global
+# Global instance
 fingerprint_service = FingerprintService()

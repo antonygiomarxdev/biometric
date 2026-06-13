@@ -1,4 +1,4 @@
-"""Módulo de almacenamiento y persistencia."""
+"""Storage and persistence module."""
 
 from .database import db_manager, DatabaseManager, FingerprintRecord, get_db_session
 from .vector_index import vector_index, VectorIndex

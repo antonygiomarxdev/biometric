@@ -1,5 +1,5 @@
 # NOTE: _VectorRecord is an internal auto-increment table, distinct from db.models.FingerprintVector (UUID PK).
-"""Índice vectorial con pgvector para búsqueda de similitud."""
+"""Vector index with pgvector for similarity search."""
 
 from __future__ import annotations
 
@@ -26,40 +26,40 @@ class _VectorRecord(Base):
     __tablename__ = "fingerprint_vectors"
 
     id: Column[int] = Column(Integer, primary_key=True, autoincrement=True)
-    embedding: Column[list[float]] = Column(Vector(256))  # Vector de 256 dimensiones
+    embedding: Column[list[float]] = Column(Vector(256))  # 256-dimensional vector
 
     def __repr__(self):
         return f"<_VectorRecord(id={self.id})>"
 
 
 class VectorIndex:
-    """Índice vectorial usando pgvector en PostgreSQL."""
+    """Vector index using pgvector on PostgreSQL."""
 
     def __init__(
         self, dimension: int | None = None, db_manager: DatabaseManager | None = None
     ):
         """
         Args:
-            dimension: Dimensión de los vectores (default: config.vector_dimension)
-            db_manager: Database manager (usa el global si es None)
+            dimension: Vector dimension (default: config.vector_dimension)
+            db_manager: Database manager (uses global if None)
         """
         from src.storage.database import db_manager as default_manager
 
         self.dimension = dimension or config.vector_dimension
         self.db_manager: DatabaseManager = db_manager or default_manager  # noqa: UP037
 
-        # Intentar inicializar extensión e índice, pero no fallar si hay problemas
+        # Try to initialize extension and index, but don't fail if there are issues
         try:
             self._ensure_extension()
             self._ensure_index()
         except Exception as e:
-            # No bloquear la creación de la instancia
+            # Don't block instance creation
             logger.debug(
                 f"VectorIndex: Error en inicialización (se reintentará cuando se use): {e}"
             )
 
     def _ensure_extension(self):
-        """Asegura que la extensión pgvector está habilitada."""
+        """Ensure the pgvector extension is enabled."""
         try:
             session = self.db_manager.get_session()
             try:
@@ -76,15 +76,15 @@ class VectorIndex:
             finally:
                 session.close()
         except Exception as e:
-            # Si hay un error de conexión, lanzar para que se maneje en __init__
+            # If there's a connection error, raise it to be handled in __init__
             logger.debug(f"Error al conectar con BD para verificar extensión: {e}")
             raise
 
     def _ensure_index(self):
-        """Crea el índice IVFFlat si no existe."""
+        """Create the IVFFlat index if it doesn't exist."""
         session = self.db_manager.get_session()
         try:
-            # Primero verificar que la tabla existe
+            # First verify the table exists
             table_exists = session.execute(
                 text(
                     """
@@ -102,7 +102,7 @@ class VectorIndex:
                 )
                 return
 
-            # Verificar si ya existe el índice
+            # Check if the index already exists
             result = session.execute(
                 text(
                     """
@@ -114,8 +114,8 @@ class VectorIndex:
             ).fetchone()
 
             if not result:
-                # Crear índice IVFFlat para búsquedas rápidas
-                # lists = sqrt(total_rows) es una buena heurística
+                # Create IVFFlat index for fast searches
+                # lists = sqrt(total_rows) is a good heuristic
                 session.execute(
                     text(
                         """
@@ -139,15 +139,15 @@ class VectorIndex:
 
     @timed("index_add_vector")
     def add(self, vector: np.ndarray) -> int:
-        """Añade un vector al índice.
+        """Add a vector to the index.
 
         Args:
-            vector: Vector numpy de dimensión (dimension,)
+            vector: Numpy vector of dimension (dimension,)
 
         Returns:
-            ID del vector añadido
+            ID of the added vector
         """
-        # Asegurar dimensión correcta
+        # Ensure correct dimension
         if len(vector) != self.dimension:
             vector = self._pad_or_truncate(vector)
 
@@ -169,16 +169,16 @@ class VectorIndex:
 
     @timed("index_search")
     def search(self, vector: np.ndarray, k: int = 1) -> tuple[list[int], list[float]]:
-        """Busca los K vectores más similares usando distancia L2.
+        """Search the K most similar vectors using L2 distance.
 
         Args:
-            vector: Vector de consulta
-            k: Número de resultados a retornar
+            vector: Query vector
+            k: Number of results to return
 
         Returns:
-            Tupla de (IDs, distancias)
+            Tuple of (IDs, distances)
         """
-        # Asegurar dimensión correcta
+        # Ensure correct dimension
         if len(vector) != self.dimension:
             vector = self._pad_or_truncate(vector)
 
@@ -187,7 +187,7 @@ class VectorIndex:
 
         session = self.db_manager.get_session()
         try:
-            # Búsqueda K-NN con operador <-> (distancia L2)
+            # K-NN search with <-> operator (L2 distance)
             results = session.execute(
                 text(
                     """
@@ -215,7 +215,7 @@ class VectorIndex:
             session.close()
 
     def _pad_or_truncate(self, vector: np.ndarray) -> np.ndarray:
-        """Ajusta el vector a la dimensión correcta."""
+        """Adjust the vector to the correct dimension."""
         if len(vector) > self.dimension:
             return vector[: self.dimension]
         elif len(vector) < self.dimension:
@@ -225,7 +225,7 @@ class VectorIndex:
         return vector
 
     def size(self) -> int:
-        """Retorna el número de vectores en el índice."""
+        """Return the number of vectors in the index."""
         session = self.db_manager.get_session()
         try:
             count = session.query(_VectorRecord).count()
@@ -234,7 +234,7 @@ class VectorIndex:
             session.close()
 
     def reset(self):
-        """Elimina todos los vectores del índice."""
+        """Remove all vectors from the index."""
         session = self.db_manager.get_session()
         try:
             session.query(_VectorRecord).delete()
@@ -248,7 +248,7 @@ class VectorIndex:
             session.close()
 
     def get_by_id(self, vector_id: int) -> np.ndarray | None:
-        """Recupera un vector por su ID."""
+        """Retrieve a vector by its ID."""
         session = self.db_manager.get_session()
         try:
             record = (
@@ -264,7 +264,7 @@ class VectorIndex:
             session.close()
 
     def get_batch_by_ids(self, vector_ids: list[int]) -> list[np.ndarray | None]:
-        """Recupera múltiples vectores por sus IDs en una sola consulta."""
+        """Retrieve multiple vectors by their IDs in a single query."""
         if not vector_ids:
             return []
 
@@ -276,20 +276,20 @@ class VectorIndex:
                 .all()
             )
 
-            # Mapear resultados
+            # Map results
             vectors_map: dict[int, np.ndarray] = {
                 int(rec.id): np.array(rec.embedding, dtype=np.float32)
                 for rec in records
             }
 
-            # Retornar en el orden solicitado
+            # Return in the requested order
             return [vectors_map.get(vid) for vid in vector_ids]
         finally:
             session.close()
 
 
-# Instancia global del índice vectorial (inicialización con manejo de errores)
-# Se inicializa con manejo de errores para no bloquear el inicio de la app
+# Global vector index instance (initialization with error handling)
+# Initialized with error handling so it doesn't block app startup
 vector_index: VectorIndex | None
 try:
     vector_index = VectorIndex()
@@ -302,7 +302,7 @@ except Exception as e:
 
 
 def get_vector_index() -> VectorIndex:
-    """Obtiene la instancia del índice vectorial, inicializándola si es necesario."""
+    """Get the vector index instance, initializing it if necessary."""
     global vector_index
     if vector_index is None:
         vector_index = VectorIndex()

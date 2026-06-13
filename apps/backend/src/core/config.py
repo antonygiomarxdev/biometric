@@ -1,19 +1,22 @@
-"""Configuración centralizada del sistema con soporte robusto para .env."""
+"""Centralized system configuration with robust .env support."""
 
 import os
 from dataclasses import dataclass, field
 from typing import Literal, Optional
+import logging
 
-# Intentar cargar .env para desarrollo local
+logging.basicConfig(level=logging.INFO)
+
+# Try to load .env for local development
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
-    pass
+    logging.warning("python-dotenv not installed, skipping .env loading. Make sure to set environment variables in production.")    
 
 @dataclass(frozen=True)
 class Config:
-    """Configuración global de la aplicación (Inmutable)."""
+    """Global application configuration (Immutable)."""
     
     # Environment
     env: str = field(default_factory=lambda: os.getenv("ENV", "development"))
@@ -75,10 +78,10 @@ class Config:
     )
 
     def __post_init__(self):
-        """Validaciones post-inicialización."""
+        """Post-initialization validations."""
         if self.combined_score_weight_l2 + self.combined_score_weight_cos != 1.0:
-            # Normalizar si no suman 1 (opcional, o lanzar warning)
+            # Normalize if they don't sum to 1 (optional, or raise warning)
             pass
 
-# Instancia global de configuración
+# Global configuration instance
 config = Config()

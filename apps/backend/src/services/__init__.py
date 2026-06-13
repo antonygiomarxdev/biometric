@@ -1,4 +1,4 @@
-"""Módulo de servicios de negocio."""
+"""Business service layer module."""
 
 from .fingerprint_service import fingerprint_service, FingerprintService
 from .comparison_service import comparison_service, ComparisonService

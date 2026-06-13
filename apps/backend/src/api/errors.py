@@ -6,7 +6,6 @@ All domain-level errors inherit from ForensicError to ensure consistent
 error responses throughout the application.
 """
 
-from typing import Any
 
 
 class ForensicError(Exception):
