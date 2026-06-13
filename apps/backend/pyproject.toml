@@ -26,6 +26,9 @@ dependencies = [
     "tqdm>=4.66.0",
     "matplotlib>=3.8.0",
     "minio>=7.2.20",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "bcrypt>=4.0,<4.1",
 ]
 
 [project.optional-dependencies]

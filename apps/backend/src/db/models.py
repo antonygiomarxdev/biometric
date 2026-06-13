@@ -175,6 +175,55 @@ class FingerprintVector(Base):
         )
 
 
+class User(Base):
+    """
+    Forensic user — personnel who interact with the system.
+
+    Stores hashed credentials and role assignments for authentication
+    and authorisation (RBAC). Roles include Admin, Perito (forensic
+    expert), and Auditor.
+    """
+
+    __tablename__ = "users"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid7,
+        server_default=text("gen_random_uuid()"),
+    )
+    username: Mapped[str] = mapped_column(
+        String(100), unique=True, nullable=False, index=True
+    )
+    email: Mapped[str] = mapped_column(
+        String(255), unique=True, nullable=False, index=True
+    )
+    hashed_password: Mapped[str] = mapped_column(
+        String(255), nullable=False
+    )
+    role: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="Perito", index=True
+    )
+    full_name: Mapped[str] = mapped_column(
+        String(300), nullable=False
+    )
+    is_active: Mapped[bool] = mapped_column(
+        nullable=False, default=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<User(id={self.id}, username={self.username}, "
+            f"role={self.role})>"
+        )
+
+
 class AuditLog(Base):
     """
     Immutable audit trail with hash chain (per D-09).
@@ -218,4 +267,62 @@ class AuditLog(Base):
         return (
             f"<AuditLog(id={self.id}, table={self.table_name}, "
             f"action={self.action})>"
+        )
+
+
+class Decision(Base):
+    """
+    Examiner matching decision for latent fingerprint evidence.
+
+    Records the forensic examiner's explicit verdict after visual
+    comparison (per D-01 requirement that the system never auto-approves).
+    Every decision is also logged to the ``AuditLog`` hash chain via
+    ``AuditService.log_event`` for tamper-evident traceability.
+    """
+
+    __tablename__ = "decisions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid7,
+        server_default=text("gen_random_uuid()"),
+    )
+    case_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cases.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    evidence_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("evidences.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    verdict: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        index=True,
+        doc="One of: Identificación, Exclusión, Inconcluso",
+    )
+    comments: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+    case: Mapped["Case"] = relationship("Case", backref="decisions")
+    evidence: Mapped["Evidence | None"] = relationship(
+        "Evidence", backref="decisions"
+    )
+
+    __table_args__ = (
+        Index("idx_decisions_case_id", case_id),
+        Index("idx_decisions_verdict", verdict),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<Decision(id={self.id}, verdict={self.verdict}, "
+            f"case_id={self.case_id})>"
         )

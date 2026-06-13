@@ -58,6 +58,22 @@ class Config:
     minio_bucket: str = field(default_factory=lambda: os.getenv("MINIO_BUCKET", "fingerprints"))
     minio_secure: bool = field(default_factory=lambda: os.getenv("MINIO_SECURE", "false").lower() == "true")
 
+    # Authentication / JWT
+    jwt_secret_key: str = field(
+        default_factory=lambda: os.getenv(
+            "JWT_SECRET_KEY",
+            "change-me-in-production-use-a-real-secret-key-32-chars-min",
+        )
+    )
+    jwt_algorithm: str = field(
+        default_factory=lambda: os.getenv("JWT_ALGORITHM", "HS256")
+    )
+    jwt_access_token_expire_minutes: int = field(
+        default_factory=lambda: int(
+            os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30")
+        )
+    )
+
     def __post_init__(self):
         """Validaciones post-inicialización."""
         if self.combined_score_weight_l2 + self.combined_score_weight_cos != 1.0:
