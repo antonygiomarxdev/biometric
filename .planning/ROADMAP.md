@@ -73,10 +73,13 @@ Plans:
 **Objetivo:** Alcanzar más del 90% de code coverage en el backend mediante unit tests aislados (mockeando DB y modelos de IA pesados) para garantizar robustez a nivel empresarial.
 **Valor:** Seguridad de que las refactorizaciones y nuevos modelos no rompen la lógica de negocio ni el compliance legal.
 
-1. **Tests: Compliance Core:** Tests exhaustivos para PII Scrubber, Tokenizer y Encriptación.
-2. **Tests: Capa de IA (GenAI & CV):** Mocks para LLMFactory, ReportGenerator, y Enhancers.
-3. **Tests: Routers & Services:** Completar cobertura de los endpoints de la API y el `fingerprint_service`.
-4. **CI Setup:** Configurar Pytest con `pytest-cov` para fallar si el coverage baja del 90%.
+**Plans:** 4 plans
+
+Plans:
+- [ ] 05-01-PLAN.md — Coverage Infrastructure & Setup
+- [ ] 05-02-PLAN.md — Compliance Core Coverage
+- [ ] 05-03-PLAN.md — GenAI & AI Vision Coverage
+- [ ] 05-04-PLAN.md — Routers & Services Integration Coverage
 
 ### Fase 6: Despliegue, Infraestructura y Operación Policial
 
