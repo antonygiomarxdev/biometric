@@ -20,6 +20,7 @@ import logging
 import cv2
 import numpy as np
 
+from src.ai.enhancement import EnhancementProcessor
 from src.ai.model_manager import ModelManager
 from src.ai.segmentation import SegmentationProcessor
 from src.core.interfaces import IEnhancer
@@ -88,3 +89,50 @@ class SegmentationEnhancer(IEnhancer):
             cropped.shape,
         )
         return cropped
+
+
+class EnhancementEnhancer(IEnhancer):
+    """U-Net MobileNetV2 based fingerprint enhancement.
+
+    Cleans and reconstructs latent / degraded fingerprint images using an
+    ONNX enhancement model. Architecture selected via spike evaluation:
+    U-Net with MobileNetV2 encoder (PSNR 21.69 / SSIM 0.9175).
+
+    .. note::
+        The original input image is always preserved alongside the enhanced
+        output for forensic auditability (per T-02-05).
+    """
+
+    def __init__(
+        self,
+        model_manager: ModelManager,
+        processor: EnhancementProcessor | None = None,
+    ) -> None:
+        """Initialise the enhancer.
+
+        Args:
+            model_manager: Initialised :class:`ModelManager` with a loaded
+                enhancement model.
+            processor: Optional custom processor. A default
+                :class:`EnhancementProcessor` is created if omitted.
+        """
+        self.model_manager = model_manager
+        self.processor = processor or EnhancementProcessor()
+
+    def enhance(self, img: np.ndarray, resize: bool = True) -> np.ndarray:
+        """Run enhancement inference via ONNX Runtime.
+
+        Args:
+            img: Input grayscale image (H, W), dtype uint8.
+            resize: Unused — kept for interface compatibility.
+
+        Returns:
+            Enhanced grayscale image (uint8) with the same spatial
+            dimensions as the input.
+        """
+        logger.debug(
+            "Enhancing image shape=%s dtype=%s",
+            img.shape,
+            img.dtype,
+        )
+        return self.processor.enhance(img, self.model_manager)
