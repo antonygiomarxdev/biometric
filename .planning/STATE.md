@@ -2,22 +2,22 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 02-ia-vision-computacional
-status: completed
-last_updated: "2026-06-13T21:20:58.155Z"
+current_phase: 03-ia-generativa-burocracia
+status: in_progress
+last_updated: "2026-06-13T22:04:00.000Z"
 progress:
-  total_phases: 2
+  total_phases: 4
   completed_phases: 1
-  total_plans: 14
-  completed_plans: 13
-  percent: 50
+  total_plans: 20
+  completed_plans: 15
+  percent: 39
 ---
 
 # State: Biometric
 
 **Last updated:** 2026-06-13
-**Current phase:** 02-ia-vision-computacional
-**Status:** Plan 04 completed (DL Minutiae Extraction)
+**Current phase:** 03-ia-generativa-burocracia
+**Status:** Plan 01 completed (LLM Factory)
 
 ## Project Reference
 
@@ -31,12 +31,12 @@ See: `.planning/PROJECT.md`
 |-------|--------|----------|
 | 1. Flujo Core Forense | ✅ Completado | 100% |
 | 2. IA Visión Computacional | 🏃‍♂️ En progreso | 67% (4/6 planes) |
-| 3. IA Generativa (Dictámenes) | ⏳ Pendiente | 0% |
+| 3. IA Generativa (Dictámenes) | 🏃‍♂️ En progreso | 20% (1/5 planes) |
 | 4. Despliegue On-Premise | ⏳ Pendiente | 0% |
 
 ## Current Work
 
-Phase 2 (IA Visión Computacional) — Plan 04 completado. ExtractionProcessor implementado (pre/post processing para DL minutiae extraction). AiFeatureExtractor implementado como IFeatureExtractor con ModelManager injection para inferencia ONNX. Decodificación de heatmaps multi-canal con supresión de no-máximos y mapeo de coordenadas. SkeletonMinutiaeExtractor intacto como fallback. Next: Plan 05 (editor de minucias).
+Phase 3 (IA Generativa/Dictámenes) — Plan 01 completado. LLMFactory con ILLMProvider Protocol, OllamaProvider (local), OpenAIProvider (remoto), y perfiles de use_case (sql, default). Config actualizada con SecretStr para API key. Next: Plan 02 (Text-to-SQL query engine).
 
 ## Completed Plans
 
@@ -46,6 +46,7 @@ Phase 2 (IA Visión Computacional) — Plan 04 completado. ExtractionProcessor i
 | 02-ia-vision-computacional | 02 - AI Infrastructure | ✅ AiConfig, ModelManager, GPU detection via PyTorch, AlgorithmOrigin AI values. |
 | 02-ia-vision-computacional | 03 - AI Enhancement & Segmentation | ✅ SegmentationEnhancer, EnhancementEnhancer, factory AI-first con CPU fallback. |
 | 02-ia-vision-computacional | 04 - DL Minutiae Extraction | ✅ ExtractionProcessor (pre/post), AiFeatureExtractor (IFeatureExtractor), 20 tests. |
+| 03-ia-generativa-burocracia | 01 - LLM Factory | ✅ LLMFactory with ILLMProvider Protocol, Ollama/OpenAI providers, use_case profiles, 15 tests. |
 
 ## Decisions Log
 
@@ -54,12 +55,13 @@ Phase 2 (IA Visión Computacional) — Plan 04 completado. ExtractionProcessor i
 - **D-05 (Segmentation crop):** SegmentationEnhancer crops to mask bounding box instead of full-image — reduces downstream processing area.
 - **D-06 (Enhancement letterbox):** EnhancementProcessor uses letterbox padding (aspect-ratio preserving) for enhancement model; SegmentationProcessor uses centre-pad for segmentation model.
 - **D-07 (Extraction output scaling):** ExtractionProcessor computes scale factors from output spatial dims to canvas size before offset subtraction — handles model outputs at different resolutions than the 512×512 input canvas.
+- **D-08 (LLM Factory Adapter Pattern):** ILLMProvider uses Protocol duck typing (not ABC) so providers are structurally typed. LLMFactory routes via config.llm_provider with use_case profiles (sql=120s timeout, default=60s). SecretStr for openai_api_key per T-03-01.
 
 ## Next Actions
 
-1. Plan 02-05: Fallback Minutiae Editor (React canvas editor)
-2. Plan 02-06: Full AI pipeline integration & benchmark
-3. Integrate AiFeatureExtractor into FingerprintService
+1. Plan 03-02: Text-to-SQL query engine integration (NLSQLTableQueryEngine)
+2. Plan 03-03: Dictamen pericial generation pipeline
+3. Plan 03-04: Evaluate and refine generation quality
 
 ## Performance Metrics
 
@@ -69,3 +71,4 @@ Phase 2 (IA Visión Computacional) — Plan 04 completado. ExtractionProcessor i
 | Phase 02-ia-vision-computacional | P02 AI Infrastructure | 5 commits | 5 files |
 | Phase 02-ia-vision-computacional | P03 AI Segmentation & Enhancement | 4 min | 3 tasks, 7 files |
 | Phase 02-ia-vision-computacional | P04 DL Minutiae Extraction | 8 min | 2 tasks (TDD), 3 files |
+| Phase 03-ia-generativa-burocracia P01 | 3min | 2 tasks | 7 files |
