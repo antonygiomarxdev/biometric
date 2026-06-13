@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import cv2
 import numpy as np
 
-from src.core.gpu_utils import GPUConfig, print_gpu_status
+# GPU support removed (CPU-only)
 from src.services.fingerprint_service import fingerprint_service
 from src.core.metrics import metrics
 
@@ -33,9 +33,9 @@ def benchmark_single_image(img: np.ndarray, use_gpu: bool, iterations: int = 5) 
     
     # Configurar GPU
     if use_gpu:
-        GPUConfig.enable()
+        None  # GPU not available
     else:
-        GPUConfig.disable()
+        None  # GPU not available
     
     # Reset metrics
     metrics.reset()
@@ -118,7 +118,7 @@ def run_full_benchmark(dataset_path: str = "data/SOCOFing/Real", iterations: int
     cpu_results = benchmark_single_image(img, use_gpu=False, iterations=iterations)
     
     # Benchmark GPU (si está disponible)
-    if GPUConfig.get_device_info()["available"]:
+    if False:
         gpu_results = benchmark_single_image(img, use_gpu=True, iterations=iterations)
     else:
         print("\n⚠️ GPU no disponible, saltando benchmark GPU")
@@ -189,11 +189,11 @@ def benchmark_batch(
     print("="*70)
     
     if use_gpu:
-        GPUConfig.enable()
+        None  # GPU not available
     else:
-        GPUConfig.disable()
+        None  # GPU not available
     
-    print(f"Backend: {GPUConfig.get_backend()}")
+    print(f"Backend: {"CPU (NumPy)"}")
     
     # Cargar imágenes
     images_paths = list(Path(dataset_path).glob("*.BMP"))[:num_images]
@@ -283,7 +283,7 @@ if __name__ == "__main__":
         run_full_benchmark(args.dataset, args.iterations)
     elif args.mode == "single":
         img = load_sample_image(args.dataset)
-        use_gpu = GPUConfig.get_device_info()["available"] and args.gpu
+        use_gpu = False and args.gpu
         benchmark_single_image(img, use_gpu, args.iterations)
     elif args.mode == "batch":
         benchmark_batch(args.dataset, args.num_images, args.gpu)
