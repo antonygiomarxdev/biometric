@@ -1,5 +1,5 @@
 """
-Router for examiner matching decisions (``/api/v1/decisiones``).
+Router for examiner matching decisions (``/api/v1/decisions``).
 
 The ``Perito`` role explicitly confirms or rejects a candidate match after
 visual comparison (Identificación, Exclusión, Inconcluso).  Per D-01 the
@@ -25,7 +25,7 @@ from src.services.audit_service import audit_service
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/decisiones", tags=["decisiones"])
+router = APIRouter(prefix="/api/v1/decisions", tags=["decisions"])
 
 # ---------------------------------------------------------------------------
 # Examiner verdict vocabulary (Spanish — forensic domain language)

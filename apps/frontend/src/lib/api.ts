@@ -158,12 +158,12 @@ export function getCase(caseId: string): Promise<CaseResponse> {
   return request<CaseResponse>("GET", `/api/v1/cases/${caseId}`);
 }
 
-export function listEvidencias(
+export function listEvidence(
   caseId?: string,
   skip = 0,
   limit = 20,
 ): Promise<EvidenceListResponse> {
-  return request<EvidenceListResponse>("GET", "/api/v1/evidencias", {
+  return request<EvidenceListResponse>("GET", "/api/v1/evidence", {
     query: { case_id: caseId, skip, limit },
   });
 }
@@ -183,7 +183,7 @@ export function searchMatching(
 export function createDecision(
   decision: DecisionCreate,
 ): Promise<DecisionResponse> {
-  return request<DecisionResponse>("POST", "/api/v1/decisiones", {
+  return request<DecisionResponse>("POST", "/api/v1/decisions", {
     body: decision,
   });
 }

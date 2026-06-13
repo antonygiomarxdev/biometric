@@ -2,7 +2,7 @@
 REST router for forensic dictamen (PDF report) generation.
 
 Per D-02: Router per REST resource.
-Per D-03: Versioned under /api/v1/dictamenes.
+Per D-03: Versioned under /api/v1/reports.
 Per D-13 / D-14: Generates PDF/A with HMAC-SHA256 signature.
 """
 
@@ -21,8 +21,8 @@ from src.services.pdf_generator import pdf_generator_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
-    prefix="/api/v1/dictamenes",
-    tags=["dictamenes"],
+    prefix="/api/v1/reports",
+    tags=["reports"],
 )
 
 

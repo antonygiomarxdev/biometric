@@ -7,7 +7,7 @@ admins, and auditors to inspect the immutable hash chain (D-09).
 
 Endpoints
 ---------
-- ``GET /api/v1/auditoria/logs`` — paginated audit log listing with
+- ``GET /api/v1/audit/logs`` — paginated audit log listing with
   optional filtering by table name, record UUID, or action type.
 """
 
@@ -25,7 +25,7 @@ from src.db.models import AuditLog
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/auditoria", tags=["auditoria"])
+router = APIRouter(prefix="/api/v1/audit", tags=["audit"])
 
 
 # ------------------------------------------------------------------ #

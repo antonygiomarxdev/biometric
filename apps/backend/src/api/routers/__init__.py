@@ -12,22 +12,22 @@ Each router handles a single REST resource (per D-02):
 - ``auditoria`` — Audit log querying
 """
 
-from .auditoria import router as auditoria_router
+from .audit import router as audit_router
 from .auth import router as auth_router
 from .cases import router as cases_router
-from .decisiones import router as decisiones_router
-from .dictamenes import router as dictamenes_router
-from .evidencias import router as evidencias_router
-from .huellas_conocidas import router as huellas_conocidas_router
+from .decisions import router as decisions_router
+from .reports import router as reports_router
+from .evidence import router as evidence_router
+from .known_fingerprints import router as known_fingerprints_router
 from .matching import router as matching_router
 
 __all__ = [
-    "auditoria_router",
+    "audit_router",
     "auth_router",
     "cases_router",
-    "decisiones_router",
-    "dictamenes_router",
-    "evidencias_router",
-    "huellas_conocidas_router",
+    "decisions_router",
+    "reports_router",
+    "evidence_router",
+    "known_fingerprints_router",
     "matching_router",
 ]

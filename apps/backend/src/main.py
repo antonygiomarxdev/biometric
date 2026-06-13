@@ -20,13 +20,13 @@ from fastapi.responses import JSONResponse
 from src.api.dependencies import lifespan
 from src.api.errors import ForensicError, IntegrityError, NotFoundError, ValidationError
 from src.api.routers import (
-    auditoria_router,
+    audit_router,
     auth_router,
     cases_router,
-    decisiones_router,
-    dictamenes_router,
-    evidencias_router,
-    huellas_conocidas_router,
+    decisions_router,
+    reports_router,
+    evidence_router,
+    known_fingerprints_router,
     matching_router,
 )
 
@@ -125,12 +125,12 @@ async def not_found_error_handler(
 
 app.include_router(auth_router)
 app.include_router(cases_router)
-app.include_router(evidencias_router)
-app.include_router(huellas_conocidas_router)
+app.include_router(evidence_router)
+app.include_router(known_fingerprints_router)
 app.include_router(matching_router)
-app.include_router(decisiones_router)
-app.include_router(dictamenes_router)
-app.include_router(auditoria_router)
+app.include_router(decisions_router)
+app.include_router(reports_router)
+app.include_router(audit_router)
 
 # ---------------------------------------------------------------------------
 # Root health check

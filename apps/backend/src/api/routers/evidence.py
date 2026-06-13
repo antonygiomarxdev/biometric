@@ -1,5 +1,5 @@
 """
-CRUD router for fingerprint evidence (``/api/v1/evidencias``).
+CRUD router for fingerprint evidence (``/api/v1/evidence``).
 
 Each evidence item is a latent fingerprint image uploaded by the perito
 and linked to a forensic case.  Image uploads are validated for MIME
@@ -23,7 +23,7 @@ from src.storage.object_storage import storage
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/evidencias", tags=["evidencias"])
+router = APIRouter(prefix="/api/v1/evidence", tags=["evidence"])
 
 # ---------------------------------------------------------------------------
 # Allowed image MIME types (T-01-05)

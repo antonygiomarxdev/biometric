@@ -1,8 +1,8 @@
 """
-Router for known fingerprint records (``/api/v1/huellas_conocidas``).
+Router for known fingerprint records (``/api/v1/known-fingerprints``).
 
 Per D-02, D-03:
-  - One router per resource, mounted under ``/api/v1/huellas_conocidas``.
+  - One router per resource, mounted under ``/api/v1/known-fingerprints``.
   - Injects ``get_db`` and the lifespan-managed ``ProcessPoolExecutor``
     via ``Depends(get_db)`` and the ``MatchingService`` dependency.
 
@@ -26,8 +26,8 @@ from src.services.matching_service import MatchingService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
-    prefix="/api/v1/huellas_conocidas",
-    tags=["huellas_conocidas"],
+    prefix="/api/v1/known-fingerprints",
+    tags=["known-fingerprints"],
 )
 
 
