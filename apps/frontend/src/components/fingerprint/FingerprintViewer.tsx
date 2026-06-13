@@ -10,7 +10,7 @@ interface FingerprintViewerProps {
 }
 
 export function FingerprintViewer({ item }: FingerprintViewerProps) {
-  const canvasRef = useCanvasDrawer(
+  const { canvasRef } = useCanvasDrawer(
     item?.id || null,
     item?.preview,
     item?.extractData
