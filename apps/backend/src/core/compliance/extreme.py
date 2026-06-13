@@ -18,14 +18,18 @@ from src.core.compliance.strategy import IComplianceStrategy
 _PII_PATTERNS: list[re.Pattern[str]] = [
     # Email addresses
     re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"),
+    # UUID v4/v1 identifiers (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+    # Must come BEFORE Phone and National ID patterns — the numeric tail
+    # of a UUID (``446655440000`` in ``550e8400-e29b-41d4-a716-446655440000``)
+    # would otherwise match the ``\d{1,3}[-.\s]?\d{1,4}[-.\s]?...`` patterns
+    # partially because all separators are optional.
+    re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"),
     # Phone numbers (international, US, LATAM formats)
     re.compile(r"\b\+?\d{1,3}[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,9}\b"),
     # SSN-like patterns (###-##-####)
     re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
     # National ID patterns (e.g., Latin American cédula: 001-123456-1234A)
     re.compile(r"\b\d{3}[-.\s]?\d{6,9}[-.\s]?\d{1,4}[A-Za-z]?\b"),
-    # UUID v4/v1 identifiers (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
-    re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"),
 ]
 
 _REDACTION_TOKEN = "[REDACTED]"

@@ -20,6 +20,7 @@ from fastapi.responses import JSONResponse
 from src.ai.tracing import setup_tracing
 from src.api.dependencies import lifespan
 from src.api.errors import ForensicError, IntegrityError, NotFoundError, ValidationError
+from src.core.compliance import setup_compliance_logging
 from src.api.routers import (
     audit_router,
     auth_router,
@@ -33,6 +34,12 @@ from src.api.routers import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Apply PII scrubbing to all log output based on the configured
+# compliance strategy (COMPLIANCE_STRATEGY env var).
+# Falls back to BaseStrategy — no scrubbing — if not configured,
+# so existing logging is never disrupted.
+setup_compliance_logging()
 
 # ---------------------------------------------------------------------------
 # FastAPI application

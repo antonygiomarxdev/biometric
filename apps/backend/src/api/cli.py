@@ -10,11 +10,18 @@ from src.storage.database import db_manager
 from src.storage.repository import repository
 from src.core.metrics import metrics
 from src.core.config import config
+from src.core.compliance import setup_compliance_logging
 
 logging.basicConfig(
     level=getattr(logging, config.log_level),
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
+
+# Apply PII scrubbing now that the root logger has its handler.
+# Falls back to BaseStrategy (no scrubbing) if not configured,
+# preserving all existing CLI logging behaviour.
+setup_compliance_logging()
+
 logger = logging.getLogger(__name__)
 
 
