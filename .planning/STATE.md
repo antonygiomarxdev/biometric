@@ -4,20 +4,20 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 03-ia-generativa-burocracia
 status: completed
-last_updated: "2026-06-13T22:23:19.330Z"
+last_updated: "2026-06-13T22:32:13.935Z"
 progress:
   total_phases: 3
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 19
-  completed_plans: 17
-  percent: 33
+  completed_plans: 18
+  percent: 67
 ---
 
 # State: Biometric
 
 **Last updated:** 2026-06-13
 **Current phase:** 03-ia-generativa-burocracia
-**Status:** Plan 04 completed (GenAI REST API Router)
+**Status:** Plan 05 completed (Observability & Eval Setup)
 
 ## Project Reference
 
@@ -31,12 +31,12 @@ See: `.planning/PROJECT.md`
 |-------|--------|----------|
 | 1. Flujo Core Forense | ✅ Completado | 100% |
 | 2. IA Visión Computacional | 🏃‍♂️ En progreso | 67% (4/6 planes) |
-| 3. IA Generativa (Dictámenes) | 🏃‍♂️ En progreso | 80% (4/5 planes) |
+| 3. IA Generativa (Dictámenes) | ✅ Completado | 100% (5/5 planes) |
 | 4. Despliegue On-Premise | ⏳ Pendiente | 0% |
 
 ## Current Work
 
-Phase 3 (IA Generativa/Dictámenes) — Plan 04 completado. GenAI REST API router (/api/v1/genai) with POST /assistant (Text-to-SQL) and POST /report/{caso_id} (report generation) endpoints. Spanish error messages for LLM unavailability. 6 router tests (TDD). Wired into main FastAPI application. Next: Plan 05 (frontend integration, auth middleware, guardrails).
+Phase 3 (IA Generativa/Dictámenes) — Completado ✅. Plan 05 finalizado: OpenTelemetry tracing with Arize Phoenix (local) for LLM call observability, plus Promptfoo configuration for automated evaluation of forensic report prompts. 5 planes ejecutados — fase completa. Next: Phase 4 (Despliegue On-Premise).
 
 ## Completed Plans
 
@@ -50,6 +50,7 @@ Phase 3 (IA Generativa/Dictámenes) — Plan 04 completado. GenAI REST API route
 | 03-ia-generativa-burocracia | 02 - Text-to-SQL | ✅ Read-only DB engine, NLP assistant with NLSQLTableQueryEngine, 5 tests (TDD). |
 | 03-ia-generativa-burocracia | 03 - Structured Dictamen | ✅ DictamenPericial Pydantic schema, async report generator with as_structured_llm, retry logic, 14 tests (TDD). |
 | 03-ia-generativa-burocracia | 04 - GenAI REST API Router | ✅ Two endpoints (/assistant, /report/{caso_id}), Spanish error messages, 6 router tests, wired into main.py. |
+| 03-ia-generativa-burocracia | 05 - Observability & Eval Setup | ✅ OpenTelemetry + Arize Phoenix tracing, Promptfoo eval config. |
 
 ## Decisions Log
 
@@ -62,12 +63,15 @@ Phase 3 (IA Generativa/Dictámenes) — Plan 04 completado. GenAI REST API route
 - **D-09 (Read-only DB enforcement):** SQLAlchemy engine uses `execution_options={"isolation_level": "AUTOCOMMIT", "postgresql_readonly": True}` to prevent writes at the driver level — enforces T-03-03.
 - **D-10 (Double table scoping):** Both `SQLDatabase(include_tables=[...])` and `NLSQLTableQueryEngine(tables=[...])` specify `["peritajes", "evidencia"]`. This is intentional double-coverage: `include_tables` limits schema exposure, `tables` limits LLM prompt context (T-03-04).
 - **D-11 (Dictamen schema & generator):** Prompt in Spanish legal language (not English) — LLM output follows prompt language. Retry only on `ValidationError` (other exceptions propagate). `PromptTemplate` not needed with `as_structured_llm.acomplete`. Mitigates T-03-06 (schema enforcement) and T-03-07 (exact ID/hash rule).
+- **D-12 (Local-only Phoenix tracing):** `phoenix.launch_app()` starts a local collector vs. pointing to external SaaS, satisfying T-03-11 (on-premise compliance for forensic case data).
+- **D-13 (Config-gated tracing):** `enable_ai_tracing` flag (bool env var, default: true) allows disabling tracing in production environments without a Phoenix collector. Graceful degradation: logs warning and skips if packages missing.
 
 ## Next Actions
 
 1. ~~Plan 03-03: Dictamen pericial generation pipeline~~ ✅
 2. ~~Plan 03-04: GenAI REST API Router~~ ✅
-3. Plan 03-05: Guardrails and production hardening
+3. ~~Plan 03-05: Observability & Eval Setup~~ ✅
+4. Phase 4: Despliegue On-Premise
 
 ## Performance Metrics
 
@@ -81,3 +85,4 @@ Phase 3 (IA Generativa/Dictámenes) — Plan 04 completado. GenAI REST API route
 | Phase 03-ia-generativa-burocracia P02 | 2min | 2 tasks (TDD) | 5 files |
 | Phase 03-ia-generativa-burocracia P03 | 4min | 2 tasks (TDD) | 6 files |
 | Phase 03-ia-generativa-burocracia P04 | 3min | 2 tasks (1 TDD) | 5 files |
+| Phase 03-ia-generativa-burocracia P05 | 15min | 2 tasks | 5 files |
