@@ -19,7 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
 import {
   getCase,
-  listEvidencias,
+  listEvidence,
   searchMatching,
   createDecision,
 } from "@/lib/api";
@@ -177,7 +177,7 @@ export default function ComparisonView() {
     data: evidenceList,
   } = useQuery({
     queryKey: ["evidencias", caseId],
-    queryFn: () => listEvidencias(caseId),
+    queryFn: () => listEvidence(caseId),
     enabled: caseId !== undefined,
   });
 
