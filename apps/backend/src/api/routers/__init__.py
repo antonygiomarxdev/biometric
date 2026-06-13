@@ -1,13 +1,20 @@
-"""Routers for the forensic API.
+"""FastAPI routers for the forensic API.
 
-Per D-02: one router per REST resource (cases, evidencias, huellas_conocidas,
-matching, decisiones, dictamenes, auditoria).
+Each router handles a single REST resource (per D-02):
+
+- ``cases`` — CRUD for forensic cases
+- ``evidencias`` — CRUD for latent fingerprint evidence with image upload
+- ``decisiones`` — Examiner matching verdicts with audit-trail logging
 """
 
-from .huellas_conocidas import router as huellas_conocidas_router
-from .matching import router as matching_router
+from .auditoria import router as auditoria_router
+from .cases import router as cases_router
+from .evidencias import router as evidencias_router
+from .decisiones import router as decisiones_router
 
 __all__ = [
-    "huellas_conocidas_router",
-    "matching_router",
+    "auditoria_router",
+    "cases_router",
+    "evidencias_router",
+    "decisiones_router",
 ]
