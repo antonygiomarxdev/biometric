@@ -4,20 +4,20 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 03-ia-generativa-burocracia
 status: completed
-last_updated: "2026-06-13T22:09:25.563Z"
+last_updated: "2026-06-13T22:16:28.480Z"
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 19
-  completed_plans: 16
-  percent: 33
+  completed_plans: 17
+  percent: 36
 ---
 
 # State: Biometric
 
 **Last updated:** 2026-06-13
 **Current phase:** 03-ia-generativa-burocracia
-**Status:** Plan 02 completed (Text-to-SQL Assistant)
+**Status:** Plan 03 completed (Structured Dictamen Generation)
 
 ## Project Reference
 
@@ -31,12 +31,12 @@ See: `.planning/PROJECT.md`
 |-------|--------|----------|
 | 1. Flujo Core Forense | ✅ Completado | 100% |
 | 2. IA Visión Computacional | 🏃‍♂️ En progreso | 67% (4/6 planes) |
-| 3. IA Generativa (Dictámenes) | 🏃‍♂️ En progreso | 20% (1/5 planes) |
+| 3. IA Generativa (Dictámenes) | 🏃‍♂️ En progreso | 60% (3/5 planes) |
 | 4. Despliegue On-Premise | ⏳ Pendiente | 0% |
 
 ## Current Work
 
-Phase 3 (IA Generativa/Dictámenes) — Plan 02 completado. Read-only DB engine (get_readonly_engine) con postgresql_readonly=True. NLP Assistant (ask_assistant) con NLSQLTableQueryEngine, tabla explícita peritajes/evidencia, async-first. 5 tests, TDD. Next: Plan 03 (Dictamen pericial generation pipeline).
+Phase 3 (IA Generativa/Dictámenes) — Plan 03 completado. DictamenPericial Pydantic schema (Evidencia + DictamenPericial). Async report generator (generate_dictamen) con as_structured_llm, retry loop (max 3) en ValidationError, prompt en español legal (Perito informático Nicaragua). 14 tests, TDD. Next: Plan 04 (FastAPI router integration & genai endpoints).
 
 ## Completed Plans
 
@@ -48,6 +48,7 @@ Phase 3 (IA Generativa/Dictámenes) — Plan 02 completado. Read-only DB engine 
 | 02-ia-vision-computacional | 04 - DL Minutiae Extraction | ✅ ExtractionProcessor (pre/post), AiFeatureExtractor (IFeatureExtractor), 20 tests. |
 | 03-ia-generativa-burocracia | 01 - LLM Factory | ✅ LLMFactory with ILLMProvider Protocol, Ollama/OpenAI providers, use_case profiles, 15 tests. |
 | 03-ia-generativa-burocracia | 02 - Text-to-SQL | ✅ Read-only DB engine, NLP assistant with NLSQLTableQueryEngine, 5 tests (TDD). |
+| 03-ia-generativa-burocracia | 03 - Structured Dictamen | ✅ DictamenPericial Pydantic schema, async report generator with as_structured_llm, retry logic, 14 tests (TDD). |
 
 ## Decisions Log
 
@@ -59,11 +60,12 @@ Phase 3 (IA Generativa/Dictámenes) — Plan 02 completado. Read-only DB engine 
 - **D-08 (LLM Factory Adapter Pattern):** ILLMProvider uses Protocol duck typing (not ABC) so providers are structurally typed. LLMFactory routes via config.llm_provider with use_case profiles (sql=120s timeout, default=60s). SecretStr for openai_api_key per T-03-01.
 - **D-09 (Read-only DB enforcement):** SQLAlchemy engine uses `execution_options={"isolation_level": "AUTOCOMMIT", "postgresql_readonly": True}` to prevent writes at the driver level — enforces T-03-03.
 - **D-10 (Double table scoping):** Both `SQLDatabase(include_tables=[...])` and `NLSQLTableQueryEngine(tables=[...])` specify `["peritajes", "evidencia"]`. This is intentional double-coverage: `include_tables` limits schema exposure, `tables` limits LLM prompt context (T-03-04).
+- **D-11 (Dictamen schema & generator):** Prompt in Spanish legal language (not English) — LLM output follows prompt language. Retry only on `ValidationError` (other exceptions propagate). `PromptTemplate` not needed with `as_structured_llm.acomplete`. Mitigates T-03-06 (schema enforcement) and T-03-07 (exact ID/hash rule).
 
 ## Next Actions
 
-1. Plan 03-03: Dictamen pericial generation pipeline
-2. Plan 03-04: Evaluate and refine generation quality
+1. ~~Plan 03-03: Dictamen pericial generation pipeline~~ ✅
+2. Plan 03-04: Evaluate and refine generation quality + FastAPI router integration
 3. Plan 03-05: Guardrails and production hardening
 
 ## Performance Metrics
@@ -76,3 +78,4 @@ Phase 3 (IA Generativa/Dictámenes) — Plan 02 completado. Read-only DB engine 
 | Phase 02-ia-vision-computacional | P04 DL Minutiae Extraction | 8 min | 2 tasks (TDD), 3 files |
 | Phase 03-ia-generativa-burocracia P01 | 3min | 2 tasks | 7 files |
 | Phase 03-ia-generativa-burocracia P02 | 2min | 2 tasks (TDD) | 5 files |
+| Phase 03-ia-generativa-burocracia P03 | 4min | 2 tasks (TDD) | 6 files |
