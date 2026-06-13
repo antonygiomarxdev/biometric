@@ -1,100 +1,73 @@
-"""LLM provider abstraction layer using the Adapter/Strategy pattern.
+"""
+Generative AI Infrastructure: Extensible LLM Factory.
 
-Supports multiple providers (Ollama local, OpenAI remote) and use-case
-specific configuration profiles (e.g. SQL generation vs. report writing).
-Consumers always go through ``LLMFactory`` — never import a concrete
-provider directly.
+Clean Architecture: Provides a unified interface for LLM connections.
+Per ADR-006 (AI Compliance & Forensic Data Handling), this system strictly uses
+an OpenAI-Compatible API standard. This allows seamless switching between:
+- Tier 1: Local Air-Gapped models (Ollama, vLLM) via localhost:11434/v1
+- Tier 2: Secure Enterprise Cloud (Azure OpenAI) with Zero-Retention contracts
+- Local AI Gateways (LiteLLM) for secure routing.
+
+Proprietary SDKs are avoided to prevent vendor lock-in and ensure auditability.
 """
 
-from __future__ import annotations
-
+import logging
 from typing import Protocol
 
 from llama_index.core.llms.llm import LLM
-from llama_index.llms.ollama import Ollama
-from llama_index.llms.openai import OpenAI
+from llama_index.llms.openai_like import OpenAILike
 
 from src.core.config import config
 
+logger = logging.getLogger(__name__)
+
 
 class ILLMProvider(Protocol):
-    """Duck-typing protocol for LLM providers.
-
-    Any object that implements ``get_llm(use_case) -> LLM`` satisfies
-    this protocol — no explicit inheritance required.
-    """
-
+    """Protocol for LLM Providers."""
     def get_llm(self, use_case: str = "default") -> LLM:
-        """Return a configured LlamaIndex ``LLM`` instance.
-
-        Args:
-            use_case: Generation profile (e.g. ``"default"``, ``"sql"``).
-                      Providers may tune parameters per use case.
-
-        Returns:
-            A ready-to-use LlamaIndex LLM.
-        """
         ...
 
 
-class OllamaProvider:
-    """Provider for locally-hosted Ollama models (e.g. Llama 3.x)."""
-
+class OpenAICompatibleProvider:
+    """
+    Universal provider that talks to ANY backend supporting the OpenAI REST API format.
+    This includes: Local Ollama, vLLM, LiteLLM Proxy, and actual OpenAI/Azure APIs.
+    """
+    
     def get_llm(self, use_case: str = "default") -> LLM:
-        """Create an Ollama LLM configured for the given use case.
-
-        Timeout is longer for SQL generation (120s) vs. other tasks
-        (60s) because schema-aware queries can take longer to produce.
-        """
-        timeout: float = 120.0 if use_case == "sql" else 60.0
-
-        return Ollama(
-            model=config.local_model_name,
-            request_timeout=timeout,
+        # Determine timeout based on use case
+        timeout = 120.0 if use_case == "sql" else 60.0
+        
+        logger.info(
+            f"Configuring LLM for use_case '{use_case}' connecting to {config.llm_api_base}"
         )
-
-
-class OpenAIProvider:
-    """Provider for remote OpenAI models (e.g. GPT-4)."""
-
-    def get_llm(self, use_case: str = "default") -> LLM:
-        """Create an OpenAI LLM with the remote model and API key."""
-        return OpenAI(
-            model=config.remote_model_name,
-            api_key=config.openai_api_key.get_secret_value(),
+        
+        # Use OpenAILike which allows overriding the API Base URL seamlessly
+        return OpenAILike(
+            model=config.llm_model_name,
+            api_base=config.llm_api_base,
+            api_key=config.llm_api_key.get_secret_value() if config.llm_api_key else "fake-key-for-local",
+            timeout=timeout,
+            is_chat_model=True,
         )
 
 
 class LLMFactory:
-    """Factory that resolves the active provider and returns a configured LLM.
-
-    Usage::
-
-        llm = LLMFactory.create("sql")          # Text-to-SQL profile
-        llm = LLMFactory.create("report")        # Report generation
-        llm = LLMFactory.create()                # Default profile
-    """
-
+    """Factory to instantiate the appropriate LLM provider based on config."""
+    
+    # We now unify all providers under the standard compatible REST interface
     _providers: dict[str, ILLMProvider] = {
-        "local": OllamaProvider(),
-        "openai": OpenAIProvider(),
+        "standard": OpenAICompatibleProvider(),
     }
 
     @classmethod
     def create(cls, use_case: str = "default") -> LLM:
-        """Resolve the active provider and return a configured LLM.
-
-        Args:
-            use_case: Generation profile forwarded to the provider.
-
-        Returns:
-            A configured LlamaIndex ``LLM`` instance.
-
-        Raises:
-            ValueError: If ``config.llm_provider`` is not registered.
         """
-        provider = cls._providers.get(config.llm_provider)
-        if provider is None:
-            msg = f"Provider {config.llm_provider} not registered"
-            raise ValueError(msg)
+        Creates and configures an LLM instance for a specific use case.
+        """
+        # In the new compliant architecture, we always use the standard REST interface.
+        # The actual routing (Local vs Azure vs Gateway) is handled by changing `config.llm_api_base`.
+        provider = cls._providers.get("standard")
+        if not provider:
+            raise ValueError("Standard provider not configured.")
         return provider.get_llm(use_case)
