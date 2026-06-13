@@ -15,11 +15,11 @@
 Plans:
 
 - [x] 01-01-PLAN.md — DB Foundation & FastAPI Core
-- [ ] 01-02-PLAN.md — Audit System & Seed Data
-- [ ] 01-03-PLAN.md — Matching Engine & Benchmark
-- [ ] 01-04-PLAN.md — Core CRUD Routers
-- [ ] 01-05-PLAN.md — Legal Report Generator (PDF)
-- [ ] 01-06-PLAN.md — Auth Service & Security Base
+- [x] 01-02-PLAN.md — Audit System & Seed Data
+- [x] 01-03-PLAN.md — Matching Engine & Benchmark
+- [x] 01-04-PLAN.md — Core CRUD Routers
+- [x] 01-05-PLAN.md — Legal Report Generator (PDF)
+- [x] 01-06-PLAN.md — Auth Service & Security Base
 - [ ] 01-07-PLAN.md — API Wiring & Monolith Teardown
 - [ ] 01-08-PLAN.md — Forensic Frontend (UI)
 
