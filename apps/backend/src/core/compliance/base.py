@@ -15,6 +15,7 @@ class BaseStrategy:
     - Prompt data passes through unchanged.
     - Client-side encryption is NOT required.
     - Audit strictness is set to "standard".
+    - Text-level masking is NOT active.
 
     Use this strategy in development or in jurisdictions that do not
     impose privacy requirements (e.g., fully on-premise internal systems).
@@ -39,3 +40,15 @@ class BaseStrategy:
     def deanonymize_prompt_data(self, data: dict[str, Any]) -> dict[str, Any]:
         """Return the data unchanged — no deanonymization needed."""
         return data
+
+    def is_masking_active(self) -> bool:
+        """Return False — no masking in base mode."""
+        return False
+
+    def anonymize_text(self, text: str) -> str:
+        """Return the input text unchanged — no anonymization."""
+        return text
+
+    def deanonymize_text(self, text: str) -> str:
+        """Return the input text unchanged — no deanonymization."""
+        return text

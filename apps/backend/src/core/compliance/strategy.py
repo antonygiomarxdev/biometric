@@ -64,3 +64,34 @@ class IComplianceStrategy(Protocol):
             A new dictionary with tokens restored to original values.
         """
         ...
+
+    def is_masking_active(self) -> bool:
+        """Indicate whether text-level PII anonymization is active.
+
+        Returns:
+            True if text should be anonymized before sending to LLMs,
+            False if data should pass through unchanged.
+        """
+        ...
+
+    def anonymize_text(self, text: str) -> str:
+        """Replace detected PII patterns in text with anonymized tokens.
+
+        Args:
+            text: The raw text that may contain PII.
+
+        Returns:
+            Text with PII replaced by tokens (e.g., ``[PERSON_1]``).
+        """
+        ...
+
+    def deanonymize_text(self, text: str) -> str:
+        """Restore tokens in text back to their original values.
+
+        Args:
+            text: Text containing anonymized tokens.
+
+        Returns:
+            Text with tokens restored to original values.
+        """
+        ...

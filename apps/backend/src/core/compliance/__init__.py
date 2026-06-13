@@ -12,6 +12,7 @@ from src.core.compliance.logger import (
     PIIFilter,
     setup_compliance_logging,
 )
+from src.core.compliance.masking import DataMasker
 
 __all__ = [
     "IComplianceStrategy",
@@ -22,4 +23,5 @@ __all__ = [
     "ComplianceLogFormatter",
     "PIIFilter",
     "setup_compliance_logging",
+    "DataMasker",
 ]

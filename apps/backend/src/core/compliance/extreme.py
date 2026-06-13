@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from src.core.compliance.masking import DataMasker
 from src.core.compliance.strategy import IComplianceStrategy
 
 
@@ -50,6 +51,7 @@ class ExtremePrivacyStrategy:
         """Initialize the token mapping store for anonymization round-trips."""
         self._token_map: dict[str, dict[str, str]] = {}
         self._next_token_id: int = 1
+        self._text_masker: DataMasker = DataMasker()
 
     def scrub_pii(self, text: str) -> str:
         """Remove all known PII patterns from the input text.
@@ -75,6 +77,32 @@ class ExtremePrivacyStrategy:
     def get_audit_strictness(self) -> str:
         """Return maximum audit strictness level."""
         return "maximum"
+
+    def is_masking_active(self) -> bool:
+        """Return True — text-level anonymization is active in extreme mode."""
+        return True
+
+    def anonymize_text(self, text: str) -> str:
+        """Replace detected PII in text with typed tokens via DataMasker.
+
+        Args:
+            text: Raw text that may contain PII.
+
+        Returns:
+            Text with PII replaced by tokens (e.g., ``[PERSON_1]``).
+        """
+        return self._text_masker.anonymize(text)
+
+    def deanonymize_text(self, text: str) -> str:
+        """Restore anonymized tokens in text back to original values.
+
+        Args:
+            text: Text containing anonymized tokens.
+
+        Returns:
+            Text with tokens restored to original values.
+        """
+        return self._text_masker.deanonymize(text)
 
     def anonymize_prompt_data(self, data: dict[str, Any]) -> dict[str, Any]:
         """Replace sensitive field values with anonymized tokens.
