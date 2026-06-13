@@ -27,7 +27,7 @@ import cv2
 from src.main import app
 from src.core.types import NormalizedFingerprint, MinutiaCandidate, MinutiaType, AlgorithmOrigin, MatchResult
 from src.services.fingerprint_service import fingerprint_service
-from src.services.comparison_service import comparison_service
+
 
 # Cliente de prueba
 client = TestClient(app)

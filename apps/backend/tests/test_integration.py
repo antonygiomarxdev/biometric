@@ -4,7 +4,7 @@ import pytest
 import numpy as np
 
 from src.services.fingerprint_service import FingerprintService
-from src.services.comparison_service import ComparisonService
+
 from src.core.types import NormalizedFingerprint
 
 
