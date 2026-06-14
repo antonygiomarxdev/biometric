@@ -1,22 +1,23 @@
 """
-Evidence service — encapsulates all evidence database operations and
-image upload logic.
+Evidence service — encapsulates evidence business logic and image upload.
 
-Follows Clean Architecture: the router layer never accesses the database
-directly.  All ``db.add``, ``db.commit``, ``db.refresh``, ``db.delete``,
-and MinIO storage calls live here, behind well-typed service methods.
+Follows Clean Architecture: the service layer contains business logic
+(validations, image upload orchestration) while all SQLAlchemy queries
+are delegated to :class:`~src.db.repositories.evidence_repository.EvidenceRepository`
+and :class:`~src.db.repositories.case_repository.CaseRepository`.
 """
+
+from __future__ import annotations
 
 import logging
 import uuid
 
 from fastapi import UploadFile
-from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from src.api.errors import NotFoundError, ValidationError
-from src.db.models import Case as CaseModel
-from src.db.models import Evidence as EvidenceModel
+from src.db.repositories.case_repository import CaseRepository
+from src.db.repositories.evidence_repository import EvidenceRepository
 from src.storage.object_storage import storage
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,29 @@ MIME_TO_EXT: dict[str, str] = {
 
 
 class EvidenceService:
-    """Service-layer operations for fingerprint evidence."""
+    """Service-layer operations for fingerprint evidence.
+
+    Receives its repository dependencies via constructor injection
+    to keep the data-access layer swappable and testable.
+    """
+
+    def __init__(
+        self,
+        evidence_repository: EvidenceRepository | None = None,
+        case_repository: CaseRepository | None = None,
+    ) -> None:
+        """Initialise the service.
+
+        Args:
+            evidence_repository: Repository for ``Evidence`` persistence.
+                Defaults to a fresh :class:`EvidenceRepository` if none
+                is provided.
+            case_repository: Repository for ``Case`` lookups.
+                Defaults to a fresh :class:`CaseRepository` if none
+                is provided.
+        """
+        self._evidence_repo = evidence_repository or EvidenceRepository()
+        self._case_repo = case_repository or CaseRepository()
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -121,8 +144,8 @@ class EvidenceService:
     # Public API
     # ------------------------------------------------------------------
 
-    @staticmethod
     def list_evidence(
+        self,
         db: Session,
         *,
         skip: int = 0,
@@ -140,20 +163,10 @@ class EvidenceService:
         Returns:
             A dict with ``items``, ``total``, ``skip``, and ``limit``.
         """
-        query = select(EvidenceModel)
-        if case_id is not None:
-            query = query.where(EvidenceModel.case_id == case_id)
-        query = query.order_by(EvidenceModel.created_at.desc()).offset(skip).limit(limit)
-
-        items = list(db.scalars(query).all())
-        count_query = (
-            select(func.count(EvidenceModel.id))
-            if case_id is None
-            else select(func.count(EvidenceModel.id)).where(
-                EvidenceModel.case_id == case_id
-            )
+        items = self._evidence_repo.list(
+            db, skip=skip, limit=limit, case_id=case_id
         )
-        total = db.scalar(count_query) or 0
+        total = self._evidence_repo.count(db, case_id=case_id)
 
         return {
             "items": items,
@@ -162,17 +175,21 @@ class EvidenceService:
             "limit": limit,
         }
 
-    @staticmethod
     def get_evidence(
+        self,
         db: Session,
         evidence_id: uuid.UUID,
-    ) -> EvidenceModel:
+    ) -> object:
         """Retrieve a single evidence item by UUID.
+
+        Args:
+            db: SQLAlchemy ORM session.
+            evidence_id: UUID of the evidence.
 
         Raises:
             NotFoundError: If no evidence exists with *evidence_id*.
         """
-        ev = db.get(EvidenceModel, evidence_id)
+        ev = self._evidence_repo.get_by_id(db, evidence_id)
         if ev is None:
             raise NotFoundError(
                 message=f"Evidence not found: {evidence_id}",
@@ -180,14 +197,14 @@ class EvidenceService:
             )
         return ev
 
-    @staticmethod
     async def create_evidence(
+        self,
         db: Session,
         *,
         case_id: uuid.UUID,
         fingerprint_id: str,
         file: UploadFile | None = None,
-    ) -> EvidenceModel:
+    ) -> object:
         """Register new evidence, optionally uploading a fingerprint image.
 
         Args:
@@ -205,7 +222,7 @@ class EvidenceService:
             refreshed).
         """
         # Verify the parent case exists
-        case = db.get(CaseModel, case_id)
+        case = self._case_repo.get_by_id(db, case_id)
         if case is None:
             raise NotFoundError(
                 message=f"Case not found: {case_id}",
@@ -215,16 +232,16 @@ class EvidenceService:
         # Upload image if provided
         image_path: str | None = None
         if file is not None:
-            image_path = await EvidenceService._upload_image(file, case_id, fingerprint_id)
+            image_path = await EvidenceService._upload_image(
+                file, case_id, fingerprint_id
+            )
 
-        ev = EvidenceModel(
+        ev = self._evidence_repo.create(
+            db,
             case_id=case_id,
             fingerprint_id=fingerprint_id,
             image_path=image_path,
         )
-        db.add(ev)
-        db.commit()
-        db.refresh(ev)
 
         logger.info(
             "Evidence created: id=%s case_id=%s fingerprint_id=%s image_path=%s",
@@ -235,8 +252,8 @@ class EvidenceService:
         )
         return ev
 
-    @staticmethod
     def get_evidence_image(
+        self,
         db: Session,
         evidence_id: uuid.UUID,
     ) -> bytes:
@@ -253,7 +270,7 @@ class EvidenceService:
         Returns:
             The raw image bytes.
         """
-        ev = db.get(EvidenceModel, evidence_id)
+        ev = self._evidence_repo.get_by_id(db, evidence_id)
         if not ev or not ev.image_path:
             raise NotFoundError("Image not found")
         image_data = storage.download_file(ev.image_path)
@@ -261,25 +278,28 @@ class EvidenceService:
             raise NotFoundError("Image not found in storage")
         return image_data
 
-    @staticmethod
     def delete_evidence(
+        self,
         db: Session,
         evidence_id: uuid.UUID,
     ) -> None:
         """Delete an evidence item.
 
+        Args:
+            db: SQLAlchemy ORM session.
+            evidence_id: UUID of the evidence to delete.
+
         Raises:
             NotFoundError: If no evidence exists with *evidence_id*.
         """
-        ev = db.get(EvidenceModel, evidence_id)
+        ev = self._evidence_repo.get_by_id(db, evidence_id)
         if ev is None:
             raise NotFoundError(
                 message=f"Evidence not found: {evidence_id}",
                 detail={"evidence_id": str(evidence_id)},
             )
 
-        db.delete(ev)
-        db.commit()
+        self._evidence_repo.delete(db, ev)
         logger.info("Evidence deleted: id=%s", evidence_id)
 
 

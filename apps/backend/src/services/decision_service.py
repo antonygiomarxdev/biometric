@@ -1,23 +1,23 @@
 """
-Decision service — encapsulates all Decision database operations.
+Decision service — encapsulates decision business logic and audit trail.
 
-Follows Clean Architecture: the router layer never accesses the database
-directly.  All ``db.add``, ``db.commit``, ``db.flush``, and audit logging
-live here, behind well-typed service methods that receive ``db: Session``
-via method injection.
+Follows Clean Architecture: the service layer contains business logic
+(verdict validation, entity existence checks, audit orchestration)
+while all SQLAlchemy queries are delegated to repositories.
 """
+
+from __future__ import annotations
 
 import logging
 import uuid
 
-from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from src.api.errors import NotFoundError, ValidationError
-from src.db.models import Case as CaseModel
-from src.db.models import Decision as DecisionModel
-from src.db.models import Evidence as EvidenceModel
-from src.services.audit_service import audit_service
+from src.db.repositories.case_repository import CaseRepository
+from src.db.repositories.decision_repository import DecisionRepository
+from src.db.repositories.evidence_repository import EvidenceRepository
+from src.services.audit_service import AuditService, audit_service as default_audit_service
 
 logger = logging.getLogger(__name__)
 
@@ -32,14 +32,45 @@ VEREDICTOS_VALIDOS: frozenset[str] = frozenset({
 
 
 class DecisionService:
-    """Service-layer operations for examiner matching decisions."""
+    """Service-layer operations for examiner matching decisions.
+
+    Receives its repository and service dependencies via constructor
+    injection to keep the data-access layer swappable and testable.
+    """
+
+    def __init__(
+        self,
+        decision_repository: DecisionRepository | None = None,
+        case_repository: CaseRepository | None = None,
+        evidence_repository: EvidenceRepository | None = None,
+        audit_service: AuditService | None = None,
+    ) -> None:
+        """Initialise the service.
+
+        Args:
+            decision_repository: Repository for ``Decision`` persistence.
+                Defaults to a fresh :class:`DecisionRepository` if none
+                is provided.
+            case_repository: Repository for ``Case`` lookups.
+                Defaults to a fresh :class:`CaseRepository` if none
+                is provided.
+            evidence_repository: Repository for ``Evidence`` lookups.
+                Defaults to a fresh :class:`EvidenceRepository` if none
+                is provided.
+            audit_service: Service for immutable audit trail logging.
+                Defaults to the global ``audit_service`` singleton.
+        """
+        self._decision_repo = decision_repository or DecisionRepository()
+        self._case_repo = case_repository or CaseRepository()
+        self._evidence_repo = evidence_repository or EvidenceRepository()
+        self._audit_service = audit_service or default_audit_service
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
-    @staticmethod
     def list_decisions(
+        self,
         db: Session,
         *,
         skip: int = 0,
@@ -60,21 +91,12 @@ class DecisionService:
             A dict with ``items`` (list of ORM objects), ``total``,
             ``skip``, and ``limit``.
         """
-        query = select(DecisionModel)
-        if case_id is not None:
-            query = query.where(DecisionModel.case_id == case_id)
-        if verdict is not None:
-            query = query.where(DecisionModel.verdict == verdict)
-        query = query.order_by(DecisionModel.created_at.desc()).offset(skip).limit(limit)
-
-        items = list(db.scalars(query).all())
-
-        count_query = select(func.count(DecisionModel.id))
-        if case_id is not None:
-            count_query = count_query.where(DecisionModel.case_id == case_id)
-        if verdict is not None:
-            count_query = count_query.where(DecisionModel.verdict == verdict)
-        total = db.scalar(count_query) or 0
+        items = self._decision_repo.list(
+            db, skip=skip, limit=limit, case_id=case_id, verdict=verdict
+        )
+        total = self._decision_repo.count(
+            db, case_id=case_id, verdict=verdict
+        )
 
         return {
             "items": items,
@@ -83,11 +105,11 @@ class DecisionService:
             "limit": limit,
         }
 
-    @staticmethod
     def get_decision(
+        self,
         db: Session,
         decision_id: uuid.UUID,
-    ) -> DecisionModel:
+    ) -> object:
         """Retrieve a single decision by UUID.
 
         Args:
@@ -100,7 +122,7 @@ class DecisionService:
         Returns:
             The ``Decision`` ORM instance.
         """
-        decision = db.get(DecisionModel, decision_id)
+        decision = self._decision_repo.get_by_id(db, decision_id)
         if decision is None:
             raise NotFoundError(
                 message=f"Decision not found: {decision_id}",
@@ -108,15 +130,15 @@ class DecisionService:
             )
         return decision
 
-    @staticmethod
     def record_verdict(
+        self,
         db: Session,
         *,
         case_id: uuid.UUID,
         evidence_id: uuid.UUID | None = None,
         verdict: str,
         comments: str | None = None,
-    ) -> DecisionModel:
+    ) -> object:
         """Record an examiner matching decision with audit trail.
 
         Validates the verdict, verifies that the referenced case and
@@ -151,7 +173,7 @@ class DecisionService:
             )
 
         # Verify referenced entities exist
-        case = db.get(CaseModel, case_id)
+        case = self._case_repo.get_by_id(db, case_id)
         if case is None:
             raise NotFoundError(
                 message=f"Case not found: {case_id}",
@@ -159,25 +181,24 @@ class DecisionService:
             )
 
         if evidence_id is not None:
-            ev = db.get(EvidenceModel, evidence_id)
+            ev = self._evidence_repo.get_by_id(db, evidence_id)
             if ev is None:
                 raise NotFoundError(
                     message=f"Evidence not found: {evidence_id}",
                     detail={"evidence_id": str(evidence_id)},
                 )
 
-        # Persist the decision
-        decision = DecisionModel(
+        # Persist the decision (flush-only — get decision.id before audit)
+        decision = self._decision_repo.create(
+            db,
             case_id=case_id,
             evidence_id=evidence_id,
             verdict=verdict,
             comments=comments,
         )
-        db.add(decision)
-        db.flush()  # get decision.id before audit logging
 
         # Log to the immutable audit hash chain (D-09)
-        audit_service.log_event(
+        self._audit_service.log_event(
             session=db,
             table_name="decisions",
             record_id=decision.id,
