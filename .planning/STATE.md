@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 05
 status: executing
-last_updated: "2026-06-14T00:40:05.381Z"
+last_updated: "2026-06-14T00:46:37.322Z"
 progress:
   total_phases: 4
   completed_phases: 2
@@ -37,14 +37,15 @@ See: `.planning/PROJECT.md`
 
 ## Current Work
 
-Phase 5 (Clean Architecture Strict Refactor) — Plan 01 completado: CaseService and EvidenceService extracting all DB/business logic from routers into dedicated service layer; 37 isolated unit tests.
-Next: Plan 05-02 (Decision Service & Audit wiring).
+Phase 5 (Clean Architecture Strict Refactor) — Plan 02 completado: DecisionService with 100% coverage; decisions router is an anemic HTTP controller.
+Next: Plan 05-03 (Matching Service refactor).
 
 ## Completed Plans
 
 | Phase | Plan | Summary |
 |-------|------|---------|
 | 05-clean-architecture-refactor | 01 - Case & Evidence Services | ✅ CaseService and EvidenceService extract all DB/business logic. Routers are pure HTTP controllers. 37 isolated unit tests. |
+| 05-clean-architecture-refactor | 02 - Decision Service & Audit | ✅ DecisionService with 100% coverage; decisions router is an anemic HTTP controller. 13 isolated unit tests. |
 | 02-ia-vision-computacional | 01 - Enhancement Spike | ✅ U-Net MobileNetV2 evaluado y recomendado. ONNX export validado. |
 | 02-ia-vision-computacional | 02 - AI Infrastructure | ✅ AiConfig, ModelManager, GPU detection via PyTorch, AlgorithmOrigin AI values. |
 | 02-ia-vision-computacional | 03 - AI Enhancement & Segmentation | ✅ SegmentationEnhancer, EnhancementEnhancer, factory AI-first con CPU fallback. |
@@ -77,7 +78,7 @@ Next: Plan 05-02 (Decision Service & Audit wiring).
 ## Next Actions
 
 1. ~~Plan 05-01: Case & Evidence Services~~ ✅
-2. Plan 05-02: Decision Service & Audit wiring
+2. ~~Plan 05-02: Decision Service & Audit wiring~~ ✅
 
 ## Performance Metrics
 
@@ -98,3 +99,10 @@ Next: Plan 05-02 (Decision Service & Audit wiring).
 | Phase 03-global-compliance-core P04 | 3 min | 3 tasks | 4 files |
 | Phase 05-clean-architecture-refactor P01 | 9 min | 3 tasks | 10 files |
 | Phase 05-test-coverage-quality P01 | 38 min | 2 tasks | 11 files |
+| Phase 05-clean-architecture-refactor P02 | 2 min | 2 tasks | 4 files |
+
+## Decisions
+
+- [Phase 05-clean-architecture-refactor]: DecisionService follows same @staticmethod/db:Session injection pattern as CaseService and EvidenceService — Consistent architecture across all read/write services in the codebase
+- [Phase 05-clean-architecture-refactor]: VEREDICTOS_VALIDOS lives in both router and service — Router keeps it for OpenAPI schema documentation; service owns runtime validation — defense in depth
+- [Phase 05-clean-architecture-refactor]: Test helper _capture_add_and_set_id simulates ORM default=uuid7 during mock db.flush() — Mock sessions don't populate SQLAlchemy column defaults; helper intercepts db.add() and sets id

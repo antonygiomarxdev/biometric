@@ -78,8 +78,9 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — Case & Evidence Services
-- [ ] 05-02-PLAN.md — Decision Service & Audit wiring
+
+- [x] 05-01-PLAN.md — Case & Evidence Services
+- [x] 05-02-PLAN.md — Decision Service & Audit wiring
 - [ ] 05-03-PLAN.md — Known Fingerprints Refactor
 
 ### Fase 6: Test Coverage & Quality Assurance (>90%)
