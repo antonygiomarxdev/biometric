@@ -50,6 +50,20 @@ class TestBaseStrategy:
         assert result == data
         assert result is data  # same object, no copy
 
+    def test_is_masking_active_returns_false(self, strategy: BaseStrategy) -> None:
+        """BaseStrategy should return False for masking active."""
+        assert strategy.is_masking_active() is False
+
+    def test_anonymize_text_passthrough(self, strategy: BaseStrategy) -> None:
+        """BaseStrategy should pass text through unchanged."""
+        text = "Juan Pérez tiene email juan@example.com"
+        assert strategy.anonymize_text(text) == text
+
+    def test_deanonymize_text_passthrough(self, strategy: BaseStrategy) -> None:
+        """BaseStrategy should pass text through unchanged."""
+        text = "[PERSON_1] tiene email [EMAIL_1]"
+        assert strategy.deanonymize_text(text) == text
+
 
 class TestExtremePrivacyStrategy:
     """ExtremePrivacyStrategy should return strict privacy behaviors."""
@@ -137,6 +151,57 @@ class TestExtremePrivacyStrategy:
         data: dict[str, Any] = {"name": "[TOKEN_1]"}
         result = strategy.deanonymize_prompt_data(data)
         assert result is not data
+
+    def test_is_masking_active_returns_true(self, strategy: ExtremePrivacyStrategy) -> None:
+        """ExtremePrivacyStrategy should return True for masking active."""
+        assert strategy.is_masking_active() is True
+
+    def test_anonymize_text_uses_masker(self, strategy: ExtremePrivacyStrategy) -> None:
+        """ExtremePrivacyStrategy should tokenize PII via anonymize_text."""
+        result = strategy.anonymize_text("Juan Pérez tiene email juan@example.com")
+        assert "[PERSON_1]" in result
+        assert "[EMAIL_1]" in result
+        assert "Juan Pérez" not in result
+
+    def test_deanonymize_text_restores_tokens(self, strategy: ExtremePrivacyStrategy) -> None:
+        """ExtremePrivacyStrategy should restore tokens via deanonymize_text."""
+        original = "Juan Pérez tiene email juan@example.com"
+        anonymized = strategy.anonymize_text(original)
+        restored = strategy.deanonymize_text(anonymized)
+        assert restored == original
+
+    def test_deanonymize_prompt_data_preserves_non_sensitive(self, strategy: ExtremePrivacyStrategy) -> None:
+        """Non-sensitive keys should pass through unchanged."""
+        data: dict[str, Any] = {"role": "perito", "confidence": 0.95, "result": "match"}
+        result = strategy.deanonymize_prompt_data(data)
+        assert result == data
+
+    def test_deanonymize_prompt_data_preserves_non_mapped_strings(self, strategy: ExtremePrivacyStrategy) -> None:
+        """Non-sensitive string values not in token mapping pass through unchanged."""
+        data: dict[str, Any] = {"name": "John Doe", "role": "perito"}
+        anonymized = strategy.anonymize_prompt_data(data)
+        # anonymized: {"name": "[TOKEN_1]", "role": "perito"}
+        # mapping: {"[TOKEN_1]": "John Doe"}
+        deanonymized = strategy.deanonymize_prompt_data(anonymized)
+        assert deanonymized == data
+
+    def test_scrub_pii_removes_ssn(self, strategy: ExtremePrivacyStrategy) -> None:
+        """ExtremePrivacyStrategy should scrub SSN patterns."""
+        result = strategy.scrub_pii("SSN: 123-45-6789")
+        assert "123-45-6789" not in result
+        assert "[REDACTED]" in result
+
+    def test_scrub_pii_removes_national_id(self, strategy: ExtremePrivacyStrategy) -> None:
+        """ExtremePrivacyStrategy should scrub national ID (cédula) patterns."""
+        result = strategy.scrub_pii("Cédula: 001-123456-1234A")
+        assert "[REDACTED]" in result
+
+    def test_scrub_pii_removes_uuid(self, strategy: ExtremePrivacyStrategy) -> None:
+        """ExtremePrivacyStrategy should scrub UUIDs."""
+        uid = "550e8400-e29b-41d4-a716-446655440000"
+        result = strategy.scrub_pii(f"UUID: {uid}")
+        assert uid not in result
+        assert "[REDACTED]" in result
 
 
 class TestProtocolStructural:

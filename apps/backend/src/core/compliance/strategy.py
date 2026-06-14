@@ -23,7 +23,7 @@ class IComplianceStrategy(Protocol):
         Returns:
             The text with PII removed or redacted.
         """
-        ...
+        ...  # pragma: no cover
 
     def requires_client_side_encryption(self) -> bool:
         """Indicate whether data must be encrypted before storage.
@@ -32,7 +32,7 @@ class IComplianceStrategy(Protocol):
             True if the client/application must encrypt data before sending
             it to storage (MinIO, PostgreSQL), False otherwise.
         """
-        ...
+        ...  # pragma: no cover
 
     def get_audit_strictness(self) -> str:
         """Return the audit strictness level for this jurisdiction.
@@ -41,7 +41,7 @@ class IComplianceStrategy(Protocol):
             A string describing the audit strictness level
             (e.g., "standard", "maximum").
         """
-        ...
+        ...  # pragma: no cover
 
     def anonymize_prompt_data(self, data: dict[str, Any]) -> dict[str, Any]:
         """Replace sensitive fields with tokens before sending to an LLM.
@@ -52,7 +52,7 @@ class IComplianceStrategy(Protocol):
         Returns:
             A new dictionary with sensitive fields replaced by anonymized tokens.
         """
-        ...
+        ...  # pragma: no cover
 
     def deanonymize_prompt_data(self, data: dict[str, Any]) -> dict[str, Any]:
         """Restore anonymized tokens back to their original values.
@@ -63,7 +63,7 @@ class IComplianceStrategy(Protocol):
         Returns:
             A new dictionary with tokens restored to original values.
         """
-        ...
+        ...  # pragma: no cover
 
     def is_masking_active(self) -> bool:
         """Indicate whether text-level PII anonymization is active.
@@ -72,7 +72,7 @@ class IComplianceStrategy(Protocol):
             True if text should be anonymized before sending to LLMs,
             False if data should pass through unchanged.
         """
-        ...
+        ...  # pragma: no cover
 
     def anonymize_text(self, text: str) -> str:
         """Replace detected PII patterns in text with anonymized tokens.
@@ -83,7 +83,7 @@ class IComplianceStrategy(Protocol):
         Returns:
             Text with PII replaced by tokens (e.g., ``[PERSON_1]``).
         """
-        ...
+        ...  # pragma: no cover
 
     def deanonymize_text(self, text: str) -> str:
         """Restore tokens in text back to their original values.
@@ -94,4 +94,4 @@ class IComplianceStrategy(Protocol):
         Returns:
             Text with tokens restored to original values.
         """
-        ...
+        ...  # pragma: no cover

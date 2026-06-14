@@ -26,7 +26,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from src.core.compliance.strategy import IComplianceStrategy
+    from src.core.compliance.strategy import IComplianceStrategy  # pragma: no cover
 
 # ---------------------------------------------------------------------------
 # Strategy resolution
