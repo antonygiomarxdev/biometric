@@ -1,17 +1,52 @@
 """
 Interfaces base para el pipeline biométrico.
 Clean Architecture: Dependency Inversion via Structural Subtyping (Protocols).
-
-Python moderno (3.8+) usa Protocols en lugar de ABCs (Abstract Base Classes).
-Esto permite duck-typing seguro estáticamente: las implementaciones (ej. CpuEnhancer)
-no necesitan heredar explícitamente de IEnhancer, solo necesitan implementar
-la firma del método `enhance`. Esto desacopla totalmente las capas.
 """
 
 from typing import Protocol, List, Tuple, runtime_checkable
 import numpy as np
 
 from src.core.types import MinutiaCandidate, NormalizedFingerprint, MatchResult
+
+
+class PreProcessResult:
+    """Resultado de un pre-procesador: imagen procesada + máscara de calidad opcional."""
+    def __init__(self, image: np.ndarray, quality_mask: np.ndarray | None = None) -> None:
+        self.image = image
+        self.quality_mask = quality_mask
+
+
+@runtime_checkable
+class IPreProcessor(Protocol):
+    """Protocolo para hooks de pre-procesamiento (QualityMask, Binarization, etc.)."""
+    def process(self, image: np.ndarray) -> PreProcessResult:
+        """
+        Procesa la imagen antes de la extracción.
+        Args:
+            image: Imagen en escala de grises (uint8).
+        Returns:
+            PreProcessResult con la imagen procesada y máscara de calidad opcional.
+        """
+        ...
+
+
+@runtime_checkable
+class IPostProcessor(Protocol):
+    """Protocolo para hooks de post-procesamiento (filtrado topológico, fusión, etc.)."""
+    def filter(
+        self,
+        candidates: List[MinutiaCandidate],
+        quality_mask: np.ndarray | None = None,
+    ) -> List[MinutiaCandidate]:
+        """
+        Filtra y limpia la lista de minucias después de la extracción.
+        Args:
+            candidates: Lista cruda de minucias detectadas.
+            quality_mask: Máscara de calidad opcional (True = zona válida).
+        Returns:
+            Lista filtrada de minucias.
+        """
+        ...
 
 
 class IEnhancer(Protocol):
