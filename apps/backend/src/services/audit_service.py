@@ -1,13 +1,10 @@
 """
 Audit trail service with SHA-256 hash chain integrity (per D-09).
 
-Each call to ``log_event`` retrieves the most recent ``AuditLog`` entry
-with a ``SELECT … FOR UPDATE`` lock, chains a new entry using
-``SHA-256(previous_hash || canonical_payload)``, and inserts it.
-
-The ``FOR UPDATE`` lock serialises concurrent appends inside a
-transaction, preventing race conditions where two requests could read
-the same ``previous_hash`` and produce parallel chain branches.
+Each call to ``log_event`` delegates persistence to an
+:class:`~src.db.repositories.audit_repository.AuditRepository`,
+keeping the service layer free of ORM imports and SQLAlchemy
+query builders (Clean Architecture).
 
 Hash format
 -----------
@@ -17,6 +14,8 @@ where ``json_payload`` is the deterministic (``sort_keys=True``) JSON
 encoding of the full event context passed to ``log_event``.
 """
 
+from __future__ import annotations
+
 import hashlib
 import json
 import logging
@@ -24,10 +23,9 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from src.db.models import AuditLog
+from src.db.repositories.audit_repository import AuditRepository
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +34,24 @@ class AuditService:
     """
     Immutable audit trail — records data-mutation events in a
     cryptographic hash chain that enables tamper detection.
+
+    All SQLAlchemy operations are delegated to an injected
+    :class:`~AuditRepository`.
+
+    Usage::
+
+        repo = AuditRepository()
+        service = AuditService(repository=repo)
+        entry = service.log_event(session, action="INSERT", payload={...})
     """
+
+    def __init__(self, repository: AuditRepository) -> None:
+        """Initialise the service with a repository instance.
+
+        Args:
+            repository: The persistence gateway for ``audit_log``.
+        """
+        self._repository = repository
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -70,8 +85,8 @@ class AuditService:
     # Public API
     # ------------------------------------------------------------------
 
-    @staticmethod
     def log_event(
+        self,
         session: Session,
         action: str,
         payload: dict[str, Any],
@@ -79,11 +94,11 @@ class AuditService:
         user_id: str | UUID | None = None,
         table_name: str = "",
         record_id: UUID | str | None = None,
-    ) -> AuditLog:
+    ) -> Any:
         """Record an auditable event with hash-chain integrity.
 
         **Must** be called inside an active database transaction so that
-        the ``SELECT … FOR UPDATE`` lock serialises concurrent appends.
+        the table lock serialises concurrent appends.
 
         Args:
             session: SQLAlchemy ORM session (caller manages commit/rollback).
@@ -113,39 +128,24 @@ class AuditService:
         if record_id is not None:
             chain_payload["record_id"] = str(record_id)
 
-        # ---- lock & read the latest entry ----
-        # Serialise all concurrent appends with a table-level lock.
-        # ``SELECT … FOR UPDATE`` alone cannot protect against hash-chain
-        # forking when the audit_log table is empty — there are no rows
-        # to lock.  The table lock guarantees that even the very first
-        # insert is serialised across transactions.
-        from sqlalchemy import text
-        session.execute(text("LOCK TABLE audit_log IN SHARE ROW EXCLUSIVE MODE"))
-
-        stmt = (
-            select(AuditLog)
-            .order_by(desc(AuditLog.created_at))
-            .limit(1)
-            .with_for_update()
-        )
-        latest = session.execute(stmt).scalar_one_or_none()
+        # ---- lock & read the latest entry via repository ----
+        self._repository.lock_table(session)
+        latest = self._repository.get_latest_entry(session)
 
         previous_hash: str | None = latest.current_hash if latest else None
 
         current_hash = AuditService._compute_hash(previous_hash, chain_payload)
 
-        # ---- insert ----
-        entry = AuditLog(
-            table_name=table_name or "system",
-            record_id=record_id if record_id else UUID(int=0),
-            action=action,
-            payload=chain_payload,
-            previous_hash=previous_hash,
-            current_hash=current_hash,
-            created_at=datetime.now(timezone.utc),
-        )
-        session.add(entry)
-        session.flush()
+        # ---- insert via repository ----
+        entry = self._repository.insert_entry(session, {
+            "table_name": table_name or "system",
+            "record_id": record_id if record_id else UUID(int=0),
+            "action": action,
+            "payload": chain_payload,
+            "previous_hash": previous_hash,
+            "current_hash": current_hash,
+            "created_at": datetime.now(timezone.utc),
+        })
 
         logger.info(
             "Audit[%s]: table=%s action=%s hash=%s…",
@@ -158,4 +158,5 @@ class AuditService:
 
 
 # Singleton — imported by routers and other services.
-audit_service = AuditService()
+# Created with a default AuditRepository for backward compatibility.
+audit_service = AuditService(repository=AuditRepository())
