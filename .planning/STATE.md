@@ -2,22 +2,22 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 05
+current_phase: 06
 status: executing
-last_updated: "2026-06-13T18:45:00.000Z"
+last_updated: "2026-06-13T18:58:00Z"
 progress:
-  total_phases: 4
+  total_phases: 6
   completed_phases: 3
-  total_plans: 25
-  completed_plans: 25
-  percent: 77
+  total_plans: 30
+  completed_plans: 26
+  percent: 63
 ---
 
 # State: Biometric
 
 **Last updated:** 2026-06-13
-**Current phase:** 05
-**Status:** Executing Phase 05
+**Current phase:** 06
+**Status:** Executing Phase 06
 
 ## Project Reference
 
@@ -30,15 +30,16 @@ See: `.planning/PROJECT.md`
 | Phase | Status | Progress |
 |-------|--------|----------|
 | 1. Flujo Core Forense | ✅ Completado | 100% |
-| 2. IA Visión Computacional | 🏃‍♂️ En progreso | 67% (4/6 planes) |
-| 3. Global Compliance & Security | 🏃‍♂️ En progreso | 75% (3/4 planes) |
+| 2. IA Visión Computacional | ✅ Completado | 100% (6/6 planes) |
+| 3. Global Compliance & Security | ✅ Completado | 100% (4/4 planes) |
 | 4. IA Generativa (Dictámenes) | ✅ Completado | 100% (5/5 planes) |
-| 5. Despliegue On-Premise | ⏳ Pendiente | 0% |
+| 5. Clean Architecture Refactor | ✅ Completado | 100% (7/7 planes) |
+| 6. Test Coverage & Quality | 🏃‍♂️ En progreso | 25% (1/4 planes) |
 
 ## Current Work
 
-Phase 05 (Clean Architecture Strict Refactor) — Plan 07 completed: fingerprint_service 99% coverage, pdf_generator 100% coverage, bug fix for empty-image edge case.
-Next: Plan 08 pending (next wave).
+Phase 06 (Test Coverage & Quality) — Plan 02 completed: Compliance Core at 100% coverage with 91 passing tests.
+Next: Plan 06-03 (GenAI & AI Vision coverage).
 
 ## Completed Plans
 
@@ -63,6 +64,7 @@ Next: Plan 08 pending (next wave).
 | 03-global-compliance-core | 01 - Strategy Pattern & Interfaces | ✅ IComplianceStrategy protocol, BaseStrategy, ExtremePrivacyStrategy, ComplianceFactory wired to Config. |
 | 03-global-compliance-core | 02 - Log PII Scrubber | ✅ ComplianceLogFormatter, PIIFilter, setup_compliance_logging wired into FastAPI and CLI. |
 | 03-global-compliance-core | 03 - AI Data Tokenizer | ✅ DataMasker with typed tokenization (PERSON/EMAIL/CASE/UUID), thread-safe, wired into ExtremePrivacyStrategy. |
+| 06-test-coverage-quality | 02 - Compliance Core Coverage | ✅ 100% coverage on all 7 compliance modules with 91 passing tests |
 
 ## Decisions Log
 
@@ -118,10 +120,13 @@ Next: Plan 08 pending (next wave).
 | Phase 05-clean-architecture-refactor P05 | 7m | 3 tasks | 9 files |
 | Phase 05-clean-architecture-refactor P06 | 15min | 2 tasks (TDD) | 4 files |
 | Phase 05-clean-architecture-refactor P07 | 15min | 2 tasks | 3 files |
+| Phase 06-test-coverage-quality P02 | 18min | 3 tasks | 7 files |
 
 ## Decisions
 
-- [Phase 05-clean-architecture-refactor]: AuditRepository is a stateless class with static methods (no instance state). Services receive it via constructor injection.
+- [Phase 06-test-coverage-quality]: Protocol method bodies (IComplianceStrategy `...` ellipsis) marked `# pragma: no cover` — abstract methods are definition-only, never executed at runtime.
+- [Phase 06-test-coverage-quality]: TYPE_CHECKING imports in logger.py/masking.py marked `# pragma: no cover` — never executed at runtime.
+- [Phase 06-test-coverage-quality]: [Phase 05-clean-architecture-refactor]: AuditRepository is a stateless class with static methods (no instance state). Services receive it via constructor injection.
 - [Phase 05-clean-architecture-refactor]: AuditService constructor now takes AuditRepository parameter. Backward-compatible singleton uses AuditRepository() default.
 - [Phase 05-clean-architecture-refactor]: Repository exposes three methods: lock_table, get_latest_entry, insert_entry — matching the exact operations AuditService needs.
 
