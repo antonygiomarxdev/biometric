@@ -66,8 +66,11 @@
 - [ ] **UI-05**: Reportes exportables (PDF/CSV)
 - [ ] **UI-06**: Visualización de minucias superpuestas mejorada
 
-### Refactor Técnico
+### Refactor Técnico — Clean Architecture
 
+- [x] **CA-01**: CaseService and EvidenceService own all DB/business logic; routers are pure HTTP controllers
+- [x] **CA-02**: DecisionService owns all write operations; decisions router is an anemic HTTP controller
+- [x] **CA-03**: MatchingService owns fingerprint vector persistence; known-fingerprints router is an anemic HTTP controller
 - [ ] **REF-01**: Separar API en routers (rest.py está muy pesado)
 - [ ] **REF-02**: Remover hardcodeo de URL en frontend (usar env vars)
 - [ ] **REF-03**: Centralizar idioma a español (o inglés consistente)
@@ -129,13 +132,16 @@
 | UI-04 | Phase 4 | Pending |
 | UI-05 | Phase 4 | Pending |
 | UI-06 | Phase 4 | Pending |
+| CA-01 | Phase 5 | ✅ Complete |
+| CA-02 | Phase 5 | ✅ Complete |
+| CA-03 | Phase 5 | ✅ Complete |
 | REF-01 | Phase 5 | Pending |
 | REF-02 | Phase 5 | Pending |
 | REF-03 | Phase 5 | Pending |
 | REF-04 | Phase 5 | Pending |
 
 **Coverage:**
-- v1 requirements: 29 total
+- v1 requirements: 32 total
 - Mapped to phases: 29
 - Unmapped: 0 ✓
 
