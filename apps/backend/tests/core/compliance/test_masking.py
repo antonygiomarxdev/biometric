@@ -118,6 +118,22 @@ class TestDataMasker:
         """Empty strings should be handled gracefully."""
         assert masker.deanonymize("") == ""
 
+    def test_deanonymize_handles_none(self, masker: DataMasker) -> None:
+        """None should be handled gracefully."""
+        assert masker.deanonymize(None) == ""  # type: ignore[arg-type]
+
+    def test_deanonymize_empty_mapping_returns_unchanged(self, masker: DataMasker) -> None:
+        """deanonymize with empty token_map should return text unchanged."""
+        result = masker.deanonymize("Hola Juan Pérez")
+        assert result == "Hola Juan Pérez"
+
+    def test_deanonymize_partial_mapping(self, masker: DataMasker) -> None:
+        """Tokens not in mapping should be left as-is."""
+        masker.anonymize("Juan Pérez")
+        result = masker.deanonymize("[PERSON_1] y [PERSON_999]")
+        assert "Juan Pérez" in result
+        assert "[PERSON_999]" in result  # Unknown token preserved
+
     # ── clear_mapping ───────────────────────────────────────────────────
 
     def test_clear_mapping_prevents_restoration(

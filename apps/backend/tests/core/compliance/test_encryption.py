@@ -58,3 +58,8 @@ class TestEncryptionService:
         c1: bytes = svc1.encrypt(data)
         c2: bytes = svc2.encrypt(data)
         assert c1 != c2, "Different keys must produce different ciphertext"
+
+    def test_instantiation_without_key_raises_value_error(self) -> None:
+        """Creating EncryptionService with no key should raise ValueError."""
+        with pytest.raises(ValueError, match="No encryption key provided"):
+            EncryptionService()  # type: ignore[call-overload]

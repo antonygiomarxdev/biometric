@@ -15,7 +15,7 @@ import threading
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.core.compliance.strategy import IComplianceStrategy
+    from src.core.compliance.strategy import IComplianceStrategy  # pragma: no cover
 
 
 # ── PII detection patterns ────────────────────────────────────────────────────
