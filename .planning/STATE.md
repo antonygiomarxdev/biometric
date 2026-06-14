@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 05
 status: executing
-last_updated: "2026-06-14T00:51:35.541Z"
-current_plan: 03
+last_updated: "2026-06-14T01:10:00.000Z"
+current_plan: 04
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 21
-  completed_plans: 20
-  percent: 75
+  total_plans: 22
+  completed_plans: 21
+  percent: 100
 ---
 
 # State: Biometric
@@ -38,7 +38,7 @@ See: `.planning/PROJECT.md`
 
 ## Current Work
 
-Phase 5 (Clean Architecture Strict Refactor) — Plan 03 completado: MatchingService owns fingerprint vector persistence; known-fingerprints router is an anemic HTTP controller. 3 isolated unit tests.
+Phase 5 (Clean Architecture Strict Refactor) — Plan 04 completado: AuditRepository encapsula todo SQLAlchemy. AuditService usa repositorio inyectado (DI). 25 tests unitarios, 100% cobertura.
 Next: All Phase 5 plans completed.
 
 ## Completed Plans
@@ -61,6 +61,9 @@ Next: All Phase 5 plans completed.
 | 03-global-compliance-core | 03 - AI Data Tokenizer | ✅ DataMasker with typed tokenization (PERSON/EMAIL/CASE/UUID), thread-safe, wired into ExtremePrivacyStrategy. |
 
 ## Decisions Log
+- [Phase 05-clean-architecture-refactor]: AuditRepository is a stateless class with static methods (no instance state). Services receive it via constructor injection.
+- [Phase 05-clean-architecture-refactor]: AuditService constructor now takes AuditRepository parameter. Backward-compatible singleton uses AuditRepository() default.
+- [Phase 05-clean-architecture-refactor]: Repository exposes three methods: lock_table, get_latest_entry, insert_entry — matching the exact operations AuditService needs.
 
 - **D-03 (Enhancement Architecture):** U-Net with MobileNetV2 encoder, L1+SSIM perceptual loss, 512×512 input, ImageNet pretrained weights. ONNX export opset 18.
 - **D-04 (AI Infrastructure):** AiConfig frozen dataclass with env-var overrides; ModelManager singleton; ONNX Runtime provider auto-selects CUDAExecutionProvider; GPU detection via PyTorch at module level.
@@ -77,6 +80,8 @@ Next: All Phase 5 plans completed.
 - **D-15 (Service layer pattern):** Services use `@staticmethod` methods with `db: Session` injected per-call (no instance state needed). Services return ORM objects; routers handle Pydantic serialization. This avoids coupling services to FastAPI's `response_model`.
 
 ## Next Actions
+3. ~~Plan 05-03: MatchingService refactor~~ ✅
+4. ~~Plan 05-04: Audit Repository Pattern~~ ✅
 
 1. ~~Plan 05-01: Case & Evidence Services~~ ✅
 2. ~~Plan 05-02: Decision Service & Audit wiring~~ ✅
@@ -101,8 +106,12 @@ Next: All Phase 5 plans completed.
 | Phase 05-clean-architecture-refactor P01 | 9 min | 3 tasks | 10 files |
 | Phase 05-test-coverage-quality P01 | 38 min | 2 tasks | 11 files |
 | Phase 05-clean-architecture-refactor P02 | 2 min | 2 tasks | 4 files |
+| Phase 05-clean-architecture-refactor | P04 Audit Repository | 18 min | 2 tasks (TDD), 6 files |
 
 ## Decisions
+- [Phase 05-clean-architecture-refactor]: AuditRepository is a stateless class with static methods (no instance state). Services receive it via constructor injection.
+- [Phase 05-clean-architecture-refactor]: AuditService constructor now takes AuditRepository parameter. Backward-compatible singleton uses AuditRepository() default.
+- [Phase 05-clean-architecture-refactor]: Repository exposes three methods: lock_table, get_latest_entry, insert_entry — matching the exact operations AuditService needs.
 
 - [Phase 05-clean-architecture-refactor]: DecisionService follows same @staticmethod/db:Session injection pattern as CaseService and EvidenceService — Consistent architecture across all read/write services in the codebase
 - [Phase 05-clean-architecture-refactor]: VEREDICTOS_VALIDOS lives in both router and service — Router keeps it for OpenAPI schema documentation; service owns runtime validation — defense in depth
