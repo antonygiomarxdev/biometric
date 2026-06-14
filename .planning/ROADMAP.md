@@ -1,6 +1,6 @@
 # Roadmap: Biometric
 
-**Created:** 2025-06-12 | **Updated:** 2025-06-12
+**Created:** 2025-06-12 | **Updated:** 2026-06-14
 **Strategy:** Entregas Verticales (Vertical Slices) — cada fase entrega valor real y usable para el perito.
 
 ---
@@ -75,13 +75,17 @@ Plans:
 
 **Requirements:** [CA-01, CA-02, CA-03]
 
-**Plans:** 3 plans
+**Plans:** 7 plans
 
 Plans:
 
 - [x] 05-01-PLAN.md — Case & Evidence Services
 - [x] 05-02-PLAN.md — Decision Service & Audit wiring
-- [x] 05-03-PLAN.md — Known Fingerprints Refactor
+- [x] 05-03-PLAN.md — MatchingService Refactor
+- [x] 05-04-PLAN.md — Audit Repository Pattern
+- [x] 05-05-PLAN.md — Decision Repository
+- [x] 05-06-PLAN.md — Matching Repository + Auth Tests
+- [ ] 05-07-PLAN.md — [pending definition]
 
 ### Fase 6: Test Coverage & Quality Assurance (>90%)
 

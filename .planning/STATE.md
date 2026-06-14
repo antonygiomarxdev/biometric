@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 05
 status: executing
-last_updated: "2026-06-14T01:21:08.624Z"
+last_updated: "2026-06-14T01:26:38Z"
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 25
-  completed_plans: 22
-  percent: 50
+  total_plans: 26
+  completed_plans: 23
+  percent: 88
 ---
 
 # State: Biometric
@@ -37,8 +37,8 @@ See: `.planning/PROJECT.md`
 
 ## Current Work
 
-Phase 5 (Clean Architecture Strict Refactor) — Plan 04 completado: AuditRepository encapsula todo SQLAlchemy. AuditService usa repositorio inyectado (DI). 25 tests unitarios, 100% cobertura.
-Next: All Phase 5 plans completed.
+Phase 05 (Clean Architecture Strict Refactor) — Plan 06 completado: MatchingRepository encapsula FingerprintVector persistence; MatchingService.register_known() delega al repositorio via DI; auth_service tests con 100% cobertura.
+Next: Plan 07 pending.
 
 ## Completed Plans
 
@@ -46,6 +46,10 @@ Next: All Phase 5 plans completed.
 |-------|------|---------|
 | 05-clean-architecture-refactor | 01 - Case & Evidence Services | ✅ CaseService and EvidenceService extract all DB/business logic. Routers are pure HTTP controllers. 37 isolated unit tests. |
 | 05-clean-architecture-refactor | 02 - Decision Service & Audit | ✅ DecisionService with 100% coverage; decisions router is an anemic HTTP controller. 13 isolated unit tests. |
+| 05-clean-architecture-refactor | 03 - MatchingService Refactor | ✅ MatchingService.register_known delegates to MatchingRepository. MatchingRepository created. |
+| 05-clean-architecture-refactor | 04 - Audit Repository Pattern | ✅ AuditRepository encapsula todo SQLAlchemy. AuditService usa repositorio inyectado (DI). 25 tests unitarios, 100% cobertura. |
+| 05-clean-architecture-refactor | 05 - Decision Repository | ✅ DecisionRepository replaces all SQLAlchemy in DecisionService |
+| 05-clean-architecture-refactor | 06 - Matching Repository + Auth Tests | ✅ MatchingRepository with insert_fingerprint_vector/get_latest_vector; auth_service tests with 100% coverage |
 | 02-ia-vision-computacional | 01 - Enhancement Spike | ✅ U-Net MobileNetV2 evaluado y recomendado. ONNX export validado. |
 | 02-ia-vision-computacional | 02 - AI Infrastructure | ✅ AiConfig, ModelManager, GPU detection via PyTorch, AlgorithmOrigin AI values. |
 | 02-ia-vision-computacional | 03 - AI Enhancement & Segmentation | ✅ SegmentationEnhancer, EnhancementEnhancer, factory AI-first con CPU fallback. |
@@ -81,11 +85,13 @@ Next: All Phase 5 plans completed.
 
 ## Next Actions
 
-3. ~~Plan 05-03: MatchingService refactor~~ ✅
-4. ~~Plan 05-04: Audit Repository Pattern~~ ✅
-
 1. ~~Plan 05-01: Case & Evidence Services~~ ✅
 2. ~~Plan 05-02: Decision Service & Audit wiring~~ ✅
+3. ~~Plan 05-03: MatchingService refactor~~ ✅
+4. ~~Plan 05-04: Audit Repository Pattern~~ ✅
+5. ~~Plan 05-05: Decision Repository~~ ✅
+6. ~~Plan 05-06: Matching Repository + Auth Tests~~ ✅
+7. Plan 05-07: ⏳ Pending
 
 ## Performance Metrics
 
@@ -109,6 +115,7 @@ Next: All Phase 5 plans completed.
 | Phase 05-clean-architecture-refactor P02 | 2 min | 2 tasks | 4 files |
 | Phase 05-clean-architecture-refactor | P04 Audit Repository | 18 min | 2 tasks (TDD), 6 files |
 | Phase 05-clean-architecture-refactor P05 | 7m | 3 tasks | 9 files |
+| Phase 05-clean-architecture-refactor P06 | 15min | 2 tasks (TDD) | 4 files |
 
 ## Decisions
 
@@ -119,3 +126,7 @@ Next: All Phase 5 plans completed.
 - [Phase 05-clean-architecture-refactor]: DecisionService follows same @staticmethod/db:Session injection pattern as CaseService and EvidenceService — Consistent architecture across all read/write services in the codebase
 - [Phase 05-clean-architecture-refactor]: VEREDICTOS_VALIDOS lives in both router and service — Router keeps it for OpenAPI schema documentation; service owns runtime validation — defense in depth
 - [Phase 05-clean-architecture-refactor]: Test helper _capture_add_and_set_id simulates ORM default=uuid7 during mock db.flush() — Mock sessions don't populate SQLAlchemy column defaults; helper intercepts db.add() and sets id
+- [Phase 05-clean-architecture-refactor]: MatchingRepository follows existing static-method pattern (same as AuditRepository, EvidenceRepository, CaseRepository)
+- [Phase 05-clean-architecture-refactor]: insert_fingerprint_vector handles commit+refresh inside the repository (consistent with EvidenceRepository.create)
+- [Phase 05-clean-architecture-refactor]: AuthService tests are pure function tests — no DB mocking, no FastAPI dependencies
+- [Phase 05-clean-architecture-refactor]: MatchingService receives MatchingRepository via constructor injection with default fallback (same pattern as CaseService, EvidenceService)
