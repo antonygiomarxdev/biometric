@@ -87,6 +87,16 @@ None — plan executed exactly as written.
 - Plan 05-03 (Matching Service refactor) can proceed — the service layer pattern is now well-established across CaseService, EvidenceService, and DecisionService.
 - All three routers (cases, evidence, decisions) are now anemic HTTP controllers.
 
+## Self-Check: PASSED
+
+- [x] `decision_service.py` created and exists
+- [x] `test_decision_service.py` created and exists
+- [x] `decisions.py` has no `db.add()` calls
+- [x] `decisions.py` has no `db.commit()` calls
+- [x] `decisions.py` has no `audit_service` imports
+- [x] All 4 commits exist (feat → test → docs → docs)
+- [x] SUMMARY.md created and verified
+
 ---
 
 *Phase: 05-clean-architecture-refactor*
