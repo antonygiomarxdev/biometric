@@ -68,7 +68,15 @@ Plans:
 - [x] 03-04-PLAN.md — FastAPI Router Integration & GenAI Endpoints
 - [x] 03-05-PLAN.md — Evaluation, Tracing, and CI/CD Setup
 
-### Fase 5: Test Coverage & Quality Assurance (>90%)
+### Fase 5: Clean Architecture Strict Refactor
+
+**Objetivo:** Eliminar la lógica de negocio y llamadas a la base de datos (`db.add`, `db.commit`) de la capa de Controladores (Routers).
+**Valor:** Desacoplamiento total para facilitar el Testing y cumplir estrictamente el principio de Responsabilidad Única.
+
+1. **Service Layer Core:** Crear `CaseService`, `EvidenceService` y `DecisionService`.
+2. **Anemic Routers:** Refactorizar los endpoints en `api/routers/` para que solo manejen HTTP Request/Response delegando todo a los servicios.
+
+### Fase 6: Test Coverage & Quality Assurance (>90%)
 
 **Objetivo:** Alcanzar más del 90% de code coverage en el backend mediante unit tests aislados (mockeando DB y modelos de IA pesados) para garantizar robustez a nivel empresarial.
 **Valor:** Seguridad de que las refactorizaciones y nuevos modelos no rompen la lógica de negocio ni el compliance legal.
@@ -82,7 +90,7 @@ Plans:
 - [ ] 05-03-PLAN.md — GenAI & AI Vision Coverage
 - [ ] 05-04-PLAN.md — Routers & Services Integration Coverage
 
-### Fase 6: Despliegue, Infraestructura y Operación Policial
+### Fase 7: Despliegue, Infraestructura y Operación Policial
 
 **Objetivo:** Sistema listo para producción on-premise y soporte a hardware físico.
 **Valor:** Sistema autónomo, seguro y extensible a las calles.
@@ -95,5 +103,5 @@ Plans:
 ---
 ## Fases Futuras (Post-Fase 4)
 
-- **Fase 7:** Reconocimiento Facial (Multimodal)
-- **Fase 8:** Sincronización entre múltiples laboratorios regionales.
+- **Fase 8:** Reconocimiento Facial (Multimodal)
+- **Fase 9:** Sincronización entre múltiples laboratorios regionales.
