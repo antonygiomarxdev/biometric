@@ -23,10 +23,9 @@ Plans:
 - [x] 01-07-PLAN.md — API Wiring & Monolith Teardown
 - [x] 01-08-PLAN.md — Forensic Frontend (UI)
 
-### Fase 2: IA de Visión Computacional (El Músculo)
+### Fase 2: IA de Visión Computacional (CONGELADA PARA EL MVP)
 
-**Objetivo:** Reemplazar el procesamiento tradicional con Deep Learning para que el sistema funcione bien con fotos de la escena del crimen, no solo de escáner.
-**Valor:** Aumenta radicalmente el "Hit Rate" en huellas de mala calidad.
+**Decisión de Producto:** Para acelerar el Go-To-Market del MVP, el procesamiento de imágenes usará el algoritmo tradicional de CPU. La extracción por Deep Learning queda diferida. El perito compensará los errores del algoritmo tradicional usando el editor manual (Fallback Editor) construido en esta fase.
 
 **Plans:** 6 plans
 
@@ -99,7 +98,7 @@ Plans:
 - [ ] 06-01-PLAN.md — Coverage Infrastructure & Setup
 - [x] 06-02-PLAN.md — Compliance Core Coverage
 - [x] 06-03-PLAN.md — GenAI & AI Vision Coverage
-- [ ] 06-04-PLAN.md — Routers & Services Integration Coverage
+- [x] 06-04-PLAN.md — Routers & Services Integration Coverage
 
 ### Fase 7: Despliegue, Infraestructura y Operación Policial
 

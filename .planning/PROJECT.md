@@ -46,20 +46,22 @@ Si el pipeline automático no da buen resultado:
 - PostgreSQL + pgvector + MinIO en Docker
 - Sin auth, sin auditoría, sin herramientas forenses
 
-## Estrategia de Inteligencia Artificial (Doble Motor)
+## Pivot Estratégico del MVP (Foco en Productividad)
 
-Nuestra ventaja competitiva radica en democratizar tecnología de punta que los gigantes de la industria venden a precios exorbitantes, empaquetada en una herramienta accesible para laboratorios en LATAM:
+Tras evaluación de viabilidad, el MVP priorizará la **IA Generativa** sobre la IA de Visión Computacional. Entrenar modelos de visión forense requiere recursos intensivos (Data Science, GPUs), mientras que los LLMs modernos ofrecen valor inmediato automatizando la burocracia.
 
-1. **IA de Visión Computacional (El Músculo):**
-   - *Segmentación (U-Net/CNN):* Aislar automáticamente la huella de fondos complejos (madera, papel, ruido).
-   - *Enhancement (GANs):* Reconstruir crestas degradadas en huellas latentes sin inventar minucias falsas.
-   - *Extracción (Deep Learning):* Detección robusta de minucias basada en redes neuronales, superior a la skeletonización tradicional.
+1. **IA Generativa (El Cerebro Operativo) - FOCO DEL MVP:**
+   - *Generación de Dictámenes (LLM local/seguro):* Redacción automática de borradores de informes periciales en lenguaje judicial, basados en los hallazgos técnicos (ahorra 50% del tiempo de papeleo al perito).
+   - *Asistente Forense:* Consultas en lenguaje natural (Text-to-SQL) para estadísticas y auditoría de cadena de custodia.
+   - *Data Anonymization:* Tokenizador PII bidireccional (Compliance Core) para asegurar privacidad.
+
+2. **Visión Computacional Tradicional (El Músculo) - MVP:**
+   - Extracción de minucias basada en filtros de Gabor y esqueletización (CPU).
+   - Ideal para huellas tomadas en comisaría (limpias). Las huellas latentes (sucias) requerirán que el perito use el Editor de Fallback (UI manual) para corregir falsos positivos antes del match.
    - *Matching:* Búsqueda vectorial 1:N ultrarrápida usando embeddings y `pgvector`.
 
-2. **IA Generativa (El Cerebro Operativo):**
-   - *Generación de Dictámenes (LLM local/seguro):* Redacción automática de borradores de informes periciales en lenguaje judicial, basados en los hallazgos técnicos (ahorra 50% del tiempo de papeleo).
-   - *Asistente Forense:* Consultas en lenguaje natural (Text-to-SQL) para estadísticas y auditoría de cadena de custodia.
-   - *Explicabilidad (XAI):* Traducción de métricas de matching a justificaciones comprensibles para la corte.
+3. **IA de Visión Computacional SOTA - DEFERIDO (Post-MVP):**
+   - Reemplazar la esqueletización por MinutiaeNet/FingerNet (Deep Learning) para mejorar el hit rate en huellas sucias sin intervención manual.
 
 ## What We Need to Build
 
