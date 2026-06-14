@@ -1,0 +1,35 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: biometric_ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  backend:
+    depends_on:
+      - ollama
+    environment:
+      LLM_API_BASE: http://ollama:11434/v1
+      LLM_MODEL_NAME: llama3
+      COMPLIANCE_STRATEGY: extreme
+      STORAGE_ENCRYPTION_KEY: "${STORAGE_ENCRYPTION_KEY:-}"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  ollama_data:

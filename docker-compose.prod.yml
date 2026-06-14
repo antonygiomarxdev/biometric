@@ -21,7 +21,7 @@ services:
     build: .
     container_name: biometric_api_prod
     restart: always
-    command: uvicorn src.api.rest:app --host 0.0.0.0 --port 8000 --workers 4
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 4
     ports:
       - "8000:8000"
     volumes:
