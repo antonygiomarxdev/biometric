@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 """
 Router for examiner matching decisions (``/api/v1/decisions``).
 
@@ -12,7 +13,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, Field
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_db
@@ -60,7 +61,7 @@ class DecisionResponse(BaseModel):
     evidence_id: uuid.UUID | None
     verdict: str
     comments: str | None
-    created_at: str
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 

@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 """
 CRUD router for forensic cases (``/api/v1/cases``).
 
@@ -10,7 +11,7 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, Field
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_db
@@ -60,8 +61,8 @@ class CaseResponse(BaseModel):
     title: str
     description: str | None
     status: str
-    created_at: str
-    updated_at: str
+    created_at: datetime
+    updated_at: datetime
 
     model_config = {"from_attributes": True}
 

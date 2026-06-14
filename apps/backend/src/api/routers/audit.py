@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 """
 Router for the forensic audit log (auditoría de cadena de custodia).
 
@@ -38,10 +39,10 @@ class AuditLogEntry(BaseModel):
     table_name: str
     record_id: str
     action: str
-    payload: dict[str, Any]
+    payload: Any
     previous_hash: Optional[str] = None
     current_hash: str
-    created_at: str
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 

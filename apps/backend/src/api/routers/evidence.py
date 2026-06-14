@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_db
 from src.services.evidence_service import evidence_service
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +53,8 @@ class EvidenceResponse(BaseModel):
     fingerprint_id: str
     image_path: str | None
     num_minutiae: int | None
-    created_at: str
-    updated_at: str
+    created_at: datetime
+    updated_at: datetime | None
 
     model_config = {"from_attributes": True}
 
