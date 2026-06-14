@@ -201,3 +201,174 @@ class TestRegisterKnown:
         assert data["minutiae_data"] is None, (
             f"Expected minutiae_data=None for empty list, got {data['minutiae_data']}"
         )
+
+
+# ---------------------------------------------------------------------------
+# search_latent
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestSearchLatent:
+    """Tests for :meth:`MatchingService.search_latent`."""
+
+    async def test_returns_empty_when_no_minutiae(
+        self,
+        matching_service: MatchingService,
+    ) -> None:
+        """Returns an empty list when no minutiae are extracted."""
+        mock_fingerprint = MagicMock()
+        mock_fingerprint.minutiae = []
+
+        matching_service._run_cpu_bound = AsyncMock(  # type: ignore[assignment]
+            return_value=mock_fingerprint,
+        )
+
+        result = await matching_service.search_latent(
+            image_bytes=b"test",
+            db=MagicMock(),
+        )
+
+        assert result == []
+
+    async def test_calls_vector_search_when_minutiae_exist(
+        self,
+        matching_service: MatchingService,
+        db: MagicMock,
+    ) -> None:
+        """Delegates to ``_vector_search`` when minutiae are present."""
+        mock_fingerprint = MagicMock()
+        mock_fingerprint.minutiae = [MagicMock()]
+        mock_fingerprint.vector = np.array([1.0, 2.0, 3.0], dtype=np.float32)
+
+        matching_service._run_cpu_bound = AsyncMock(  # type: ignore[assignment]
+            return_value=mock_fingerprint,
+        )
+        matching_service._vector_search = AsyncMock(  # type: ignore[assignment]
+            return_value=["candidate"],
+        )
+
+        result = await matching_service.search_latent(
+            image_bytes=b"test",
+            db=db,
+        )
+
+        assert result == ["candidate"]
+        matching_service._vector_search.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# _build_query_vector
+# ---------------------------------------------------------------------------
+
+
+class TestBuildQueryVector:
+    """Tests for :meth:`MatchingService._build_query_vector`."""
+
+    def test_pads_short_vector(self, matching_service: MatchingService) -> None:
+        """A vector shorter than ``vector_dimension`` is zero-padded."""
+        from src.core.config import config
+
+        fp = MagicMock()
+        fp.vector = np.array([1.0, 2.0], dtype=np.float32)
+
+        result = matching_service._build_query_vector(fp)
+        assert len(result) == config.vector_dimension
+        assert result[0] == 1.0
+        assert result[1] == 2.0
+        assert result[-1] == 0.0  # tail should be padded
+
+    def test_truncates_long_vector(self, matching_service: MatchingService) -> None:
+        """A vector longer than ``vector_dimension`` is truncated."""
+        from src.core.config import config
+
+        long = np.arange(config.vector_dimension + 50, dtype=np.float32)
+        fp = MagicMock()
+        fp.vector = long
+
+        result = matching_service._build_query_vector(fp)
+        assert len(result) == config.vector_dimension
+        assert result[0] == 0.0
+        assert np.array_equal(result, long[: config.vector_dimension])
+
+    def test_exact_length_vector(
+        self,
+        matching_service: MatchingService,
+    ) -> None:
+        """A vector exactly matching ``vector_dimension`` passes through unchanged."""
+        from src.core.config import config
+
+        exact = np.arange(config.vector_dimension, dtype=np.float32)
+        fp = MagicMock()
+        fp.vector = exact
+
+        result = matching_service._build_query_vector(fp)
+        assert len(result) == config.vector_dimension
+        assert np.array_equal(result, exact)
+
+
+# ---------------------------------------------------------------------------
+# _vector_search
+# ---------------------------------------------------------------------------
+
+
+class TestVectorSearch:
+    """Tests for :meth:`MatchingService._vector_search`."""
+
+    def test_raises_when_db_is_none(
+        self,
+        matching_service: MatchingService,
+    ) -> None:
+        """Raises ``RuntimeError`` when no database session is provided."""
+        import numpy as np
+
+        query = np.array([1.0, 2.0], dtype=np.float32)
+
+        with pytest.raises(RuntimeError, match="SQLAlchemy Session is required"):
+            # _vector_search is async — need to call via event loop
+            import asyncio
+
+            asyncio.run(matching_service._vector_search(query, 5, None))
+
+    def test_returns_candidates(
+        self,
+        matching_service: MatchingService,
+        db: MagicMock,
+    ) -> None:
+        """Returns a list of ``CandidateMatch`` from query results."""
+        import numpy as np
+
+        # Mock DB execute to return rows
+        mock_row_1 = MagicMock()
+        mock_row_1.person_id = "P-001"
+        mock_row_1.name = "Candidate 1"
+        mock_row_1.document = "DNI-001"
+        mock_row_1.evidence_id = "ev-001"
+        mock_row_1.l2_distance = 0.5
+
+        mock_row_2 = MagicMock()
+        mock_row_2.person_id = "P-002"
+        mock_row_2.name = "Candidate 2"
+        mock_row_2.document = "DNI-002"
+        mock_row_2.evidence_id = None
+        mock_row_2.l2_distance = 1.5
+
+        mock_execute = MagicMock()
+        mock_execute.fetchall.return_value = [mock_row_1, mock_row_2]
+        db.execute.return_value = mock_execute
+
+        query = np.array([1.0, 2.0], dtype=np.float32)
+
+        import asyncio
+
+        candidates = asyncio.run(
+            matching_service._vector_search(query, 5, db),
+        )
+
+        assert len(candidates) == 2
+        assert candidates[0].person_id == "P-001"
+        assert candidates[0].l2_distance == 0.5
+        assert candidates[0].evidence_id == "ev-001"
+        assert candidates[1].person_id == "P-002"
+        assert candidates[1].evidence_id is None
+        assert candidates[1].l2_distance == 1.5
