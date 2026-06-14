@@ -176,14 +176,15 @@ class FingerprintService:
                 "Verifica que el archivo sea una imagen válida (BMP, PNG, JPEG) y no esté corrupta."
             )
         
+        # Validate that the image has a reasonable size BEFORE accessing
+        # .min() / .max() / .mean(), which would raise on a zero-size array.
+        if image.size == 0:
+            raise ValueError("La imagen decodificada está vacía")
+
         logger.debug(
             f"Imagen decodificada exitosamente - shape: {image.shape}, dtype: {image.dtype}, "
             f"min: {image.min()}, max: {image.max()}, mean: {image.mean():.2f}"
         )
-        
-        # Validate that the image has a reasonable size
-        if image.size == 0:
-            raise ValueError("La imagen decodificada está vacía")
         
         if image.shape[0] < 50 or image.shape[1] < 50:
             logger.warning(f"Imagen muy pequeña: {image.shape} - podría no tener suficiente detalle")
