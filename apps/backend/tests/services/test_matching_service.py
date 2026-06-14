@@ -1,10 +1,10 @@
 """
 Isolated unit tests for :class:`~src.services.matching_service.MatchingService`.
 
-Uses ``MagicMock`` for the SQLAlchemy ``Session`` — no real database
-required.  Tests verify that ``register_known()`` handles the full
-persistence pipeline (FingerprintVector creation, db.add, db.commit,
-db.refresh) so the router layer can remain an anemic HTTP controller.
+Uses ``MagicMock`` for the SQLAlchemy ``Session`` and
+``MatchingRepository`` — no real database required.  Tests verify that
+``register_known()`` delegates persistence to the repository so the
+router layer can remain an anemic HTTP controller.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock
 import numpy as np
 import pytest
 
+from src.db.repositories.matching_repository import MatchingRepository
 from src.services.matching_service import MatchingService
 
 
@@ -30,9 +31,20 @@ def db() -> MagicMock:
 
 
 @pytest.fixture
-def matching_service() -> MatchingService:
-    """Return a ``MatchingService`` with a mock pool (no real CPU work)."""
-    return MatchingService(pool=MagicMock())
+def mock_matching_repo() -> MagicMock:
+    """Return a mock MatchingRepository."""
+    return MagicMock()
+
+
+@pytest.fixture
+def matching_service(
+    mock_matching_repo: MagicMock,
+) -> MatchingService:
+    """Return a ``MatchingService`` with mock pool and repository."""
+    return MatchingService(
+        pool=MagicMock(),
+        matching_repository=mock_matching_repo,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -44,19 +56,19 @@ def matching_service() -> MatchingService:
 class TestRegisterKnown:
     """Tests for :meth:`MatchingService.register_known`."""
 
-    async def test_persists_fingerprint_vector(
+    async def test_delegates_to_repository(
         self,
         db: MagicMock,
+        mock_matching_repo: MagicMock,
         matching_service: MatchingService,
     ) -> None:
-        """Creates a FingerprintVector row, adds/commits/refreshes it.
+        """Delegates persistence to ``MatchingRepository.insert_fingerprint_vector``.
 
         The service should:
         1. Extract the fingerprint (mocked).
         2. Build the query vector (mocked).
-        3. Create a ``FingerprintVector`` model.
-        4. Call ``db.add()``, ``db.commit()``, and ``db.refresh()``.
-        5. Return a ``RegisteredKnownPrint`` with the expected values.
+        3. Call ``matching_repo.insert_fingerprint_vector()`` with the data.
+        4. Return a ``RegisteredKnownPrint`` with the expected values.
         """
         # --- Arrange -------------------------------------------------------
         mock_fingerprint = MagicMock()
@@ -81,13 +93,11 @@ class TestRegisterKnown:
         # Mock the CPU-bound processing to return our mock fingerprint
         matching_service._run_cpu_bound = AsyncMock(return_value=mock_fingerprint)  # type: ignore[assignment]
 
-        # Simulate ORM default for ``id`` when ``db.refresh()`` is called
+        # Mock repository return
         expected_id = uuid.uuid4()
-
-        def _refresh(fv: MagicMock) -> None:
-            fv.id = expected_id
-
-        db.refresh.side_effect = _refresh
+        mock_vector = MagicMock()
+        mock_vector.id = expected_id
+        mock_matching_repo.insert_fingerprint_vector.return_value = mock_vector
 
         # --- Act -----------------------------------------------------------
         result = await matching_service.register_known(
@@ -105,13 +115,22 @@ class TestRegisterKnown:
         assert result.minutiae_count == 2
         assert result.vector_id == expected_id
 
-        db.add.assert_called_once()
-        db.commit.assert_called_once()
-        db.refresh.assert_called_once()
+        mock_matching_repo.insert_fingerprint_vector.assert_called_once()
+        # Verify the data dict was passed with the correct values
+        call_args = mock_matching_repo.insert_fingerprint_vector.call_args[0]
+        assert call_args[0] is db  # session is first arg
+        data = call_args[1]
+        assert data["person_id"] == "P-001"
+        assert data["name"] == "Jane Doe"
+        assert data["document"] == "DNI-98765432"
+        assert data["num_minutiae"] == 2
+        assert data["minutiae_data"] is not None
+        assert len(data["minutiae_data"]) == 2
 
     async def test_registers_with_no_minutiae(
         self,
         db: MagicMock,
+        mock_matching_repo: MagicMock,
         matching_service: MatchingService,
     ) -> None:
         """Still persists a record when ``minutiae`` is empty (graceful degradation)."""
@@ -123,11 +142,9 @@ class TestRegisterKnown:
         matching_service._run_cpu_bound = AsyncMock(return_value=mock_fingerprint)  # type: ignore[assignment]
 
         expected_id = uuid.uuid4()
-
-        def _refresh(fv: MagicMock) -> None:
-            fv.id = expected_id
-
-        db.refresh.side_effect = _refresh
+        mock_vector = MagicMock()
+        mock_vector.id = expected_id
+        mock_matching_repo.insert_fingerprint_vector.return_value = mock_vector
 
         # --- Act -----------------------------------------------------------
         result = await matching_service.register_known(
@@ -143,13 +160,15 @@ class TestRegisterKnown:
         assert result.vector_id == expected_id
         assert result.person_id == "P-002"
 
-        db.add.assert_called_once()
-        db.commit.assert_called_once()
-        db.refresh.assert_called_once()
+        mock_matching_repo.insert_fingerprint_vector.assert_called_once()
+        call_args = mock_matching_repo.insert_fingerprint_vector.call_args[0]
+        data = call_args[1]
+        assert data["num_minutiae"] == 0
 
     async def test_sets_minutiae_data_to_none_when_empty(
         self,
         db: MagicMock,
+        mock_matching_repo: MagicMock,
         matching_service: MatchingService,
     ) -> None:
         """Verifies that ``minutiae_data`` is ``None`` (not an empty list) when no minutiae."""
@@ -160,10 +179,9 @@ class TestRegisterKnown:
 
         matching_service._run_cpu_bound = AsyncMock(return_value=mock_fingerprint)  # type: ignore[assignment]
 
-        def _refresh(fv: MagicMock) -> None:
-            fv.id = uuid.uuid4()
-
-        db.refresh.side_effect = _refresh
+        mock_vector = MagicMock()
+        mock_vector.id = uuid.uuid4()
+        mock_matching_repo.insert_fingerprint_vector.return_value = mock_vector
 
         # --- Act -----------------------------------------------------------
         result = await matching_service.register_known(
@@ -177,10 +195,9 @@ class TestRegisterKnown:
         # --- Assert --------------------------------------------------------
         assert result.minutiae_count == 0
 
-        # Inspect the object that was passed to ``db.add()``
-        call_args = db.add.call_args
-        assert call_args is not None
-        fv_arg = call_args[0][0]
-        assert fv_arg.minutiae_data is None, (
-            f"Expected minutiae_data=None for empty list, got {fv_arg.minutiae_data}"
+        # Inspect the data dict passed to the repository
+        call_args = mock_matching_repo.insert_fingerprint_vector.call_args[0]
+        data = call_args[1]
+        assert data["minutiae_data"] is None, (
+            f"Expected minutiae_data=None for empty list, got {data['minutiae_data']}"
         )

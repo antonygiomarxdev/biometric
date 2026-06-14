@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from src.core.config import config
 from src.core.types import NormalizedFingerprint
-from src.db.models import FingerprintVector
+from src.db.repositories.matching_repository import MatchingRepository
 from src.services.fingerprint_service import FingerprintService
 
 logger = logging.getLogger(__name__)
@@ -97,6 +97,7 @@ class MatchingService:
         self,
         pool: ProcessPoolExecutor | None = None,
         fingerprint_service: FingerprintService | None = None,
+        matching_repository: MatchingRepository | None = None,
     ) -> None:
         """
         Args:
@@ -104,9 +105,12 @@ class MatchingService:
                   When ``None``, falls back to ``asyncio.get_running_loop()``
                   default executor (``ThreadPoolExecutor``).
             fingerprint_service: Optional override for the pipeline service.
+            matching_repository: Repository for ``FingerprintVector`` persistence.
+                Defaults to a fresh :class:`MatchingRepository` if none is provided.
         """
         self._pool = pool
         self._fingerprint_service = fingerprint_service or FingerprintService()
+        self._matching_repo = matching_repository or MatchingRepository()
 
     # ------------------------------------------------------------------
     # Public API
@@ -209,18 +213,18 @@ class MatchingService:
             else None
         )
 
-        # Persist to fingerprint_vectors
-        fv = FingerprintVector(
-            person_id=person_id,
-            name=name,
-            document=document,
-            embedding=vector.tolist(),
-            num_minutiae=len(fingerprint.minutiae),
-            minutiae_data=minutiae_data,
+        # Delegate persistence to the repository
+        fv = self._matching_repo.insert_fingerprint_vector(
+            db,
+            {
+                "person_id": person_id,
+                "name": name,
+                "document": document,
+                "embedding": vector.tolist(),
+                "num_minutiae": len(fingerprint.minutiae),
+                "minutiae_data": minutiae_data,
+            },
         )
-        db.add(fv)
-        db.commit()
-        db.refresh(fv)
 
         logger.info(
             "Known print registered — vector_id=%s, person_id=%s, minutiae=%d",
