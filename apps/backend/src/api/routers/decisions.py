@@ -4,7 +4,7 @@ Router for examiner matching decisions (``/api/v1/decisions``).
 The ``Perito`` role explicitly confirms or rejects a candidate match after
 visual comparison (Identificación, Exclusión, Inconcluso).  Per D-01 the
 system **never** auto-approves — every verdict is recorded and logged to
-the immutable audit hash chain via ``AuditService`` (D-09).
+the immutable audit hash chain via ``DecisionService`` (D-09).
 """
 
 import logging
@@ -13,15 +13,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_db
-from src.api.errors import NotFoundError, ValidationError, IntegrityError
-from src.db.models import Case as CaseModel
-from src.db.models import Decision as DecisionModel
-from src.db.models import Evidence as EvidenceModel
-from src.services.audit_service import audit_service
+from src.services.decision_service import decision_service
 
 logger = logging.getLogger(__name__)
 
@@ -118,45 +113,24 @@ async def list_decisions(
     """
     List examiner decisions with optional filters and pagination.
     """
-    query = select(DecisionModel)
-    if case_id is not None:
-        query = query.where(DecisionModel.case_id == case_id)
-    if verdict is not None:
-        query = query.where(DecisionModel.verdict == verdict)
-    query = query.order_by(DecisionModel.created_at.desc()).offset(skip).limit(limit)
-
-    items = db.scalars(query).all()
-
-    count_query = select(func.count(DecisionModel.id))
-    if case_id is not None:
-        count_query = count_query.where(DecisionModel.case_id == case_id)
-    if verdict is not None:
-        count_query = count_query.where(DecisionModel.verdict == verdict)
-    total = db.scalar(count_query) or 0
-
-    return {
-        "items": [DecisionResponse.model_validate(d) for d in items],
-        "total": total,
-        "skip": skip,
-        "limit": limit,
-    }
+    return decision_service.list_decisions(
+        db,
+        skip=skip,
+        limit=limit,
+        case_id=case_id,
+        verdict=verdict,
+    )
 
 
 @router.get("/{decision_id}", response_model=DecisionResponse)
 async def get_decision(
     decision_id: uuid.UUID,
     db: Session = Depends(get_db),
-) -> DecisionModel:
+) -> Any:
     """
     Retrieve a single decision by its UUID.
     """
-    decision = db.get(DecisionModel, decision_id)
-    if decision is None:
-        raise NotFoundError(
-            message=f"Decision not found: {decision_id}",
-            detail={"decision_id": str(decision_id)},
-        )
-    return decision
+    return decision_service.get_decision(db, decision_id)
 
 
 @router.post(
@@ -168,73 +142,21 @@ async def get_decision(
 async def create_decision(
     body: DecisionCreate,
     db: Session = Depends(get_db),
-) -> DecisionModel:
+) -> Any:
     """
     Submit an examiner matching decision.
 
     The caller **must** have the ``Perito`` role (T-01-04).  The decision
     is persisted in the ``decisions`` table **and** logged to the
-    immutable ``AuditLog`` hash chain via ``AuditService`` (D-09).
+    immutable ``AuditLog`` hash chain via ``DecisionService`` (D-09).
 
     Verdict must be one of: ``Identificación``, ``Exclusión``,
     ``Inconcluso``.
     """
-    if body.verdict not in VEREDICTOS_VALIDOS:
-        raise ValidationError(
-            message=f"Invalid verdict: '{body.verdict}'",
-            detail={
-                "received": body.verdict,
-                "allowed": sorted(VEREDICTOS_VALIDOS),
-            },
-        )
-
-    # Verify referenced entities exist
-    case = db.get(CaseModel, body.case_id)
-    if case is None:
-        raise NotFoundError(
-            message=f"Case not found: {body.case_id}",
-            detail={"case_id": str(body.case_id)},
-        )
-
-    if body.evidence_id is not None:
-        ev = db.get(EvidenceModel, body.evidence_id)
-        if ev is None:
-            raise NotFoundError(
-                message=f"Evidence not found: {body.evidence_id}",
-                detail={"evidence_id": str(body.evidence_id)},
-            )
-
-    # Persist the decision
-    decision = DecisionModel(
+    return decision_service.record_verdict(
+        db,
         case_id=body.case_id,
         evidence_id=body.evidence_id,
         verdict=body.verdict,
         comments=body.comments,
     )
-    db.add(decision)
-    db.flush()  # get decision.id before we commit
-
-    # Log to the immutable audit hash chain (D-09)
-    audit_service.log_event(
-        session=db,
-        table_name="decisions",
-        record_id=decision.id,
-        action="INSERT",
-        payload={
-            "case_id": str(body.case_id),
-            "evidence_id": str(body.evidence_id) if body.evidence_id else None,
-            "verdict": body.verdict,
-            "comments": body.comments,
-        },
-    )
-
-    db.commit()
-    db.refresh(decision)
-
-    logger.info(
-        "Decision created: id=%s case_id=%s verdict=%s",
-        decision.id,
-        decision.case_id,
-        decision.verdict,
-    )
-    return decision
