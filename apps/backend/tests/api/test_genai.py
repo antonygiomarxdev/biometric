@@ -133,8 +133,8 @@ class TestReportEndpoint:
         assert "hallazgos" in data
 
         mock_generate.assert_awaited_once_with(
-            "CASO-001",
-            "Resultados de la consulta SQL.",
+            case_id="CASO-001",
+            sql_results="Resultados de la consulta SQL.",
         )
 
     @patch("src.api.routers.genai.generate_dictamen")
