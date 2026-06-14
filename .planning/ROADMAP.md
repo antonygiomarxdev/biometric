@@ -85,7 +85,7 @@ Plans:
 - [x] 05-04-PLAN.md — Audit Repository Pattern
 - [x] 05-05-PLAN.md — Decision Repository
 - [x] 05-06-PLAN.md — Matching Repository + Auth Tests
-- [ ] 05-07-PLAN.md — [pending definition]
+- [x] 05-07-PLAN.md — Service Tests (fingerprint_service + pdf_generator)
 
 ### Fase 6: Test Coverage & Quality Assurance (>90%)
 

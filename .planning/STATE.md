@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 05
 status: executing
-last_updated: "2026-06-14T01:26:38Z"
+last_updated: "2026-06-13T18:45:00.000Z"
 progress:
   total_phases: 4
-  completed_phases: 2
-  total_plans: 26
-  completed_plans: 23
-  percent: 88
+  completed_phases: 3
+  total_plans: 25
+  completed_plans: 25
+  percent: 77
 ---
 
 # State: Biometric
@@ -37,8 +37,8 @@ See: `.planning/PROJECT.md`
 
 ## Current Work
 
-Phase 05 (Clean Architecture Strict Refactor) — Plan 06 completado: MatchingRepository encapsula FingerprintVector persistence; MatchingService.register_known() delega al repositorio via DI; auth_service tests con 100% cobertura.
-Next: Plan 07 pending.
+Phase 05 (Clean Architecture Strict Refactor) — Plan 07 completed: fingerprint_service 99% coverage, pdf_generator 100% coverage, bug fix for empty-image edge case.
+Next: Plan 08 pending (next wave).
 
 ## Completed Plans
 
@@ -50,6 +50,7 @@ Next: Plan 07 pending.
 | 05-clean-architecture-refactor | 04 - Audit Repository Pattern | ✅ AuditRepository encapsula todo SQLAlchemy. AuditService usa repositorio inyectado (DI). 25 tests unitarios, 100% cobertura. |
 | 05-clean-architecture-refactor | 05 - Decision Repository | ✅ DecisionRepository replaces all SQLAlchemy in DecisionService |
 | 05-clean-architecture-refactor | 06 - Matching Repository + Auth Tests | ✅ MatchingRepository with insert_fingerprint_vector/get_latest_vector; auth_service tests with 100% coverage |
+| 05-clean-architecture-refactor | 07 - Service Test Coverage | ✅ fingerprint_service 99% coverage, pdf_generator 100% coverage, bug fix for empty-image edge case |
 | 02-ia-vision-computacional | 01 - Enhancement Spike | ✅ U-Net MobileNetV2 evaluado y recomendado. ONNX export validado. |
 | 02-ia-vision-computacional | 02 - AI Infrastructure | ✅ AiConfig, ModelManager, GPU detection via PyTorch, AlgorithmOrigin AI values. |
 | 02-ia-vision-computacional | 03 - AI Enhancement & Segmentation | ✅ SegmentationEnhancer, EnhancementEnhancer, factory AI-first con CPU fallback. |
@@ -91,7 +92,7 @@ Next: Plan 07 pending.
 4. ~~Plan 05-04: Audit Repository Pattern~~ ✅
 5. ~~Plan 05-05: Decision Repository~~ ✅
 6. ~~Plan 05-06: Matching Repository + Auth Tests~~ ✅
-7. Plan 05-07: ⏳ Pending
+7. Plan 05-07: ✅ Completado
 
 ## Performance Metrics
 
@@ -116,6 +117,7 @@ Next: Plan 07 pending.
 | Phase 05-clean-architecture-refactor | P04 Audit Repository | 18 min | 2 tasks (TDD), 6 files |
 | Phase 05-clean-architecture-refactor P05 | 7m | 3 tasks | 9 files |
 | Phase 05-clean-architecture-refactor P06 | 15min | 2 tasks (TDD) | 4 files |
+| Phase 05-clean-architecture-refactor P07 | 15min | 2 tasks | 3 files |
 
 ## Decisions
 
@@ -130,3 +132,6 @@ Next: Plan 07 pending.
 - [Phase 05-clean-architecture-refactor]: insert_fingerprint_vector handles commit+refresh inside the repository (consistent with EvidenceRepository.create)
 - [Phase 05-clean-architecture-refactor]: AuthService tests are pure function tests — no DB mocking, no FastAPI dependencies
 - [Phase 05-clean-architecture-refactor]: MatchingService receives MatchingRepository via constructor injection with default fallback (same pattern as CaseService, EvidenceService)
+- [Phase 05-clean-architecture-refactor]: create_enhancer patch target must be src.processing.enhancer (where the import happens in create_ai_fingerprint_service body), not src.services.fingerprint_service (the re-export)
+- [Phase 05-clean-architecture-refactor]: Test ProcessPoolExecutor via synchronous MagicMock execution — validates orchestration logic without multiprocessing overhead
+- [Phase 05-clean-architecture-refactor]: Pin _PDF_SECRET to b"test-secret" via patch for deterministic HMAC-SHA256 across all pdf_generator tests
