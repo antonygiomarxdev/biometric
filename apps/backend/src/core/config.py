@@ -33,6 +33,9 @@ class Config:
     # Environment
     env: str = field(default_factory=lambda: os.getenv("ENV", "development"))
     
+    # Jurisdiction (legal framework config)
+    jurisdiction: JurisdictionConfig = field(default_factory=JurisdictionConfig)
+    
     # Database
     database_url: str = field(
         default_factory=lambda: os.getenv(

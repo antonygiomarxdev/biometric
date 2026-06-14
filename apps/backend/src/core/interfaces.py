@@ -8,7 +8,7 @@ no necesitan heredar explícitamente de IEnhancer, solo necesitan implementar
 la firma del método `enhance`. Esto desacopla totalmente las capas.
 """
 
-from typing import Protocol, List, Tuple
+from typing import Protocol, List, Tuple, runtime_checkable
 import numpy as np
 
 from src.core.types import MinutiaCandidate, NormalizedFingerprint, MatchResult
@@ -29,6 +29,7 @@ class IEnhancer(Protocol):
         ...
 
 
+@runtime_checkable
 class IFeatureExtractor(Protocol):
     """Protocolo para extracción de características."""
     
