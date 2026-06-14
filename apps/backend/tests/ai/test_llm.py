@@ -126,6 +126,20 @@ class TestLLMFactory:
 
         mock_get_llm.assert_called_once_with("sql")
 
+    def test_create_raises_when_provider_missing(self) -> None:
+        """LLMFactory.create raises ValueError when 'standard' provider absent."""
+        from src.ai.llm import LLMFactory
+
+        saved = LLMFactory._providers.copy()
+        LLMFactory._providers.clear()
+        try:
+            with pytest.raises(
+                ValueError, match="Standard provider not configured"
+            ):
+                LLMFactory.create("default")
+        finally:
+            LLMFactory._providers.update(saved)
+
 
 class TestAiConfig:
     """AiConfig defaults and environment overrides."""

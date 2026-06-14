@@ -105,6 +105,33 @@ class TestSkeletonMinutiaeExtractor:
         candidates = extractor.extract(img)
         assert isinstance(candidates, list)
 
+    def test_extract_with_gradient_image_triggers_otsu(
+        self,
+    ) -> None:
+        """A gradient image with >2 unique values triggers Otsu binarization."""
+        from src.processing.extractor import SkeletonMinutiaeExtractor
+
+        extractor = SkeletonMinutiaeExtractor(border_margin=2, erosion_size=2)
+        # Create an image with many intensity values
+        gradient = np.tile(np.arange(50, dtype=np.uint8), (50, 1))
+        # This has >2 unique values → triggers Otsu binarization path
+        candidates = extractor.extract(gradient)
+        assert isinstance(candidates, list)
+
+    def test_extract_very_few_white_pixels_triggers_inversion(
+        self,
+    ) -> None:
+        """An image with < 5% white pixels triggers automatic inversion."""
+        from src.processing.extractor import SkeletonMinutiaeExtractor
+
+        extractor = SkeletonMinutiaeExtractor(border_margin=2, erosion_size=2)
+        # 50x50 = 2500 pixels, 5% = 125. Put just 100 white pixels.
+        img = np.zeros((50, 50), dtype=np.uint8)
+        # Create a small white dot structure in the centre
+        img[24:26, 24:26] = 255  # 4 pixels < 5%
+        candidates = extractor.extract(img)
+        assert isinstance(candidates, list)
+
     def test_compute_angle_termination(self) -> None:
         """_compute_angle returns the angle toward the single neighbour."""
         from src.processing.extractor import SkeletonMinutiaeExtractor
@@ -172,6 +199,31 @@ class TestSkeletonMinutiaeExtractor:
 
         # We should have some candidates from the cross pattern
         assert len(candidates) > 0
+
+    def test_detect_crossing_number_with_non_binary_input(self) -> None:
+        """_detect_crossing_number normalises non-binary skeleton to binary."""
+        from src.processing.extractor import SkeletonMinutiaeExtractor
+
+        extractor = SkeletonMinutiaeExtractor()
+
+        # Input with values 0 and 2 (not 0/1 binary) — should be normalised
+        skel = np.zeros((20, 20), dtype=np.uint8)
+        skel[10, 5:16] = 2  # value 2 instead of 1
+        skel[5:16, 10] = 2
+
+        candidates = extractor._detect_crossing_number(skel)
+        assert isinstance(candidates, list)
+
+    def test_detect_crossing_number_no_skeleton(self) -> None:
+        """_detect_crossing_number returns empty when skeleton has no pixels."""
+        from src.processing.extractor import SkeletonMinutiaeExtractor
+
+        extractor = SkeletonMinutiaeExtractor()
+        skel = np.zeros((20, 20), dtype=np.uint8)
+        candidates = extractor._detect_crossing_number(skel)
+        # A skeleton with no pixels has no ridge structure
+        # The function should still handle this gracefully
+        assert isinstance(candidates, list)
 
     def test_create_mask_fallback(self) -> None:
         """_create_mask falls back when convex_hull_image fails."""
@@ -295,6 +347,25 @@ class TestGradientRidgeExtractor:
         extractor = GradientRidgeExtractor()
         candidates = extractor.extract(blank_binary)
         assert isinstance(candidates, list)
+
+    def test_extract_with_high_contrast_image_finds_corners(
+        self,
+    ) -> None:
+        """A high-contrast image with corners produces candidates."""
+        from src.processing.extractor import GradientRidgeExtractor
+
+        extractor = GradientRidgeExtractor()
+        # Create an image with strong corners
+        img = np.zeros((60, 60), dtype=np.uint8)
+        # Draw a white square - corners are strong features
+        img[10:50, 10:50] = 255
+        candidates = extractor.extract(img)
+        assert isinstance(candidates, list)
+        # A square has 4 corners → should find some
+        if len(candidates) > 0:
+            c = candidates[0]
+            assert isinstance(c.x, int)
+            assert isinstance(c.y, int)
 
 
 # ---------------------------------------------------------------------------

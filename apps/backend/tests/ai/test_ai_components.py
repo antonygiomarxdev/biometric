@@ -356,6 +356,20 @@ class TestExtractionProcessorPostprocess:
 
         assert candidates == []
 
+    def test_single_channel_with_batch_dim_preserved(
+        self, processor: Any
+    ) -> None:
+        """A (1, 1, H, W) output is treated as single-channel UNKNOWN."""
+        raw = np.zeros((1, 1, 64, 64), dtype=np.float32)
+        raw[0, 0, 32, 32] = 0.9
+
+        candidates = processor.postprocess(
+            raw, (128, 128), confidence_threshold=0.5
+        )
+
+        assert len(candidates) > 0
+        assert all(c.type == MinutiaType.UNKNOWN for c in candidates)
+
     def test_coordinate_remap(
         self, processor: Any
     ) -> None:
@@ -387,6 +401,19 @@ class TestExtractionProcessorPostprocess:
 
         # After NMS with 3x3, only the local maximum survives
         assert len(candidates) == 1
+
+    def test_decode_heatmap_no_detections_returns_empty(
+        self, processor: Any
+    ) -> None:
+        """_decode_heatmap returns empty list when no points exceed threshold."""
+        heatmap = np.zeros((64, 64), dtype=np.float32)
+
+        from src.core.types import MinutiaType
+
+        candidates = processor._decode_heatmap(
+            heatmap, 0.9, MinutiaType.TERMINATION
+        )
+        assert candidates == []
 
     def test_decode_heatmap_connected_components(
         self, processor: Any

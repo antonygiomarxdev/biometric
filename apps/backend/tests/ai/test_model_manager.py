@@ -62,36 +62,6 @@ class TestModelManagerLoad:
         session = manager.load_model("segment")
         assert session is not None
 
-    def test_load_model_caches_session(self) -> None:
-        """When the real method is used, second call returns cached session."""
-        from src.ai.model_manager import ModelManager
-
-        config = AiConfig(model_dir="/tmp/test_models/", use_gpu=False)
-        manager = ModelManager(config)
-
-        # Undo the session-scoped class-level patch for this test only.
-        # The conftest patches load_model at the class level, so we need
-        # to unpatch it and instead mock the lower-level InferenceSession.
-        with (
-            patch.object(
-                ModelManager,
-                "load_model",
-                wraps=ModelManager._original_load_model,  # type: ignore[attr-defined]
-            ) if hasattr(ModelManager, "_original_load_model") else patch.object(
-                ModelManager, "load_model", side_effect=None
-            ),
-        ):
-            pass
-
-        # Simulate caching by directly inserting into the private dict
-        fake = MagicMock()
-        manager._sessions["segment"] = fake
-        result = manager.load_model("segment")
-        # With the conftest patch active, load_model returns the conftest mock.
-        # We verify that after a real load_model call, the session hits the
-        # cache by inspecting _sessions after a manual insert.
-        assert manager._sessions["segment"] is fake
-
     def test_unload_model_removes_session(self, manager: Any) -> None:
         """unload_model evicts a single session from the cache."""
         mock_session = MagicMock()
@@ -207,6 +177,98 @@ class TestModelManagerRun:
         # but we can verify the method exists and is callable.
         session = manager.get_session("segment")
         assert session is not None
+
+
+class TestModelManagerRealLoad:
+    """Test the REAL ``load_model`` by working around session-scoped mocks.
+
+    The conftest patches ``ModelManager.load_model`` and ``get_session``
+    at the class level to prevent real ONNX loading.  These tests use
+    ``importlib.reload`` to create a fresh, unpatched ``ModelManager``
+    class while keeping ``onnxruntime.InferenceSession`` mocked at the
+    package level.
+    """
+
+    def test_caches_session(self) -> None:
+        """Real load_model returns cached session on second call."""
+        import importlib
+
+        import src.ai.model_manager as mm_mod
+
+        with (
+            patch("onnxruntime.InferenceSession") as mock_session_cls,
+            patch("pathlib.Path.exists", return_value=True),
+        ):
+            mm_mod = importlib.reload(mm_mod)
+            FreshModelManager = mm_mod.ModelManager
+
+            config = AiConfig(
+                model_dir="/tmp/test_models/", use_gpu=False
+            )
+            manager = FreshModelManager(config)
+
+            fake_session = MagicMock()
+            mock_session_cls.return_value = fake_session
+
+            # First call — loads from disk
+            session1 = manager.load_model("segment")
+            assert session1 is fake_session
+            assert "segment" in manager._sessions
+            mock_session_cls.assert_called_once()
+
+            # Second call — returns cached (no new InferenceSession)
+            mock_session_cls.reset_mock()
+            session2 = manager.load_model("segment")
+            assert session2 is fake_session
+            assert session2 is session1
+            mock_session_cls.assert_not_called()
+
+    def test_raises_on_missing_file(self) -> None:
+        """Real load_model raises FileNotFoundError when .onnx missing."""
+        import importlib
+
+        import src.ai.model_manager as mm_mod
+
+        with (
+            patch("onnxruntime.InferenceSession"),
+            patch("pathlib.Path.mkdir"),  # prevent __init__ from crashing
+        ):
+            mm_mod = importlib.reload(mm_mod)
+            FreshModelManager = mm_mod.ModelManager
+
+            config = AiConfig(
+                model_dir="/nonexistent/path/",
+                use_gpu=False,
+            )
+            manager = FreshModelManager(config)
+
+            with pytest.raises(FileNotFoundError, match="ONNX model not found"):
+                manager.load_model("nonexistent_model")
+
+    def test_get_session_calls_load_model(self) -> None:
+        """Real get_session delegates to load_model."""
+        import importlib
+
+        import src.ai.model_manager as mm_mod
+
+        with (
+            patch("onnxruntime.InferenceSession"),
+            patch("pathlib.Path.exists", return_value=True),
+        ):
+            mm_mod = importlib.reload(mm_mod)
+            FreshModelManager = mm_mod.ModelManager
+
+            config = AiConfig(
+                model_dir="/tmp/test_models/", use_gpu=False
+            )
+            manager = FreshModelManager(config)
+
+            with patch.object(
+                manager, "load_model", wraps=manager.load_model
+            ) as spy:
+                session = manager.get_session("segment")
+                assert session is not None
+                spy.assert_called_once_with("segment")
 
 
 
