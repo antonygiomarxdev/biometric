@@ -98,7 +98,7 @@ Plans:
 
 - [ ] 06-01-PLAN.md — Coverage Infrastructure & Setup
 - [x] 06-02-PLAN.md — Compliance Core Coverage
-- [ ] 06-03-PLAN.md — GenAI & AI Vision Coverage
+- [x] 06-03-PLAN.md — GenAI & AI Vision Coverage
 - [ ] 06-04-PLAN.md — Routers & Services Integration Coverage
 
 ### Fase 7: Despliegue, Infraestructura y Operación Policial

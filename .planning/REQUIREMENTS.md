@@ -18,6 +18,10 @@
 
 - [x] **GENAI-02**: Implementar motor Text-to-SQL (NLSQLTableQueryEngine) con conexión read-only y scoping explícito de tablas
 - [x] **GENAI-03**: Implementar generación estructurada del Dictamen Pericial con esquema Pydantic y generación LLM vía as_structured_llm
+
+### Test Coverage — AI & Vision Modules
+
+- [x] **COV-02**: Alcanzar >90% de cobertura en módulos GenAI (assistant.py, llm.py, report_generator.py) y Visión Computacional (enhancer.py, extractor.py, segmentation.py, enhancement.py, extraction.py) con todos los modelos mockeados
 - [x] **GENAI-04**: Exponer el asistente NLP y generador de dictámenes como endpoints REST (/api/v1/genai/assistant, /api/v1/genai/report/{caso_id})
 
 ### Matching & Algoritmo AFIS
