@@ -2,22 +2,22 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 03
+current_phase: 05
 status: executing
-last_updated: "2026-06-14T00:16:08.961Z"
+last_updated: "2026-06-14T00:40:05.381Z"
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 22
-  completed_plans: 18
+  total_plans: 21
+  completed_plans: 19
   percent: 50
 ---
 
 # State: Biometric
 
 **Last updated:** 2026-06-13
-**Current phase:** 03
-**Status:** Executing Phase 03 — Plan 03 complete
+**Current phase:** 05
+**Status:** Executing Phase 05
 
 ## Project Reference
 
@@ -37,12 +37,14 @@ See: `.planning/PROJECT.md`
 
 ## Current Work
 
-Phase 3 (Global Compliance & Security Core) — Plan 03 completado: AI Data Tokenizer with DataMasker (bidirectional text-level PII tokenizer) and strategy protocol extensions. Next: Plan 03-04 (Storage Encryption).
+Phase 5 (Clean Architecture Strict Refactor) — Plan 01 completado: CaseService and EvidenceService extracting all DB/business logic from routers into dedicated service layer; 37 isolated unit tests.
+Next: Plan 05-02 (Decision Service & Audit wiring).
 
 ## Completed Plans
 
 | Phase | Plan | Summary |
 |-------|------|---------|
+| 05-clean-architecture-refactor | 01 - Case & Evidence Services | ✅ CaseService and EvidenceService extract all DB/business logic. Routers are pure HTTP controllers. 37 isolated unit tests. |
 | 02-ia-vision-computacional | 01 - Enhancement Spike | ✅ U-Net MobileNetV2 evaluado y recomendado. ONNX export validado. |
 | 02-ia-vision-computacional | 02 - AI Infrastructure | ✅ AiConfig, ModelManager, GPU detection via PyTorch, AlgorithmOrigin AI values. |
 | 02-ia-vision-computacional | 03 - AI Enhancement & Segmentation | ✅ SegmentationEnhancer, EnhancementEnhancer, factory AI-first con CPU fallback. |
@@ -70,13 +72,12 @@ Phase 3 (Global Compliance & Security Core) — Plan 03 completado: AI Data Toke
 - **D-12 (Local-only Phoenix tracing):** `phoenix.launch_app()` starts a local collector vs. pointing to external SaaS, satisfying T-03-11 (on-premise compliance for forensic case data).
 - **D-13 (Config-gated tracing):** `enable_ai_tracing` flag (bool env var, default: true) allows disabling tracing in production environments without a Phoenix collector. Graceful degradation: logs warning and skips if packages missing.
 - **D-14 (DataMasker text-level tokenization):** DataMasker handles text-level PII tokenization independently from dict-level `anonymize_prompt_data`. Token types have semantic prefixes (PERSON, EMAIL, CASE, UUID). Thread-safe via `threading.Lock`. Strategy protocol extended with `is_masking_active()`, `anonymize_text()`, `deanonymize_text()`.
+- **D-15 (Service layer pattern):** Services use `@staticmethod` methods with `db: Session` injected per-call (no instance state needed). Services return ORM objects; routers handle Pydantic serialization. This avoids coupling services to FastAPI's `response_model`.
 
 ## Next Actions
 
-1. ~~Plan 03-01: Strategy Pattern & Interfaces~~ ✅
-2. ~~Plan 03-02: Log PII Scrubber~~ ✅
-3. ~~Plan 03-03: AI Data Tokenizer (Masking)~~ ✅
-4. Plan 03-04: Storage Encryption
+1. ~~Plan 05-01: Case & Evidence Services~~ ✅
+2. Plan 05-02: Decision Service & Audit wiring
 
 ## Performance Metrics
 
@@ -95,4 +96,5 @@ Phase 3 (Global Compliance & Security Core) — Plan 03 completado: AI Data Toke
 | 03-global-compliance-core | 02 | 5 min | 2 tasks (1 TDD) | 6 files |
 | 03-global-compliance-core | 03 | 24 min | 1 task (TDD) | 7 files |
 | Phase 03-global-compliance-core P04 | 3 min | 3 tasks | 4 files |
+| Phase 05-clean-architecture-refactor P01 | 9 min | 3 tasks | 10 files |
 | Phase 05-test-coverage-quality P01 | 38 min | 2 tasks | 11 files |
