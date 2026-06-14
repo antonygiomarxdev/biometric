@@ -1,8 +1,8 @@
 """
 Isolated unit tests for :class:`~src.services.case_service.CaseService`.
 
-Uses ``MagicMock`` for the SQLAlchemy ``Session`` — no real database
-required.  Does NOT import from ``src.db.models`` to avoid triggering
+Uses mock repositories — no real database required.
+Does NOT import from ``src.db.models`` to avoid triggering
 the pgvector → numpy import chain in environments without a compatible
 numpy build.
 """
@@ -10,17 +10,29 @@ numpy build.
 from __future__ import annotations
 
 import uuid
-from unittest.mock import MagicMock, PropertyMock
+from unittest.mock import MagicMock
 
 import pytest
 
 from src.api.errors import IntegrityError, NotFoundError
-from src.services.case_service import CaseService, case_service
+from src.services.case_service import CaseService
 
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def mock_case_repo() -> MagicMock:
+    """Return a mock CaseRepository."""
+    return MagicMock()
+
+
+@pytest.fixture
+def service(mock_case_repo: MagicMock) -> CaseService:
+    """Return a CaseService with a mock repository."""
+    return CaseService(case_repository=mock_case_repo)
 
 
 @pytest.fixture
@@ -50,40 +62,52 @@ def _make_mock_case(**kwargs: object) -> MagicMock:
 class TestListCases:
     """Tests for :meth:`CaseService.list_cases`."""
 
-    def test_basic_pagination(self, db: MagicMock) -> None:
+    def test_basic_pagination(
+        self, service: CaseService, db: MagicMock, mock_case_repo: MagicMock
+    ) -> None:
         """Returns a dict with items, total, skip, and limit."""
         mock_case = _make_mock_case()
 
-        db.scalars.return_value.all.return_value = [mock_case]
-        db.scalar.return_value = 1
+        mock_case_repo.list.return_value = [mock_case]
+        mock_case_repo.count.return_value = 1
 
-        result = case_service.list_cases(db, skip=0, limit=20)
+        result = service.list_cases(db, skip=0, limit=20)
 
         assert result["total"] == 1
         assert len(result["items"]) == 1
         assert result["skip"] == 0
         assert result["limit"] == 20
-        db.scalars.assert_called_once()
-        db.scalar.assert_called_once()
+        mock_case_repo.list.assert_called_once_with(
+            db, skip=0, limit=20, status=None
+        )
+        mock_case_repo.count.assert_called_once_with(db, status=None)
 
-    def test_with_status_filter(self, db: MagicMock) -> None:
-        """Applies a status filter when provided."""
+    def test_with_status_filter(
+        self, service: CaseService, db: MagicMock, mock_case_repo: MagicMock
+    ) -> None:
+        """Passes status filter to the repository."""
         mock_case = _make_mock_case()
 
-        db.scalars.return_value.all.return_value = [mock_case]
-        db.scalar.return_value = 1
+        mock_case_repo.list.return_value = [mock_case]
+        mock_case_repo.count.return_value = 1
 
-        result = case_service.list_cases(db, skip=0, limit=10, status="closed")
+        result = service.list_cases(db, skip=0, limit=10, status="closed")
 
         assert result["total"] == 1
         assert len(result["items"]) == 1
+        mock_case_repo.list.assert_called_once_with(
+            db, skip=0, limit=10, status="closed"
+        )
+        mock_case_repo.count.assert_called_once_with(db, status="closed")
 
-    def test_empty_result(self, db: MagicMock) -> None:
+    def test_empty_result(
+        self, service: CaseService, db: MagicMock, mock_case_repo: MagicMock
+    ) -> None:
         """Returns empty items list and zero total when no cases match."""
-        db.scalars.return_value.all.return_value = []
-        db.scalar.return_value = 0
+        mock_case_repo.list.return_value = []
+        mock_case_repo.count.return_value = 0
 
-        result = case_service.list_cases(db, skip=0, limit=20)
+        result = service.list_cases(db, skip=0, limit=20)
 
         assert result["total"] == 0
         assert result["items"] == []
@@ -97,23 +121,26 @@ class TestListCases:
 class TestGetCase:
     """Tests for :meth:`CaseService.get_case`."""
 
-    def test_found(self, db: MagicMock) -> None:
+    def test_found(
+        self, service: CaseService, db: MagicMock, mock_case_repo: MagicMock
+    ) -> None:
         """Returns the case when found."""
         mock_case = _make_mock_case()
+        mock_case_repo.get_by_id.return_value = mock_case
 
-        db.get.return_value = mock_case
-
-        result = case_service.get_case(db, mock_case.id)
+        result = service.get_case(db, mock_case.id)
 
         assert result is mock_case
 
-    def test_not_found(self, db: MagicMock) -> None:
+    def test_not_found(
+        self, service: CaseService, db: MagicMock, mock_case_repo: MagicMock
+    ) -> None:
         """Raises NotFoundError when the case does not exist."""
-        db.get.return_value = None
+        mock_case_repo.get_by_id.return_value = None
 
         case_id = uuid.uuid4()
         with pytest.raises(NotFoundError, match="Case not found"):
-            case_service.get_case(db, case_id)
+            service.get_case(db, case_id)
 
 
 # ---------------------------------------------------------------------------
@@ -124,16 +151,15 @@ class TestGetCase:
 class TestCreateCase:
     """Tests for :meth:`CaseService.create_case`."""
 
-    def test_success(self, db: MagicMock) -> None:
+    def test_success(
+        self, service: CaseService, db: MagicMock, mock_case_repo: MagicMock
+    ) -> None:
         """Creates and returns a new case."""
-        db.scalar.return_value = None  # No duplicate
+        mock_case_repo.get_by_case_number.return_value = None  # No duplicate
+        mock_case = _make_mock_case()
+        mock_case_repo.create.return_value = mock_case
 
-        def _refresh(case: MagicMock) -> None:
-            case.id = uuid.uuid4()
-
-        db.refresh.side_effect = _refresh
-
-        result = case_service.create_case(
+        result = service.create_case(
             db,
             case_number="CASE-001",
             title="Test Case",
@@ -144,52 +170,61 @@ class TestCreateCase:
         assert result.case_number == "CASE-001"
         assert result.title == "Test Case"
         assert result.status == "open"
-        db.add.assert_called_once()
-        db.commit.assert_called_once()
-        db.refresh.assert_called_once()
+        mock_case_repo.get_by_case_number.assert_called_once_with(
+            db, "CASE-001"
+        )
+        mock_case_repo.create.assert_called_once_with(
+            db,
+            case_number="CASE-001",
+            title="Test Case",
+            description="A test",
+            status="open",
+        )
 
-    def test_duplicate_case_number(self, db: MagicMock) -> None:
+    def test_duplicate_case_number(
+        self, service: CaseService, db: MagicMock, mock_case_repo: MagicMock
+    ) -> None:
         """Raises IntegrityError when case_number already exists."""
-        db.scalar.return_value = _make_mock_case()
+        mock_case_repo.get_by_case_number.return_value = _make_mock_case()
 
         with pytest.raises(IntegrityError, match="already exists"):
-            case_service.create_case(
+            service.create_case(
                 db,
                 case_number="CASE-001",
                 title="Duplicate",
             )
-        db.add.assert_not_called()
-        db.commit.assert_not_called()
+        mock_case_repo.create.assert_not_called()
 
-    def test_default_status(self, db: MagicMock) -> None:
+    def test_default_status(
+        self, service: CaseService, db: MagicMock, mock_case_repo: MagicMock
+    ) -> None:
         """Uses 'open' as default status."""
-        db.scalar.return_value = None
+        mock_case_repo.get_by_case_number.return_value = None
+        mock_case_repo.create.return_value = _make_mock_case(status="open")
 
-        def _refresh(case: MagicMock) -> None:
-            case.id = uuid.uuid4()
-
-        db.refresh.side_effect = _refresh
-
-        result = case_service.create_case(
+        result = service.create_case(
             db,
             case_number="CASE-002",
             title="Default Status",
         )
 
         assert result.status == "open"
+        mock_case_repo.create.assert_called_once_with(
+            db,
+            case_number="CASE-002",
+            title="Default Status",
+            description=None,
+            status="open",
+        )
 
     def test_empty_description_defaults_to_empty_string(
-        self, db: MagicMock
+        self, service: CaseService, db: MagicMock, mock_case_repo: MagicMock
     ) -> None:
         """Sets description to empty string when None is provided."""
-        db.scalar.return_value = None
+        mock_case_repo.get_by_case_number.return_value = None
+        mock_case_repo.create.return_value = _make_mock_case(description="")
 
-        def _refresh(case: MagicMock) -> None:
-            case.id = uuid.uuid4()
-
-        db.refresh.side_effect = _refresh
-
-        result = case_service.create_case(
+        result = service.create_case(
             db,
             case_number="CASE-003",
             title="No Description",
@@ -197,6 +232,13 @@ class TestCreateCase:
         )
 
         assert result.description == ""
+        mock_case_repo.create.assert_called_once_with(
+            db,
+            case_number="CASE-003",
+            title="No Description",
+            description=None,
+            status="open",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -207,12 +249,20 @@ class TestCreateCase:
 class TestUpdateCase:
     """Tests for :meth:`CaseService.update_case`."""
 
-    def test_update_all_fields(self, db: MagicMock) -> None:
+    def test_update_all_fields(
+        self, service: CaseService, db: MagicMock, mock_case_repo: MagicMock
+    ) -> None:
         """Updates all provided fields."""
         mock_case = _make_mock_case()
-        db.get.return_value = mock_case
+        mock_case_repo.get_by_id.return_value = mock_case
+        updated_case = _make_mock_case(
+            title="Updated Title",
+            description="Updated description",
+            status="closed",
+        )
+        mock_case_repo.update.return_value = updated_case
 
-        case_service.update_case(
+        result = service.update_case(
             db,
             mock_case.id,
             title="Updated Title",
@@ -220,33 +270,47 @@ class TestUpdateCase:
             status="closed",
         )
 
-        assert mock_case.title == "Updated Title"
-        assert mock_case.description == "Updated description"
-        assert mock_case.status == "closed"
-        db.commit.assert_called_once()
-        db.refresh.assert_called_once()
+        assert result.title == "Updated Title"
+        assert result.description == "Updated description"
+        assert result.status == "closed"
+        mock_case_repo.update.assert_called_once_with(
+            db,
+            mock_case,
+            title="Updated Title",
+            description="Updated description",
+            status="closed",
+        )
 
-    def test_partial_update(self, db: MagicMock) -> None:
+    def test_partial_update(
+        self, service: CaseService, db: MagicMock, mock_case_repo: MagicMock
+    ) -> None:
         """Only updates fields that are not None."""
         mock_case = _make_mock_case()
-        db.get.return_value = mock_case
+        mock_case_repo.get_by_id.return_value = mock_case
+        updated_case = _make_mock_case(title="Only Title")
+        mock_case_repo.update.return_value = updated_case
 
-        case_service.update_case(
+        result = service.update_case(
             db,
             mock_case.id,
             title="Only Title",
         )
 
-        assert mock_case.title == "Only Title"
-        assert mock_case.description == "A forensic test case"
-        assert mock_case.status == "open"
+        assert result.title == "Only Title"
+        assert result.description == "A forensic test case"
+        assert result.status == "open"
+        mock_case_repo.update.assert_called_once_with(
+            db, mock_case, title="Only Title", description=None, status=None
+        )
 
-    def test_not_found(self, db: MagicMock) -> None:
+    def test_not_found(
+        self, service: CaseService, db: MagicMock, mock_case_repo: MagicMock
+    ) -> None:
         """Raises NotFoundError when case does not exist."""
-        db.get.return_value = None
+        mock_case_repo.get_by_id.return_value = None
 
         with pytest.raises(NotFoundError, match="Case not found"):
-            case_service.update_case(
+            service.update_case(
                 db,
                 uuid.uuid4(),
                 title="Nope",
@@ -261,19 +325,22 @@ class TestUpdateCase:
 class TestDeleteCase:
     """Tests for :meth:`CaseService.delete_case`."""
 
-    def test_success(self, db: MagicMock) -> None:
+    def test_success(
+        self, service: CaseService, db: MagicMock, mock_case_repo: MagicMock
+    ) -> None:
         """Deletes a case."""
         mock_case = _make_mock_case()
-        db.get.return_value = mock_case
+        mock_case_repo.get_by_id.return_value = mock_case
 
-        case_service.delete_case(db, mock_case.id)
+        service.delete_case(db, mock_case.id)
 
-        db.delete.assert_called_once_with(mock_case)
-        db.commit.assert_called_once()
+        mock_case_repo.delete.assert_called_once_with(db, mock_case)
 
-    def test_not_found(self, db: MagicMock) -> None:
+    def test_not_found(
+        self, service: CaseService, db: MagicMock, mock_case_repo: MagicMock
+    ) -> None:
         """Raises NotFoundError when case does not exist."""
-        db.get.return_value = None
+        mock_case_repo.get_by_id.return_value = None
 
         with pytest.raises(NotFoundError, match="Case not found"):
-            case_service.delete_case(db, uuid.uuid4())
+            service.delete_case(db, uuid.uuid4())

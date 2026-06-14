@@ -1,10 +1,9 @@
 """
 Isolated unit tests for :class:`~src.services.evidence_service.EvidenceService`.
 
-Uses ``MagicMock`` for the SQLAlchemy ``Session`` and for the MinIO
-``storage`` singleton — no real database or MinIO required.
-Does NOT import from ``src.db.models`` to avoid triggering the
-pgvector → numpy import chain.
+Uses mock repositories and patches ``storage`` — no real database or
+MinIO required.  Does NOT import from ``src.db.models`` to avoid
+triggering the pgvector → numpy import chain.
 """
 
 from __future__ import annotations
@@ -15,15 +14,36 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.api.errors import NotFoundError, ValidationError
-from src.services.evidence_service import (
-    EvidenceService,
-    evidence_service,
-)
+from src.services.evidence_service import EvidenceService
 
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def mock_evidence_repo() -> MagicMock:
+    """Return a mock EvidenceRepository."""
+    return MagicMock()
+
+
+@pytest.fixture
+def mock_case_repo() -> MagicMock:
+    """Return a mock CaseRepository."""
+    return MagicMock()
+
+
+@pytest.fixture
+def service(
+    mock_evidence_repo: MagicMock,
+    mock_case_repo: MagicMock,
+) -> EvidenceService:
+    """Return an EvidenceService with mock repositories."""
+    return EvidenceService(
+        evidence_repository=mock_evidence_repo,
+        case_repository=mock_case_repo,
+    )
 
 
 @pytest.fixture
@@ -87,40 +107,58 @@ def mock_upload_file() -> MagicMock:
 class TestListEvidence:
     """Tests for :meth:`EvidenceService.list_evidence`."""
 
-    def test_basic_pagination(self, db: MagicMock) -> None:
+    def test_basic_pagination(
+        self,
+        service: EvidenceService,
+        db: MagicMock,
+        mock_evidence_repo: MagicMock,
+    ) -> None:
         """Returns paginated evidence list."""
         mock_ev = _make_mock_evidence()
 
-        db.scalars.return_value.all.return_value = [mock_ev]
-        db.scalar.return_value = 1
+        mock_evidence_repo.list.return_value = [mock_ev]
+        mock_evidence_repo.count.return_value = 1
 
-        result = evidence_service.list_evidence(db, skip=0, limit=20)
+        result = service.list_evidence(db, skip=0, limit=20)
 
         assert result["total"] == 1
         assert len(result["items"]) == 1
         assert result["skip"] == 0
         assert result["limit"] == 20
 
-    def test_filter_by_case(self, db: MagicMock) -> None:
+    def test_filter_by_case(
+        self,
+        service: EvidenceService,
+        db: MagicMock,
+        mock_evidence_repo: MagicMock,
+    ) -> None:
         """Filters by case_id when provided."""
         mock_ev = _make_mock_evidence()
         case_id = uuid.uuid4()
 
-        db.scalars.return_value.all.return_value = [mock_ev]
-        db.scalar.return_value = 1
+        mock_evidence_repo.list.return_value = [mock_ev]
+        mock_evidence_repo.count.return_value = 1
 
-        result = evidence_service.list_evidence(
+        result = service.list_evidence(
             db, skip=0, limit=10, case_id=case_id
         )
 
         assert result["total"] == 1
+        mock_evidence_repo.list.assert_called_once_with(
+            db, skip=0, limit=10, case_id=case_id
+        )
 
-    def test_empty_result(self, db: MagicMock) -> None:
+    def test_empty_result(
+        self,
+        service: EvidenceService,
+        db: MagicMock,
+        mock_evidence_repo: MagicMock,
+    ) -> None:
         """Returns empty list when no evidence matches."""
-        db.scalars.return_value.all.return_value = []
-        db.scalar.return_value = 0
+        mock_evidence_repo.list.return_value = []
+        mock_evidence_repo.count.return_value = 0
 
-        result = evidence_service.list_evidence(db, skip=0, limit=20)
+        result = service.list_evidence(db, skip=0, limit=20)
 
         assert result["total"] == 0
         assert result["items"] == []
@@ -134,20 +172,31 @@ class TestListEvidence:
 class TestGetEvidence:
     """Tests for :meth:`EvidenceService.get_evidence`."""
 
-    def test_found(self, db: MagicMock, sample_evidence: MagicMock) -> None:
+    def test_found(
+        self,
+        service: EvidenceService,
+        db: MagicMock,
+        mock_evidence_repo: MagicMock,
+        sample_evidence: MagicMock,
+    ) -> None:
         """Returns the evidence when found."""
-        db.get.return_value = sample_evidence
+        mock_evidence_repo.get_by_id.return_value = sample_evidence
 
-        result = evidence_service.get_evidence(db, sample_evidence.id)
+        result = service.get_evidence(db, sample_evidence.id)
 
         assert result is sample_evidence
 
-    def test_not_found(self, db: MagicMock) -> None:
+    def test_not_found(
+        self,
+        service: EvidenceService,
+        db: MagicMock,
+        mock_evidence_repo: MagicMock,
+    ) -> None:
         """Raises NotFoundError when evidence does not exist."""
-        db.get.return_value = None
+        mock_evidence_repo.get_by_id.return_value = None
 
         with pytest.raises(NotFoundError, match="Evidence not found"):
-            evidence_service.get_evidence(db, uuid.uuid4())
+            service.get_evidence(db, uuid.uuid4())
 
 
 # ---------------------------------------------------------------------------
@@ -159,16 +208,20 @@ class TestCreateEvidence:
     """Tests for :meth:`EvidenceService.create_evidence`."""
 
     @pytest.mark.asyncio
-    async def test_without_image(self, db: MagicMock, sample_case: MagicMock) -> None:
+    async def test_without_image(
+        self,
+        service: EvidenceService,
+        db: MagicMock,
+        mock_case_repo: MagicMock,
+        mock_evidence_repo: MagicMock,
+        sample_case: MagicMock,
+    ) -> None:
         """Creates evidence with no image (metadata-only)."""
-        db.get.return_value = sample_case
+        mock_case_repo.get_by_id.return_value = sample_case
+        mock_evidence = _make_mock_evidence(image_path=None)
+        mock_evidence_repo.create.return_value = mock_evidence
 
-        def _refresh(ev: MagicMock) -> None:
-            ev.id = uuid.uuid4()
-
-        db.refresh.side_effect = _refresh
-
-        result = await evidence_service.create_evidence(
+        result = await service.create_evidence(
             db,
             case_id=sample_case.id,
             fingerprint_id="FP-001",
@@ -177,29 +230,38 @@ class TestCreateEvidence:
 
         assert result.fingerprint_id == "FP-001"
         assert result.image_path is None
-        db.add.assert_called_once()
-        db.commit.assert_called_once()
+        mock_case_repo.get_by_id.assert_called_once_with(
+            db, sample_case.id
+        )
+        mock_evidence_repo.create.assert_called_once_with(
+            db,
+            case_id=sample_case.id,
+            fingerprint_id="FP-001",
+            image_path=None,
+        )
 
     @pytest.mark.asyncio
     async def test_with_image(
         self,
+        service: EvidenceService,
         db: MagicMock,
+        mock_case_repo: MagicMock,
+        mock_evidence_repo: MagicMock,
         sample_case: MagicMock,
         mock_upload_file: MagicMock,
     ) -> None:
         """Creates evidence and uploads the image to MinIO."""
-        db.get.return_value = sample_case
-
-        def _refresh(ev: MagicMock) -> None:
-            ev.id = uuid.uuid4()
-
-        db.refresh.side_effect = _refresh
+        mock_case_repo.get_by_id.return_value = sample_case
+        mock_evidence = _make_mock_evidence(
+            image_path="evidences/case-uuid/FP-001.png"
+        )
+        mock_evidence_repo.create.return_value = mock_evidence
 
         with patch(
             "src.services.evidence_service.storage.upload_file",
             return_value="evidences/case-uuid/FP-001.png",
         ):
-            result = await evidence_service.create_evidence(
+            result = await service.create_evidence(
                 db,
                 case_id=sample_case.id,
                 fingerprint_id="FP-001",
@@ -207,16 +269,20 @@ class TestCreateEvidence:
             )
 
         assert result.image_path == "evidences/case-uuid/FP-001.png"
-        db.add.assert_called_once()
-        db.commit.assert_called_once()
+        mock_evidence_repo.create.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_case_not_found(self, db: MagicMock) -> None:
+    async def test_case_not_found(
+        self,
+        service: EvidenceService,
+        db: MagicMock,
+        mock_case_repo: MagicMock,
+    ) -> None:
         """Raises NotFoundError when the parent case does not exist."""
-        db.get.return_value = None
+        mock_case_repo.get_by_id.return_value = None
 
         with pytest.raises(NotFoundError, match="Case not found"):
-            await evidence_service.create_evidence(
+            await service.create_evidence(
                 db,
                 case_id=uuid.uuid4(),
                 fingerprint_id="FP-001",
@@ -225,11 +291,13 @@ class TestCreateEvidence:
     @pytest.mark.asyncio
     async def test_with_empty_image_raises_validation_error(
         self,
+        service: EvidenceService,
         db: MagicMock,
+        mock_case_repo: MagicMock,
         sample_case: MagicMock,
     ) -> None:
         """Raises ValidationError when the uploaded file is empty."""
-        db.get.return_value = sample_case
+        mock_case_repo.get_by_id.return_value = sample_case
 
         empty_file = MagicMock()
         empty_file.content_type = "image/png"
@@ -237,7 +305,7 @@ class TestCreateEvidence:
         empty_file.read = AsyncMock(return_value=b"")
 
         with pytest.raises(ValidationError, match="empty"):
-            await evidence_service.create_evidence(
+            await service.create_evidence(
                 db,
                 case_id=sample_case.id,
                 fingerprint_id="FP-001",
@@ -247,18 +315,20 @@ class TestCreateEvidence:
     @pytest.mark.asyncio
     async def test_mime_type_rejected(
         self,
+        service: EvidenceService,
         db: MagicMock,
+        mock_case_repo: MagicMock,
         sample_case: MagicMock,
     ) -> None:
         """Raises ValidationError for unsupported MIME types."""
-        db.get.return_value = sample_case
+        mock_case_repo.get_by_id.return_value = sample_case
 
         bad_file = MagicMock()
         bad_file.content_type = "application/pdf"
         bad_file.filename = "document.pdf"
 
         with pytest.raises(ValidationError, match="Unsupported"):
-            await evidence_service.create_evidence(
+            await service.create_evidence(
                 db,
                 case_id=sample_case.id,
                 fingerprint_id="FP-001",
@@ -268,23 +338,23 @@ class TestCreateEvidence:
     @pytest.mark.asyncio
     async def test_minio_upload_failure(
         self,
+        service: EvidenceService,
         db: MagicMock,
+        mock_case_repo: MagicMock,
+        mock_evidence_repo: MagicMock,
         sample_case: MagicMock,
         mock_upload_file: MagicMock,
     ) -> None:
         """Proceeds with image_path=None when MinIO upload returns None."""
-        db.get.return_value = sample_case
-
-        def _refresh(ev: MagicMock) -> None:
-            ev.id = uuid.uuid4()
-
-        db.refresh.side_effect = _refresh
+        mock_case_repo.get_by_id.return_value = sample_case
+        mock_evidence = _make_mock_evidence(image_path=None)
+        mock_evidence_repo.create.return_value = mock_evidence
 
         with patch(
             "src.services.evidence_service.storage.upload_file",
             return_value=None,
         ):
-            result = await evidence_service.create_evidence(
+            result = await service.create_evidence(
                 db,
                 case_id=sample_case.id,
                 fingerprint_id="FP-001",
@@ -302,48 +372,70 @@ class TestCreateEvidence:
 class TestGetEvidenceImage:
     """Tests for :meth:`EvidenceService.get_evidence_image`."""
 
-    def test_success(self, db: MagicMock, sample_evidence: MagicMock) -> None:
+    def test_success(
+        self,
+        service: EvidenceService,
+        db: MagicMock,
+        mock_evidence_repo: MagicMock,
+        sample_evidence: MagicMock,
+    ) -> None:
         """Returns the raw image bytes from MinIO."""
-        db.get.return_value = sample_evidence
+        mock_evidence_repo.get_by_id.return_value = sample_evidence
 
         with patch(
             "src.services.evidence_service.storage.download_file",
             return_value=b"image-bytes",
         ) as mock_download:
-            result = evidence_service.get_evidence_image(
+            result = service.get_evidence_image(
                 db, sample_evidence.id
             )
 
         assert result == b"image-bytes"
         mock_download.assert_called_once_with(sample_evidence.image_path)
 
-    def test_evidence_not_found(self, db: MagicMock) -> None:
+    def test_evidence_not_found(
+        self,
+        service: EvidenceService,
+        db: MagicMock,
+        mock_evidence_repo: MagicMock,
+    ) -> None:
         """Raises NotFoundError when evidence does not exist."""
-        db.get.return_value = None
+        mock_evidence_repo.get_by_id.return_value = None
 
         with pytest.raises(NotFoundError, match="Image not found"):
-            evidence_service.get_evidence_image(db, uuid.uuid4())
+            service.get_evidence_image(db, uuid.uuid4())
 
-    def test_no_image_path(self, db: MagicMock) -> None:
+    def test_no_image_path(
+        self,
+        service: EvidenceService,
+        db: MagicMock,
+        mock_evidence_repo: MagicMock,
+    ) -> None:
         """Raises NotFoundError when evidence has no image_path."""
         ev_no_image = _make_mock_evidence(image_path=None)
-        db.get.return_value = ev_no_image
+        mock_evidence_repo.get_by_id.return_value = ev_no_image
 
         with pytest.raises(NotFoundError, match="Image not found"):
-            evidence_service.get_evidence_image(db, ev_no_image.id)
+            service.get_evidence_image(db, ev_no_image.id)
 
     def test_storage_not_found(
-        self, db: MagicMock, sample_evidence: MagicMock
+        self,
+        service: EvidenceService,
+        db: MagicMock,
+        mock_evidence_repo: MagicMock,
+        sample_evidence: MagicMock,
     ) -> None:
         """Raises NotFoundError when image is missing from MinIO."""
-        db.get.return_value = sample_evidence
+        mock_evidence_repo.get_by_id.return_value = sample_evidence
 
         with patch(
             "src.services.evidence_service.storage.download_file",
             return_value=None,
         ):
-            with pytest.raises(NotFoundError, match="Image not found in storage"):
-                evidence_service.get_evidence_image(db, sample_evidence.id)
+            with pytest.raises(
+                NotFoundError, match="Image not found in storage"
+            ):
+                service.get_evidence_image(db, sample_evidence.id)
 
 
 # ---------------------------------------------------------------------------
@@ -354,25 +446,37 @@ class TestGetEvidenceImage:
 class TestDeleteEvidence:
     """Tests for :meth:`EvidenceService.delete_evidence`."""
 
-    def test_success(self, db: MagicMock, sample_evidence: MagicMock) -> None:
+    def test_success(
+        self,
+        service: EvidenceService,
+        db: MagicMock,
+        mock_evidence_repo: MagicMock,
+        sample_evidence: MagicMock,
+    ) -> None:
         """Deletes an evidence item."""
-        db.get.return_value = sample_evidence
+        mock_evidence_repo.get_by_id.return_value = sample_evidence
 
-        evidence_service.delete_evidence(db, sample_evidence.id)
+        service.delete_evidence(db, sample_evidence.id)
 
-        db.delete.assert_called_once_with(sample_evidence)
-        db.commit.assert_called_once()
+        mock_evidence_repo.delete.assert_called_once_with(
+            db, sample_evidence
+        )
 
-    def test_not_found(self, db: MagicMock) -> None:
+    def test_not_found(
+        self,
+        service: EvidenceService,
+        db: MagicMock,
+        mock_evidence_repo: MagicMock,
+    ) -> None:
         """Raises NotFoundError when evidence does not exist."""
-        db.get.return_value = None
+        mock_evidence_repo.get_by_id.return_value = None
 
         with pytest.raises(NotFoundError, match="Evidence not found"):
-            evidence_service.delete_evidence(db, uuid.uuid4())
+            service.delete_evidence(db, uuid.uuid4())
 
 
 # ---------------------------------------------------------------------------
-# _validate_image (private helper)
+# _validate_image (private helper — static, no repo dependency)
 # ---------------------------------------------------------------------------
 
 
@@ -422,7 +526,7 @@ class TestValidateImage:
 
 
 # ---------------------------------------------------------------------------
-# _upload_image (private helper)
+# _upload_image (private helper — static, no repo dependency)
 # ---------------------------------------------------------------------------
 
 
