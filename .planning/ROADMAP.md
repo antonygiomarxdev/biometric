@@ -115,3 +115,12 @@ Plans:
 
 - **Fase 8:** Reconocimiento Facial (Multimodal)
 - **Fase 9:** Sincronización entre múltiples laboratorios regionales.
+
+### Phase 8: Fingerprint CPU Engine Refactor (Modular Pre/Post Hooks & Fusion)
+**Goal:** Restructure the existing CPU fingerprint processing pipeline (`FingerprintService`) into a modular Hexagonal-like chain (Pre-processors -> Core Extractors -> Post-processors) to eliminate false positives (>200) without relying on AI models.
+**Status:** Not Started
+**Plans:** 3 plans
+- [ ] 08-01-PLAN.md — Define strict pipeline abstractions and implement initial pre-processing hooks.
+- [ ] 08-02-PLAN.md — Refactor core extractors and implement post-processing heuristics.
+- [ ] 08-03-PLAN.md — Refactor FingerprintService to orchestrate the new modular pipeline.
+
