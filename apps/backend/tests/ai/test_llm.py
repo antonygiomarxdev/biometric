@@ -1,4 +1,10 @@
-"""Tests for LLM factory and provider adapters."""
+"""Tests for LLM factory and provider adapters.
+
+The LLM module has been simplified to always use ``OpenAICompatibleProvider``
+(the standard REST-compatible interface). This avoids vendor lock-in and
+supports both local (Ollama, vLLM) and remote (Azure OpenAI) backends
+through a single code path.
+"""
 
 from __future__ import annotations
 
@@ -7,144 +13,114 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.ai.llm import LLMFactory, OllamaProvider, OpenAIProvider
 
-
-@pytest.fixture
-def mock_ollama_llm() -> MagicMock:
-    """Return a mock LlamaIndex Ollama LLM instance."""
-    return MagicMock()
-
-
-@pytest.fixture
-def mock_openai_llm() -> MagicMock:
-    """Return a mock LlamaIndex OpenAI LLM instance."""
-    return MagicMock()
-
-
-class TestLLMFactoryRouting:
-    """LLMFactory should route to the correct provider based on config."""
+class TestOpenAICompatibleProvider:
+    """OpenAICompatibleProvider should apply correct parameters per use_case."""
 
     @patch("src.ai.llm.config")
-    def test_create_returns_ollama_instance(
-        self, mock_config: Any, mock_ollama_llm: MagicMock
-    ) -> None:
-        """Factory returns Ollama-provided LLM when provider is 'local'."""
-        mock_config.llm_provider = "local"
-
-        with patch.object(
-            OllamaProvider, "get_llm", return_value=mock_ollama_llm
-        ) as mock_get_llm:
-            result = LLMFactory.create()
-
-            assert result is mock_ollama_llm
-            mock_get_llm.assert_called_once_with("default")
-
-    @patch("src.ai.llm.config")
-    def test_create_returns_openai_instance(
-        self, mock_config: Any, mock_openai_llm: MagicMock
-    ) -> None:
-        """Factory returns OpenAI-provided LLM when provider is 'openai'."""
-        mock_config.llm_provider = "openai"
-
-        with patch.object(
-            OpenAIProvider, "get_llm", return_value=mock_openai_llm
-        ) as mock_get_llm:
-            result = LLMFactory.create()
-
-            assert result is mock_openai_llm
-            mock_get_llm.assert_called_once_with("default")
-
-
-class TestLLMFactoryUseCase:
-    """LLMFactory should pass use_case to the provider."""
-
-    @patch("src.ai.llm.config")
-    def test_create_with_sql_use_case(
-        self, mock_config: Any, mock_ollama_llm: MagicMock
-    ) -> None:
-        """Factory passes 'sql' use_case to the provider."""
-        mock_config.llm_provider = "local"
-
-        with patch.object(
-            OllamaProvider, "get_llm", return_value=mock_ollama_llm
-        ) as mock_get_llm:
-            result = LLMFactory.create("sql")
-
-            assert result is mock_ollama_llm
-            mock_get_llm.assert_called_once_with("sql")
-
-
-class TestLLMFactoryUnknownProvider:
-    """LLMFactory should raise ValueError for unknown providers."""
-
-    @patch("src.ai.llm.config")
-    def test_unknown_provider_raises_value_error(
+    def test_get_llm_default_timeout(
         self, mock_config: Any
     ) -> None:
-        """Unknown provider raises ValueError."""
-        mock_config.llm_provider = "unknown"
+        """Default use case sets timeout to 60.0."""
+        from src.ai.llm import OpenAICompatibleProvider
 
-        with pytest.raises(ValueError, match="Provider unknown not registered"):
-            LLMFactory.create()
+        mock_config.llm_model_name = "llama3.1:latest"
+        mock_config.llm_api_base = "http://localhost:11434/v1"
+        mock_config.llm_api_key = None
 
-
-class TestOllamaProvider:
-    """OllamaProvider should apply correct parameters per use_case."""
-
-    @patch("src.ai.llm.config")
-    def test_get_llm_default_use_case(self, mock_config: Any) -> None:
-        """OllamaProvider returns an LLM with default timeout."""
-        mock_config.local_model_name = "llama3.1:latest"
-
-        with patch("src.ai.llm.Ollama") as mock_ollama_cls:
-            mock_ollama_cls.return_value = MagicMock()
-            provider = OllamaProvider()
+        with patch("src.ai.llm.OpenAILike") as mock_openai_cls:
+            mock_openai_cls.return_value = MagicMock()
+            provider = OpenAICompatibleProvider()
             result = provider.get_llm("default")
 
-            assert result is mock_ollama_cls.return_value
-            mock_ollama_cls.assert_called_once_with(
+            assert result is mock_openai_cls.return_value
+            mock_openai_cls.assert_called_once_with(
                 model="llama3.1:latest",
-                request_timeout=60.0,
+                api_base="http://localhost:11434/v1",
+                api_key="fake-key-for-local",
+                timeout=60.0,
+                is_chat_model=True,
             )
 
     @patch("src.ai.llm.config")
-    def test_get_llm_sql_use_case(self, mock_config: Any) -> None:
-        """OllamaProvider returns an LLM with SQL-specific timeout."""
-        mock_config.local_model_name = "llama3.1:latest"
-
-        with patch("src.ai.llm.Ollama") as mock_ollama_cls:
-            mock_ollama_cls.return_value = MagicMock()
-            provider = OllamaProvider()
-            result = provider.get_llm("sql")
-
-            assert result is mock_ollama_cls.return_value
-            mock_ollama_cls.assert_called_once_with(
-                model="llama3.1:latest",
-                request_timeout=120.0,
-            )
-
-
-class TestOpenAIProvider:
-    """OpenAIProvider should apply correct parameters."""
-
-    @patch("src.ai.llm.config")
-    def test_get_llm_uses_remote_model_and_api_key(
+    def test_get_llm_sql_use_case_timeout(
         self, mock_config: Any
     ) -> None:
-        """OpenAIProvider returns an LLM with remote model config."""
-        from pydantic import SecretStr
+        """SQL use case sets timeout to 120.0."""
+        from src.ai.llm import OpenAICompatibleProvider
 
-        mock_config.remote_model_name = "gpt-4"
-        mock_config.openai_api_key = SecretStr("sk-test-123")
+        mock_config.llm_model_name = "llama3.1:latest"
+        mock_config.llm_api_base = "http://localhost:11434/v1"
+        mock_config.llm_api_key = None
 
-        with patch("src.ai.llm.OpenAI") as mock_openai_cls:
+        with patch("src.ai.llm.OpenAILike") as mock_openai_cls:
             mock_openai_cls.return_value = MagicMock()
-            provider = OpenAIProvider()
+            provider = OpenAICompatibleProvider()
+            result = provider.get_llm("sql")
+
+            assert result is mock_openai_cls.return_value
+            mock_openai_cls.assert_called_once_with(
+                model="llama3.1:latest",
+                api_base="http://localhost:11434/v1",
+                api_key="fake-key-for-local",
+                timeout=120.0,
+                is_chat_model=True,
+            )
+
+    @patch("src.ai.llm.config")
+    def test_get_llm_with_api_key(
+        self, mock_config: Any
+    ) -> None:
+        """When an API key is set it is passed to the LLM."""
+        from pydantic import SecretStr
+        from src.ai.llm import OpenAICompatibleProvider
+
+        mock_config.llm_model_name = "gpt-4"
+        mock_config.llm_api_base = "https://api.openai.com/v1"
+        mock_config.llm_api_key = SecretStr("sk-test-key-12345")
+
+        with patch("src.ai.llm.OpenAILike") as mock_openai_cls:
+            mock_openai_cls.return_value = MagicMock()
+            provider = OpenAICompatibleProvider()
             result = provider.get_llm("default")
 
             assert result is mock_openai_cls.return_value
             mock_openai_cls.assert_called_once_with(
                 model="gpt-4",
-                api_key="sk-test-123",
+                api_base="https://api.openai.com/v1",
+                api_key="sk-test-key-12345",
+                timeout=60.0,
+                is_chat_model=True,
             )
+
+
+class TestLLMFactory:
+    """LLMFactory should route through the standard provider."""
+
+    @patch("src.ai.llm.OpenAICompatibleProvider.get_llm")
+    def test_create_returns_provider_result(
+        self, mock_get_llm: MagicMock
+    ) -> None:
+        """Factory returns whatever the standard provider returns."""
+        from src.ai.llm import LLMFactory
+
+        mock_llm = MagicMock()
+        mock_get_llm.return_value = mock_llm
+
+        result = LLMFactory.create("default")
+
+        assert result is mock_llm
+        mock_get_llm.assert_called_once_with("default")
+
+    @patch("src.ai.llm.OpenAICompatibleProvider.get_llm")
+    def test_create_passes_use_case(
+        self, mock_get_llm: MagicMock
+    ) -> None:
+        """The use_case parameter is forwarded to the provider."""
+        from src.ai.llm import LLMFactory
+
+        mock_get_llm.return_value = MagicMock()
+
+        LLMFactory.create("sql")
+
+        mock_get_llm.assert_called_once_with("sql")

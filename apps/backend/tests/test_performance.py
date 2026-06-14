@@ -17,6 +17,7 @@ def reset_metrics():
     metrics.reset()
 
 
+@pytest.mark.performance
 def test_extraction_performance(sample_image):
     """Benchmark de extracción de minutiae."""
     service = FingerprintService()
@@ -36,6 +37,7 @@ def test_extraction_performance(sample_image):
     assert avg_time < 500, f"Extracción demasiado lenta: {avg_time:.2f}ms"
 
 
+@pytest.mark.performance
 def test_vectorization_performance():
     """Benchmark de vectorización."""
     from src.core.types import MinutiaCandidate, NormalizedFingerprint, MinutiaType, AlgorithmOrigin
@@ -63,6 +65,7 @@ def test_vectorization_performance():
     assert avg_time < 5, f"Vectorización demasiado lenta: {avg_time:.4f}ms"
 
 
+@pytest.mark.performance
 def test_search_performance(sample_image, repository):
     """Benchmark de búsqueda en índice."""
     service = FingerprintService()
@@ -78,7 +81,7 @@ def test_search_performance(sample_image, repository):
         fp=fp,
                 person_id=f"P{i:03d}",
                 name=f"User {i}",
-                document=f"DOC{i:08d}"
+                doc=f"DOC{i:08d}"
             )
     
     # Medir búsqueda
@@ -100,6 +103,7 @@ def test_search_performance(sample_image, repository):
         assert avg_time < 50, f"Búsqueda demasiado lenta: {avg_time:.2f}ms"
 
 
+@pytest.mark.performance
 def test_end_to_end_latency(sample_image, repository):
     """Benchmark latencia end-to-end."""
     service = FingerprintService()
@@ -109,10 +113,10 @@ def test_end_to_end_latency(sample_image, repository):
     fp_ref = service.process_image(sample_image)
     if fp_ref.minutiae:
         repository.register(
-            fingerprint=fp_ref,
+            fp=fp_ref,
             person_id="P001",
             name="Reference",
-            document="12345678"
+            doc="12345678"
         )
     
     # Medir pipeline completo: procesar + identificar
@@ -133,6 +137,7 @@ def test_end_to_end_latency(sample_image, repository):
     assert avg_time < 1000, f"Latencia E2E demasiado alta: {avg_time:.2f}ms"
 
 
+@pytest.mark.performance
 def test_metrics_collection():
     """Verifica que las métricas se están recolectando."""
     service = FingerprintService()

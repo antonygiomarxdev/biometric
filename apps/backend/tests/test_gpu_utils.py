@@ -1,6 +1,14 @@
 import os
 from unittest import mock
+
 import pytest
+
+from src.gpu_utils import (
+    GPU_AVAILABLE,
+    _detect_gpu,
+    get_device_info,
+    is_gpu_enabled,
+)
 
 def test_gpu_available_flag():
     """GPU_AVAILABLE is a bool (import-level check)."""

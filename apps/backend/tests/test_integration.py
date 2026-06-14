@@ -27,7 +27,7 @@ def test_full_pipeline(sample_image, repository):
         fp=fingerprint,
             person_id="P001",
             name="Test User",
-            document="12345678"
+            doc="12345678"
         )
         
         assert isinstance(record_id, int)
@@ -67,7 +67,7 @@ def test_register_and_search(sample_image, repository):
         fp=fp,
                 person_id=f"P{i:03d}",
                 name=f"User {i}",
-                document=f"DOC{i:08d}"
+                doc=f"DOC{i:08d}"
             )
     
     # Verificar que se registraron
@@ -89,10 +89,10 @@ def test_no_match_scenario(sample_image, repository):
     
     if fp1.minutiae:
         repository.register(
-            fingerprint=fp1,
+            fp=fp1,
             person_id="P001",
             name="User 1",
-            document="12345678"
+            doc="12345678"
         )
         
         # Crear una huella muy diferente

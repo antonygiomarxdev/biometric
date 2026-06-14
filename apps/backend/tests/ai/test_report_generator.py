@@ -182,6 +182,6 @@ class TestGenerateDictamen:
         # ── assert prompt contains legal Spanish role ────────────
         call_args, _ = mock_structured_llm.acomplete.call_args
         prompt_text = str(call_args[0]) if call_args else ""
-        assert "Perito informático" in prompt_text
+        assert "Perito Forense" in prompt_text
         assert "Nicaragua" in prompt_text
         assert "legislación" in prompt_text
