@@ -73,8 +73,14 @@ Plans:
 **Objetivo:** Eliminar la lógica de negocio y llamadas a la base de datos (`db.add`, `db.commit`) de la capa de Controladores (Routers).
 **Valor:** Desacoplamiento total para facilitar el Testing y cumplir estrictamente el principio de Responsabilidad Única.
 
-1. **Service Layer Core:** Crear `CaseService`, `EvidenceService` y `DecisionService`.
-2. **Anemic Routers:** Refactorizar los endpoints en `api/routers/` para que solo manejen HTTP Request/Response delegando todo a los servicios.
+**Requirements:** [CA-01, CA-02, CA-03]
+
+**Plans:** 3 plans
+
+Plans:
+- [ ] 05-01-PLAN.md — Case & Evidence Services
+- [ ] 05-02-PLAN.md — Decision Service & Audit wiring
+- [ ] 05-03-PLAN.md — Known Fingerprints Refactor
 
 ### Fase 6: Test Coverage & Quality Assurance (>90%)
 
@@ -85,10 +91,10 @@ Plans:
 
 Plans:
 
-- [x] 05-01-PLAN.md — Coverage Infrastructure & Setup
-- [ ] 05-02-PLAN.md — Compliance Core Coverage
-- [ ] 05-03-PLAN.md — GenAI & AI Vision Coverage
-- [ ] 05-04-PLAN.md — Routers & Services Integration Coverage
+- [ ] 06-01-PLAN.md — Coverage Infrastructure & Setup
+- [ ] 06-02-PLAN.md — Compliance Core Coverage
+- [ ] 06-03-PLAN.md — GenAI & AI Vision Coverage
+- [ ] 06-04-PLAN.md — Routers & Services Integration Coverage
 
 ### Fase 7: Despliegue, Infraestructura y Operación Policial
 
