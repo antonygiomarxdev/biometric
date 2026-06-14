@@ -1,46 +1,26 @@
 """
 CRUD router for fingerprint evidence (``/api/v1/evidence``).
 
-Each evidence item is a latent fingerprint image uploaded by the perito
-and linked to a forensic case.  Image uploads are validated for MIME
-type (T-01-05) and stored in MinIO object storage.
+Clean Architecture: this module acts as a pure HTTP controller.
+All business logic, MinIO storage operations, and database interactions
+are delegated to :class:`~src.services.evidence_service.EvidenceService`.
 """
 
 import logging
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, Query, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_db
-from src.api.errors import NotFoundError, ValidationError
-from src.db.models import Case as CaseModel
-from src.db.models import Evidence as EvidenceModel
-from src.storage.object_storage import storage
+from src.services.evidence_service import evidence_service
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/evidence", tags=["evidence"])
-
-# ---------------------------------------------------------------------------
-# Allowed image MIME types (T-01-05)
-# ---------------------------------------------------------------------------
-ALLOWED_MIME_TYPES: frozenset[str] = frozenset({
-    "image/jpeg",
-    "image/png",
-    "image/bmp",
-    "image/tiff",
-})
-
-MIME_TO_EXT: dict[str, str] = {
-    "image/jpeg": ".jpg",
-    "image/png": ".png",
-    "image/bmp": ".bmp",
-    "image/tiff": ".tiff",
-}
 
 # ---------------------------------------------------------------------------
 # Pydantic schemas
@@ -88,39 +68,6 @@ class EvidenceListResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _validate_image(file: UploadFile) -> None:
-    """
-    Validate that the uploaded file has an allowed image MIME type.
-
-    Raises ``ValidationError`` if the MIME type is not in the allow-list
-    (per T-01-05).
-    """
-    if file.content_type not in ALLOWED_MIME_TYPES:
-        raise ValidationError(
-            message="Unsupported image format",
-            detail={
-                "received": file.content_type,
-                "allowed": sorted(ALLOWED_MIME_TYPES),
-            },
-        )
-
-    # Extension-based check as a secondary guard
-    if file.filename:
-        ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
-        expected_ext = MIME_TO_EXT.get(file.content_type, "")
-        if expected_ext and ext != expected_ext.lstrip("."):
-            logger.warning(
-                "MIME/extension mismatch: content_type=%s filename=%s",
-                file.content_type,
-                file.filename,
-            )
-
-
-# ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
 
@@ -131,30 +78,18 @@ async def list_evidence(
     limit: int = Query(20, ge=1, le=100),
     case_id: uuid.UUID | None = Query(None, description="Filter by case"),
     db: Session = Depends(get_db),
-) -> dict[str, Any]:
+) -> dict[str, object]:
     """
     List evidence items with optional case filter and pagination.
     """
-    query = select(EvidenceModel)
-    if case_id is not None:
-        query = query.where(EvidenceModel.case_id == case_id)
-    query = query.order_by(EvidenceModel.created_at.desc()).offset(skip).limit(limit)
-
-    items = db.scalars(query).all()
-    count_query = (
-        select(func.count(EvidenceModel.id))
-        if case_id is None
-        else select(func.count(EvidenceModel.id)).where(
-            EvidenceModel.case_id == case_id
-        )
+    result = evidence_service.list_evidence(
+        db, skip=skip, limit=limit, case_id=case_id
     )
-    total = db.scalar(count_query) or 0
-
     return {
-        "items": [EvidenceResponse.model_validate(e) for e in items],
-        "total": total,
-        "skip": skip,
-        "limit": limit,
+        "items": [EvidenceResponse.model_validate(e) for e in result["items"]],
+        "total": result["total"],
+        "skip": result["skip"],
+        "limit": result["limit"],
     }
 
 
@@ -162,17 +97,11 @@ async def list_evidence(
 async def get_evidence(
     evidence_id: uuid.UUID,
     db: Session = Depends(get_db),
-) -> EvidenceModel:
+) -> object:
     """
     Retrieve a single evidence item by its UUID.
     """
-    ev = db.get(EvidenceModel, evidence_id)
-    if ev is None:
-        raise NotFoundError(
-            message=f"Evidence not found: {evidence_id}",
-            detail={"evidence_id": str(evidence_id)},
-        )
-    return ev
+    return evidence_service.get_evidence(db, evidence_id)
 
 
 @router.post(
@@ -187,7 +116,7 @@ async def create_evidence(
     ),
     file: UploadFile | None = None,
     db: Session = Depends(get_db),
-) -> EvidenceModel:
+) -> object:
     """
     Register new evidence, optionally uploading a fingerprint image.
 
@@ -199,74 +128,21 @@ async def create_evidence(
     If no file is provided the evidence entry is created with
     ``image_path = NULL`` (metadata-only registration).
     """
-    # Verify the parent case exists
-    case = db.get(CaseModel, case_id)
-    if case is None:
-        raise NotFoundError(
-            message=f"Case not found: {case_id}",
-            detail={"case_id": str(case_id)},
-        )
-
-    # Upload image if provided
-    image_path: str | None = None
-    if file is not None:
-        _validate_image(file)
-        image_bytes = await file.read()
-        if len(image_bytes) == 0:
-            raise ValidationError(
-                message="Uploaded file is empty",
-                detail={"filename": file.filename},
-            )
-
-        object_name = (
-            f"evidences/{case_id}/{fingerprint_id}"
-            f"{MIME_TO_EXT.get(file.content_type or '', '')}"
-        )
-        image_path = storage.upload_file(
-            image_bytes,
-            object_name,
-            content_type=file.content_type or "application/octet-stream",
-        )
-        if image_path is None:
-            logger.warning(
-                "MinIO upload returned None for %s — proceeding without storage",
-                object_name,
-            )
-
-    ev = EvidenceModel(
+    return await evidence_service.create_evidence(
+        db,
         case_id=case_id,
         fingerprint_id=fingerprint_id,
-        image_path=image_path,
+        file=file,
     )
-    db.add(ev)
-    db.commit()
-    db.refresh(ev)
-
-    logger.info(
-        "Evidence created: id=%s case_id=%s fingerprint_id=%s image_path=%s",
-        ev.id,
-        ev.case_id,
-        ev.fingerprint_id,
-        ev.image_path,
-    )
-    return ev
 
 
 @router.get("/{evidence_id}/image")
-async def get_evidence_image(  # noqa: F821
+async def get_evidence_image(
     evidence_id: uuid.UUID,
     db: Session = Depends(get_db),
-) -> "Response":
+) -> Response:
     """Serve the evidence image from MinIO object storage."""
-    from fastapi.responses import Response
-    from src.api.errors import NotFoundError
-
-    ev = db.get(EvidenceModel, evidence_id)
-    if not ev or not ev.image_path:
-        raise NotFoundError("Image not found")
-    image_data = storage.download_file(ev.image_path)
-    if image_data is None:
-        raise NotFoundError("Image not found in storage")
+    image_data = evidence_service.get_evidence_image(db, evidence_id)
     return Response(content=image_data, media_type="image/png")
 
 
@@ -278,13 +154,4 @@ async def delete_evidence(
     """
     Delete an evidence item.
     """
-    ev = db.get(EvidenceModel, evidence_id)
-    if ev is None:
-        raise NotFoundError(
-            message=f"Evidence not found: {evidence_id}",
-            detail={"evidence_id": str(evidence_id)},
-        )
-
-    db.delete(ev)
-    db.commit()
-    logger.info("Evidence deleted: id=%s", evidence_id)
+    evidence_service.delete_evidence(db, evidence_id)
