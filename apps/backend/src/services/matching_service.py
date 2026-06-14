@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid as uuid_pkg
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 
@@ -24,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from src.core.config import config
 from src.core.types import NormalizedFingerprint
+from src.db.models import FingerprintVector
 from src.services.fingerprint_service import FingerprintService
 
 logger = logging.getLogger(__name__)
@@ -49,6 +51,26 @@ class CandidateMatch:
     evidence_id: str | None
     l2_distance: float
     score: float
+
+
+@dataclass
+class RegisteredKnownPrint:
+    """
+    Result of registering a known (ten-print) fingerprint.
+
+    Attributes:
+        vector_id:       UUID of the created ``FingerprintVector`` row.
+        person_id:       External person identifier.
+        name:            Display name.
+        document:        Document number.
+        minutiae_count:  Number of minutiae extracted from the image.
+    """
+
+    vector_id: uuid_pkg.UUID
+    person_id: str
+    name: str
+    document: str
+    minutiae_count: int
 
 
 class MatchingService:
@@ -139,34 +161,81 @@ class MatchingService:
         name: str,
         document: str,
         db: Session,
-    ) -> NormalizedFingerprint:
+    ) -> RegisteredKnownPrint:
         """
-        Process a known (ten-print) image and return the normalised result
-        suitable for insertion into the ``fingerprint_vectors`` table.
+        Process a known (ten-print) image and persist its vector embedding.
 
-        The caller is responsible for persisting the returned fingerprint
-        and its vector embedding to the database.
+        The service handles the full registration pipeline:
+          1. CPU-bound fingerprint extraction (offloaded to process pool).
+          2. Fixed-dimension query vector construction.
+          3. ``FingerprintVector`` row creation and persistence via
+             ``db.add`` / ``db.commit`` / ``db.refresh``.
 
         Args:
-            image_bytes: Raw image bytes.
+            image_bytes: Raw image bytes (BMP, PNG, or JPEG).
             person_id:   External person identifier.
             name:        Display name.
             document:    Document number.
-            db:          SQLAlchemy session for any ancillary queries.
+            db:          SQLAlchemy session for persistence.
 
         Returns:
-            The ``NormalizedFingerprint`` produced by the pipeline.
+            A ``RegisteredKnownPrint`` summary of the registered record.
         """
         fingerprint = await self._run_cpu_bound(image_bytes)
 
         if not fingerprint.minutiae:
             logger.warning(
-                "No minutiae extracted from known print %s (%s)",
+                "No minutiae extracted for %s (%s) — registering anyway",
                 person_id,
                 name,
             )
 
-        return fingerprint
+        # Build the fixed-dimension vector
+        vector = self._build_query_vector(fingerprint)
+
+        # Serialize minutiae for JSON storage
+        minutiae_data = (
+            [
+                {
+                    "x": m.x,
+                    "y": m.y,
+                    "type": m.type.name,
+                    "angle": m.angle,
+                    "confidence": m.confidence,
+                }
+                for m in fingerprint.minutiae
+            ]
+            if fingerprint.minutiae
+            else None
+        )
+
+        # Persist to fingerprint_vectors
+        fv = FingerprintVector(
+            person_id=person_id,
+            name=name,
+            document=document,
+            embedding=vector.tolist(),
+            num_minutiae=len(fingerprint.minutiae),
+            minutiae_data=minutiae_data,
+        )
+        db.add(fv)
+        db.commit()
+        db.refresh(fv)
+
+        logger.info(
+            "Known print registered — vector_id=%s, person_id=%s, minutiae=%d",
+            fv.id,
+            person_id,
+            len(fingerprint.minutiae),
+        )
+
+        return RegisteredKnownPrint(
+            vector_id=fv.id,
+            person_id=person_id,
+            name=name,
+            document=document,
+            minutiae_count=len(fingerprint.minutiae),
+        )
 
     # ------------------------------------------------------------------
     # Internal helpers
