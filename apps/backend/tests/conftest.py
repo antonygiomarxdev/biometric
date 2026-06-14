@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-import numpy as np
 import pytest
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.dialects.postgresql import JSONB
@@ -260,8 +259,10 @@ def repository(db_manager: Any, vector_index: Any) -> Any:
 
 
 @pytest.fixture
-def sample_image() -> np.ndarray:
+def sample_image() -> "np.ndarray":
     """Generate a synthetic fingerprint image for testing."""
+    import numpy as np
+
     img = np.zeros((200, 200), dtype=np.uint8)
     for i in range(10, 190, 10):
         img[i : i + 3, 10:190] = 255
