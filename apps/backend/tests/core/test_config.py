@@ -14,20 +14,15 @@ from src.core.config import Config
 class TestConfigLlmDefaults:
     """Default values should apply when no environment variables are set."""
 
-    def test_llm_provider_defaults_to_local(self) -> None:
-        """LLM provider should default to 'local'."""
+    def test_llm_api_base_defaults_to_local(self) -> None:
+        """LLM API base should default to local Ollama."""
         config = Config()
-        assert config.llm_provider == "local"
+        assert config.llm_api_base == "http://localhost:11434/v1"
 
     def test_local_model_name_default(self) -> None:
-        """Local model name should default to 'llama3.1:latest'."""
+        """Model name should default to 'qwen3:8b'."""
         config = Config()
-        assert config.local_model_name == "llama3.1:latest"
-
-    def test_remote_model_name_default(self) -> None:
-        """Remote model name should default to 'gpt-4'."""
-        config = Config()
-        assert config.remote_model_name == "gpt-4"
+        assert config.llm_model_name == "qwen3:8b"
 
     def test_openai_api_key_is_empty_secret(self) -> None:
         """OpenAI API key should default to an empty SecretStr."""
@@ -43,9 +38,8 @@ class TestConfigLlmFromEnv:
     def _set_env(self) -> Any:
         """Set LLM environment variables for this test class."""
         env_vars = {
-            "LLM_PROVIDER": "openai",
-            "LOCAL_MODEL_NAME": "llama3.2:latest",
-            "REMOTE_MODEL_NAME": "gpt-4o",
+            "LLM_API_BASE": "https://api.openai.com/v1",
+            "LLM_MODEL_NAME": "gpt-4o",
             "OPENAI_API_KEY": "sk-test-key-12345",
         }
         for key, value in env_vars.items():
@@ -54,20 +48,15 @@ class TestConfigLlmFromEnv:
         for key in env_vars:
             os.environ.pop(key, None)
 
-    def test_llm_provider_from_env(self) -> None:
-        """LLM provider should be read from environment."""
+    def test_llm_api_base_from_env(self) -> None:
+        """LLM API base should be read from environment."""
         config = Config()
-        assert config.llm_provider == "openai"
+        assert config.llm_api_base == "https://api.openai.com/v1"
 
     def test_local_model_name_from_env(self) -> None:
-        """Local model name should be read from environment."""
+        """Model name should be read from environment."""
         config = Config()
-        assert config.local_model_name == "llama3.2:latest"
-
-    def test_remote_model_name_from_env(self) -> None:
-        """Remote model name should be read from environment."""
-        config = Config()
-        assert config.remote_model_name == "gpt-4o"
+        assert config.llm_model_name == "gpt-4o"
 
     def test_openai_api_key_from_env(self) -> None:
         """OpenAI API key should be read from environment as SecretStr."""

@@ -173,26 +173,6 @@ def _mock_processing_pipeline() -> Generator[None, None, None]:
         yield
 
 
-@pytest.fixture(autouse=True, scope="session")
-def _mock_vector_index_setup() -> Generator[None, None, None]:
-    """Mock pgvector extension and index setup to avoid real DB connections.
-
-    ``VectorIndex._ensure_extension`` and ``_ensure_index`` are made no-ops
-    so that constructing a ``VectorIndex`` during a test does not attempt
-    to talk to PostgreSQL.
-    """
-    with (
-        patch(
-            "src.storage.vector_index.VectorIndex._ensure_extension",
-            return_value=None,
-        ),
-        patch(
-            "src.storage.vector_index.VectorIndex._ensure_index",
-            return_value=None,
-        ),
-    ):
-        yield
-
 
 # ---------------------------------------------------------------------------
 # Shared fixtures — preserved from the original conftest
@@ -225,7 +205,7 @@ def test_config() -> Any:
 @pytest.fixture
 def db_manager(test_config: Any) -> Any:
     """Database manager for tests using SQLite in-memory."""
-    from src.storage.database import DatabaseManager
+    
 
     manager = DatabaseManager(database_url=test_config.database_url)
     manager.create_tables()
@@ -237,7 +217,7 @@ def db_manager(test_config: Any) -> Any:
 @pytest.fixture
 def vector_index(db_manager: Any, test_config: Any) -> Any:
     """Vector index for tests, backed by SQLite in-memory."""
-    from src.storage.vector_index import VectorIndex
+    
 
     index = VectorIndex(
         dimension=test_config.vector_dimension,
@@ -250,7 +230,7 @@ def vector_index(db_manager: Any, test_config: Any) -> Any:
 @pytest.fixture
 def repository(db_manager: Any, vector_index: Any) -> Any:
     """Repository for tests."""
-    from src.storage.repository import FingerprintRepository
+    
 
     repo = FingerprintRepository()
     repo.db_manager = db_manager

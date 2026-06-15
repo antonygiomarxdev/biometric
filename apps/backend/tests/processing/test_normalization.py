@@ -1,4 +1,4 @@
-"""Tests for MinutiaNormalizer and RotationInvariantNormalizer."""
+"""Tests for MinutiaNormalizer (latent-print-safe)."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ def make_minutia(x: int, y: int, angle: float = 0.0,
 
 
 class TestMinutiaNormalizer:
-    """Standard geometric normalizer."""
+    """Normalizer for latent and controlled prints (no global centering)."""
 
     def test_normalize_empty_minutiae(self) -> None:
         """Normalizing an empty list returns a fingerprint with empty minutiae."""
@@ -41,8 +41,8 @@ class TestMinutiaNormalizer:
         assert result.width == 200
         assert result.height == 100
 
-    def test_normalize_centers_minutiae(self) -> None:
-        """Minutiae are centered around their centroid."""
+    def test_normalize_preserves_absolute_coordinates(self) -> None:
+        """Absolute coordinates are preserved (no centering)."""
         from src.processing.normalization import MinutiaNormalizer
 
         normalizer = MinutiaNormalizer()
@@ -51,11 +51,11 @@ class TestMinutiaNormalizer:
             make_minutia(30, 30),
         ]
         result = normalizer.normalize(minutiae, (100, 100))
-        # Centroid is (20, 20). After centering: (10-20=-10, 10-20=-10), (30-20=10, 30-20=10)
-        assert result.minutiae[0].x == -10
-        assert result.minutiae[0].y == -10
-        assert result.minutiae[1].x == 10
-        assert result.minutiae[1].y == 10
+        assert len(result.minutiae) == 2
+        xs = {m.x for m in result.minutiae}
+        ys = {m.y for m in result.minutiae}
+        assert xs == {10, 30}
+        assert ys == {10, 30}
 
     def test_apply_consensus_removes_duplicates(self) -> None:
         """Close minutiae are merged (highest confidence wins)."""
@@ -78,44 +78,15 @@ class TestMinutiaNormalizer:
         assert normalizer._apply_consensus([]) == []
 
     def test_canonical_sort_by_distance(self) -> None:
-        """Minutiae are sorted by distance from origin."""
+        """Minutiae are sorted by distance from the image centre."""
         from src.processing.normalization import MinutiaNormalizer
 
         normalizer = MinutiaNormalizer()
         minutiae = [
-            make_minutia(10, 0),   # r² = 100
+            make_minutia(10, 0),   # r² = ?
             make_minutia(1, 1),    # r² = 2  → should be first
             make_minutia(3, 4),    # r² = 25
         ]
-        sorted_m = normalizer._canonical_sort(minutiae)
-        distances = [m.x**2 + m.y**2 for m in sorted_m]
+        sorted_m = normalizer._canonical_sort(minutiae, (100, 100))
+        distances = [(m.x - 50) ** 2 + (m.y - 50) ** 2 for m in sorted_m]
         assert distances == sorted(distances)
-
-
-class TestRotationInvariantNormalizer:
-    """PCA-based rotation invariant normalizer."""
-
-    def test_fewer_than_3_minutiae_falls_back(self) -> None:
-        """With < 3 minutiae, falls back to the base normalizer."""
-        from src.processing.normalization import RotationInvariantNormalizer
-
-        normalizer = RotationInvariantNormalizer()
-        minutiae = [make_minutia(10, 10)]
-        result = normalizer.normalize(minutiae, (100, 100))
-        assert isinstance(result, NormalizedFingerprint)
-        assert len(result.minutiae) == 1
-
-    def test_normalizes_with_rotation(self) -> None:
-        """With >= 3 minutiae, PCA rotation is applied."""
-        from src.processing.normalization import RotationInvariantNormalizer
-
-        normalizer = RotationInvariantNormalizer()
-        # Create a horizontal line of minutiae
-        minutiae = [
-            make_minutia(0, 50),
-            make_minutia(50, 50),
-            make_minutia(100, 50),
-        ]
-        result = normalizer.normalize(minutiae, (100, 100))
-        assert isinstance(result, NormalizedFingerprint)
-        assert len(result.minutiae) == 3

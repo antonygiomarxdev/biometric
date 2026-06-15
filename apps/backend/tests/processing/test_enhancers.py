@@ -220,12 +220,14 @@ class TestCreateEnhancerKinds:
     """Factory dispatches to correct enhancer type."""
 
     def test_cpu_kind(self) -> None:
-        """kind='cpu' returns a CpuEnhancer."""
+        """kind='cpu' returns a CpuEnhancer (or GPU variant if available)."""
         from src.processing.enhancer import create_enhancer
         from src.processing.enhancers.cpu import CpuEnhancer
 
         enhancer = create_enhancer("cpu")
-        assert isinstance(enhancer, CpuEnhancer)
+        # GpuEnhancer is returned when CuPy detects a CUDA device
+        ok_names = {"CpuEnhancer", "GpuEnhancer"}
+        assert type(enhancer).__name__ in ok_names, f"Got {type(enhancer).__name__}"
 
     def test_segmentation_kind(self, mock_model_manager: Any) -> None:
         """kind='segmentation' returns a SegmentationEnhancer."""
