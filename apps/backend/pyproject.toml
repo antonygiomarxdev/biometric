@@ -34,6 +34,9 @@ dependencies = [
     "llama-index-core>=0.10.0",
     "llama-index-llms-ollama>=0.1.0",
     "llama-index-llms-openai>=0.1.0",
+    "sknw>=0.15",
+    "networkx>=3.0",
+    "numba>=0.47",
 ]
 
 [project.optional-dependencies]

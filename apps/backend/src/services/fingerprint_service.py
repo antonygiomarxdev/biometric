@@ -32,6 +32,7 @@ from src.core.types import NormalizedFingerprint
 from src.processing.enhancer import create_enhancer
 from src.processing.enhancers.gpu import GpuEnhancer  # imported for type hinting
 from src.processing.extractor import SkeletonMinutiaeExtractor
+from src.processing.graph_extractor import RidgeGraphExtractor
 from src.processing.normalization import MinutiaNormalizer
 from src.processing.post_hooks import (
     BorderMaskCleaner,
@@ -143,6 +144,7 @@ def build_production_pipeline(
         
         # 3. Extraction
         ExtractorStep(extractors),
+        RidgeGraphExtractor(),
         
         # 4. Fusion
         EnsembleFusionFilter(radius=8.0, min_votes=2),
@@ -211,6 +213,7 @@ class FingerprintService:
             self.steps.extend([OrientationFieldAnalyzer(), SingularityDetector(roi_radius=140)])
 
         self.steps.append(ExtractorStep(self.extractors))
+        self.steps.append(RidgeGraphExtractor())
         self.steps.append(EnsembleFusionFilter(radius=8.0, min_votes=2))
 
         chosen_post = post_hooks if post_hooks is not None else post_processors

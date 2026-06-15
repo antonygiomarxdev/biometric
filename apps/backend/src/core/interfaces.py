@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import Protocol, List, runtime_checkable
 import numpy as np
 
-from src.core.types import MinutiaCandidate, NormalizedFingerprint, MatchResult, TripletVector
+from src.core.types import MinutiaCandidate, NormalizedFingerprint, MatchResult, RidgeGraph, TripletVector
 
 
 # ---------------------------------------------------------------------------
@@ -54,6 +54,9 @@ class PipelineContext:
 
     # Final Output
     normalized_fingerprint: NormalizedFingerprint | None = None
+
+    # Phase 11: Ridge Graph (biological topology)
+    ridge_graph: RidgeGraph | None = None
 
     # Provenance / debugging
     warnings: list[str] = field(default_factory=list)

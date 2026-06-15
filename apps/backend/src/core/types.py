@@ -86,6 +86,35 @@ class MatchResult:
 
 
 @dataclass(frozen=True, slots=True)
+class RidgeNode:
+    x: int
+    y: int
+
+@dataclass(frozen=True, slots=True)
+class RidgeEdge:
+    source: int
+    target: int
+    path: list[tuple[int, int]]
+    length: int
+
+@dataclass(frozen=True, slots=True)
+class RidgeGraph:
+    nodes: list[RidgeNode]
+    edges: list[RidgeEdge]
+
+    @property
+    def num_nodes(self) -> int:
+        return len(self.nodes)
+
+    @property
+    def num_edges(self) -> int:
+        return len(self.edges)
+
+    def is_empty(self) -> bool:
+        return self.num_nodes == 0
+
+
+@dataclass(frozen=True, slots=True)
 class TripletVector:
     """
     A local invariant structure (RAG chunk) representing a Delaunay triangle
