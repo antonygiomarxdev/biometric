@@ -75,8 +75,7 @@ def visualize_one(path: Path, output_dir: Path) -> Path:
     fig.suptitle(path.name, fontsize=11)
     fig.tight_layout()
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_path = output_dir / f"{path.stem}_{timestamp}.png"
+    output_path = output_dir / f"{path.stem}.png"
     fig.savefig(output_path, dpi=100, bbox_inches="tight")
     plt.close(fig)
     return output_path
@@ -87,16 +86,18 @@ def main() -> int:
         print(f"Error: fixtures not found at {FIXTURES_DIR}")
         return 1
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    run_dir = OUTPUT_DIR / timestamp
+    run_dir.mkdir(parents=True, exist_ok=True)
 
     paths = sorted(FIXTURES_DIR.glob("*.BMP"))
     if not paths:
         print(f"Error: no .BMP fixtures in {FIXTURES_DIR}")
         return 1
 
-    print(f"Visualizing {len(paths)} fingerprints into {OUTPUT_DIR}")
+    print(f"Visualizing {len(paths)} fingerprints into {run_dir}")
     for path in paths:
-        out = visualize_one(path, OUTPUT_DIR)
+        out = visualize_one(path, run_dir)
         print(f"  {path.name} -> {out.name}")
 
     print("Done.")

@@ -33,6 +33,7 @@ from src.processing.enhancer import create_enhancer
 from src.processing.enhancers.gpu import GpuEnhancer  # imported for type hinting
 from src.processing.extractor import SkeletonMinutiaeExtractor
 from src.processing.graph_extractor import RidgeGraphExtractor
+from src.processing.skeletonize_step import SkeletonizationStep
 from src.processing.normalization import MinutiaNormalizer
 from src.processing.post_hooks import (
     BorderMaskCleaner,
@@ -101,9 +102,12 @@ class ExtractorStep(IPipelineStep):
         self.extractors = extractors
 
     def process(self, ctx: PipelineContext) -> None:
-        if ctx.enhanced_image is None:
-            raise ValueError("No enhanced image available for extraction")
-        ctx.candidate_groups = [ext.extract(ctx.enhanced_image) for ext in self.extractors]
+        # Pasa el esqueleto pre-calculado a los extractores si está disponible,
+        # sino, cae de nuevo en la imagen mejorada
+        source = ctx.skeleton if ctx.skeleton is not None else ctx.enhanced_image
+        if source is None:
+            raise ValueError("No valid image source available for extraction")
+        ctx.candidate_groups = [ext.extract(source) for ext in self.extractors]
 
 
 class NormalizerStep(IPipelineStep):
@@ -142,11 +146,14 @@ def build_production_pipeline(
         OrientationFieldAnalyzer(),
         SingularityDetector(roi_radius=140),
         
-        # 3. Extraction
+        # 3. Skeletonization
+        SkeletonizationStep(min_island_size=20),
+        
+        # 4. Extraction
         ExtractorStep(extractors),
         RidgeGraphExtractor(),
         
-        # 4. Fusion
+        # 5. Fusion
         EnsembleFusionFilter(radius=8.0, min_votes=2),
         
         # 5. Post-hooks (cleanup)
@@ -212,6 +219,7 @@ class FingerprintService:
         else:
             self.steps.extend([OrientationFieldAnalyzer(), SingularityDetector(roi_radius=140)])
 
+        self.steps.append(SkeletonizationStep(min_island_size=20))
         self.steps.append(ExtractorStep(self.extractors))
         self.steps.append(RidgeGraphExtractor())
         self.steps.append(EnsembleFusionFilter(radius=8.0, min_votes=2))

@@ -44,6 +44,7 @@ class PipelineContext:
 
     # Enhancement output
     enhanced_image: np.ndarray | None = None  # after Gabor / binarisation
+    skeleton: np.ndarray | None = None        # strict 0/1 binary skeleton
 
     # Detector outputs
     candidate_groups: list[list[MinutiaCandidate]] = field(default_factory=list)
