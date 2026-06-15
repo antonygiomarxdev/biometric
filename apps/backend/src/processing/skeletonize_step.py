@@ -34,7 +34,7 @@ class SkeletonizationStep(IPipelineStep):
 
         # 2. Limpieza de "pelusas" (elimina manchas blancas desconectadas)
         if self.min_island_size > 0:
-            binary_bool = remove_small_objects(binary_bool, min_size=self.min_island_size)
+            binary_bool = remove_small_objects(binary_bool, max_size=self.min_island_size)
 
         white_pixels = int(binary_bool.sum())
         if white_pixels < 10:

@@ -25,6 +25,7 @@ sys.path.insert(0, str(BACKEND_ROOT))
 from src.core.interfaces import PipelineContext  # noqa: E402
 from src.core.types import RidgeGraph  # noqa: E402
 from src.processing.graph_extractor import RidgeGraphExtractor  # noqa: E402
+from src.processing.skeletonize_step import SkeletonizationStep  # noqa: E402
 
 
 FIXTURES_DIR = BACKEND_ROOT / "tests" / "fixtures" / "socofing_real"
@@ -59,9 +60,9 @@ def visualize_one(path: Path, output_dir: Path) -> Path:
     if img is None:
         raise FileNotFoundError(f"Could not load {path}")
 
-    extractor = RidgeGraphExtractor()
     ctx = PipelineContext(raw_image=img)
-    extractor.process(ctx)
+    SkeletonizationStep().process(ctx)
+    RidgeGraphExtractor().process(ctx)
     assert ctx.ridge_graph is not None
 
     fig, axes = plt.subplots(1, 2, figsize=(10, 5))
