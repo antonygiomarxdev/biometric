@@ -24,8 +24,7 @@ sys.path.insert(0, str(BACKEND_ROOT))
 
 from src.core.interfaces import PipelineContext  # noqa: E402
 from src.core.types import RidgeGraph  # noqa: E402
-from src.processing.graph_extractor import RidgeGraphExtractor  # noqa: E402
-from src.processing.skeletonize_step import SkeletonizationStep  # noqa: E402
+from src.services.fingerprint_service import fingerprint_service  # noqa: E402
 
 
 FIXTURES_DIR = BACKEND_ROOT / "tests" / "fixtures" / "socofing_real"
@@ -34,11 +33,15 @@ OUTPUT_DIR = BACKEND_ROOT / "tests" / "output_visual" / "ridge_graph"
 
 def _draw_graph(ax: Axes, img: np.ndarray, graph: RidgeGraph) -> None:
     ax.imshow(img, cmap="gray")
-    ax.set_title(
-        f"Nodes: {graph.num_nodes}  Edges: {graph.num_edges}",
-        fontsize=10,
+    
+    # Texto en el gráfico
+    ax.text(
+        0.02, 0.98, f"Nodos: {graph.num_nodes} | Aristas: {graph.num_edges}", 
+        transform=ax.transAxes, color="white", fontsize=10, 
+        verticalalignment='top', bbox=dict(boxstyle='round', facecolor='black', alpha=0.6)
     )
 
+    # Dibujar aristas topológicas (Cian)
     for edge in graph.edges:
         if edge.source >= len(graph.nodes) or edge.target >= len(graph.nodes):
             continue
@@ -46,11 +49,12 @@ def _draw_graph(ax: Axes, img: np.ndarray, graph: RidgeGraph) -> None:
         sy = graph.nodes[edge.source].y
         tx = graph.nodes[edge.target].x
         ty = graph.nodes[edge.target].y
-        ax.plot([sx, tx], [sy, ty], color="cyan", linewidth=0.6, alpha=0.7)
+        ax.plot([sx, tx], [sy, ty], color="cyan", linewidth=0.8, alpha=0.8)
 
+    # Dibujar nodos (Magenta para bifurcaciones/terminaciones)
     xs = [n.x for n in graph.nodes]
     ys = [n.y for n in graph.nodes]
-    ax.scatter(xs, ys, s=8, c="red", edgecolors="yellow", linewidths=0.3, zorder=3)
+    ax.scatter(xs, ys, s=15, c="#FF00FF", edgecolors="white", linewidths=0.5, zorder=3)
     ax.set_xticks([])
     ax.set_yticks([])
 
@@ -60,24 +64,37 @@ def visualize_one(path: Path, output_dir: Path) -> Path:
     if img is None:
         raise FileNotFoundError(f"Could not load {path}")
 
-    ctx = PipelineContext(raw_image=img)
-    SkeletonizationStep().process(ctx)
-    RidgeGraphExtractor().process(ctx)
+    ctx = PipelineContext(raw_image=img, fingerprint_id=path.stem)
+    
+    # Run the exact production pipeline, no custom steps!
+    for step in fingerprint_service.steps:
+        step.process(ctx)
+        
     assert ctx.ridge_graph is not None
+    assert ctx.enhanced_image is not None
 
-    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+    fig, axes = plt.subplots(1, 2, figsize=(10, 5), facecolor="#111111")
+    
+    for ax in axes:
+        ax.set_facecolor("#111111")
+        ax.tick_params(colors="white")
+        for spine in ax.spines.values():
+            spine.set_color("#333333")
+
     axes[0].imshow(img, cmap="gray")
-    axes[0].set_title("Original", fontsize=10)
+    axes[0].set_title("1. Imagen Original SOCOFing", fontsize=11, color="white")
     axes[0].set_xticks([])
     axes[0].set_yticks([])
 
-    _draw_graph(axes[1], img, ctx.ridge_graph)
+    # Plot the biological graph over the beautifully enhanced Gabor image
+    _draw_graph(axes[1], ctx.enhanced_image, ctx.ridge_graph)
+    axes[1].set_title("2. Biological Ridge Graph (sobre Gabor)", fontsize=11, color="white")
 
-    fig.suptitle(path.name, fontsize=11)
+    fig.suptitle(f"Graph Extraction: {path.name}", fontsize=12, color="white", y=1.02)
     fig.tight_layout()
 
     output_path = output_dir / f"{path.stem}.png"
-    fig.savefig(output_path, dpi=100, bbox_inches="tight")
+    fig.savefig(output_path, dpi=150, bbox_inches="tight", facecolor="#111111")
     plt.close(fig)
     return output_path
 
