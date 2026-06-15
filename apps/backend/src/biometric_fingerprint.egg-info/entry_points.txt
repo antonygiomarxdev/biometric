@@ -1,3 +1,0 @@
-[console_scripts]
-biometric = src.api.cli:cli
-biometric-api = src.main:app
