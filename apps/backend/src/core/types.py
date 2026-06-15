@@ -4,7 +4,7 @@ Clean Code: Definiciones inmutables y explícitas.
 """
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import List, Tuple, NewType, Optional
+from typing import ClassVar, List, NewType, Optional, Tuple
 import numpy as np
 
 # Tipos primitivos para claridad
@@ -127,3 +127,93 @@ class TripletVector:
     """
     features: List[float]
     weight: float
+
+
+@dataclass(frozen=True, slots=True)
+class GraphEmbedding:
+    """
+    Macro-topology features of a RidgeGraph, used as a dense vector
+    for coarse matching via vector search.
+
+    All features are size-invariant (ratios / normalised) so that two
+    graphs with the same topology but different absolute scale produce
+    identical embeddings.  The canonical 22-dim layout is::
+
+        degree_0..degree_4plus    (5)   node-degree histogram ratios
+        edge_len_p10..p90         (5)   edge length percentiles
+        edge_len_mean, std        (2)
+        weight_p10, p50, p90      (3)
+        weight_mean, std          (2)
+        log_nodes, log_edges      (2)
+        cutoff_ratio              (1)
+        avg_degree                (1)
+        density                   (1)
+        ----
+        total                     (22)
+    """
+    # Degree histogram ratios (5 bins: 0, 1, 2, 3, 4+)
+    degree_0_ratio: float
+    degree_1_ratio: float
+    degree_2_ratio: float
+    degree_3_ratio: float
+    degree_4plus_ratio: float
+    # Edge length distribution (5 percentiles + mean + std)
+    edge_len_p10: float
+    edge_len_p25: float
+    edge_len_p50: float
+    edge_len_p75: float
+    edge_len_p90: float
+    edge_len_mean: float
+    edge_len_std: float
+    # Node weight distribution (3 percentiles + mean + std)
+    weight_p10: float
+    weight_p50: float
+    weight_p90: float
+    weight_mean: float
+    weight_std: float
+    # Graph-level stats
+    log_num_nodes: float
+    log_num_edges: float
+    cutoff_ratio: float
+    avg_degree: float
+    density: float
+
+    EMBEDDING_DIM: ClassVar[int] = 22
+
+    def to_vector(self) -> np.ndarray:
+        """Flatten to a fixed-size numpy vector for vector search."""
+        return np.array(
+            [
+                self.degree_0_ratio,
+                self.degree_1_ratio,
+                self.degree_2_ratio,
+                self.degree_3_ratio,
+                self.degree_4plus_ratio,
+                self.edge_len_p10,
+                self.edge_len_p25,
+                self.edge_len_p50,
+                self.edge_len_p75,
+                self.edge_len_p90,
+                self.edge_len_mean,
+                self.edge_len_std,
+                self.weight_p10,
+                self.weight_p50,
+                self.weight_p90,
+                self.weight_mean,
+                self.weight_std,
+                self.log_num_nodes,
+                self.log_num_edges,
+                self.cutoff_ratio,
+                self.avg_degree,
+                self.density,
+            ],
+            dtype=np.float32,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class CoarseMatch:
+    """A single candidate returned by the coarse matcher."""
+    fingerprint_id: str
+    score: float
+    metadata: dict = field(default_factory=dict)

@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import Protocol, List, runtime_checkable
 import numpy as np
 
-from src.core.types import MinutiaCandidate, NormalizedFingerprint, MatchResult, RidgeGraph, TripletVector
+from src.core.types import CoarseMatch, MinutiaCandidate, NormalizedFingerprint, MatchResult, RidgeGraph, TripletVector
 
 
 # ---------------------------------------------------------------------------
@@ -155,3 +155,29 @@ class IVectorizer(Protocol):
     Each chunk represents a local invariant structure.
     """
     def vectorize(self, ctx: PipelineContext) -> List[TripletVector]: ...
+
+
+class ICoarseMatcher(Protocol):
+    """Port for the Coarse Matcher (Phase 11-02).
+
+    Coarse matchers convert a RidgeGraph into a fixed-size dense
+    embedding and return the *top_k* most similar candidates from
+    a vector index.  Concrete adapters include :class:`QdrantRepository`.
+    """
+
+    def ensure_collection(self) -> None:
+        """Create the backing collection if it does not already exist."""
+        ...
+
+    def upsert(
+        self,
+        fingerprint_id: str,
+        embedding: np.ndarray,
+        metadata: dict | None = None,
+    ) -> None:
+        """Insert or update one fingerprint embedding."""
+        ...
+
+    def search(self, embedding: np.ndarray, top_k: int = 100) -> List[CoarseMatch]:
+        """Return the *top_k* candidates ranked by similarity."""
+        ...
