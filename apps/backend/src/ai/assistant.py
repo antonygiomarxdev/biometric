@@ -8,11 +8,20 @@ underlying ``NLSQLTableQueryEngine`` factory via
 """
 
 from llama_index.core import SQLDatabase
-from llama_index.core.base.response.schema import Response
+from llama_index.core.base.response.schema import (
+    AsyncStreamingResponse,
+    PydanticResponse,
+    Response,
+    StreamingResponse,
+)
 from llama_index.core.query_engine import NLSQLTableQueryEngine
 
 from src.ai.llm import LLMFactory
 from src.db.readonly import get_readonly_engine
+
+AssistantResponse = (
+    Response | StreamingResponse | AsyncStreamingResponse | PydanticResponse
+)
 
 
 def get_assistant_query_engine() -> NLSQLTableQueryEngine:
@@ -59,5 +68,5 @@ async def ask_assistant(query: str) -> str:
         A synthesised text response from the LLM.
     """
     query_engine = get_assistant_query_engine()
-    response: Response = await query_engine.aquery(query)
+    response: AssistantResponse = await query_engine.aquery(query)
     return str(response)

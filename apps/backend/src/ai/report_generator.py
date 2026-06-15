@@ -28,6 +28,7 @@ Usage::
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 from pydantic import ValidationError
 
@@ -110,7 +111,7 @@ async def generate_dictamen(
                 sql_results=sql_results
             )
             completion = await structured_llm.acomplete(prompt)
-            result: DictamenPericial = completion.raw
+            result: DictamenPericial = cast(DictamenPericial, completion.raw)
             return result
         except ValidationError as exc:
             last_error = exc

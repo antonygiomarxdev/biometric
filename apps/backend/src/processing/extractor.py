@@ -12,7 +12,8 @@ import math
 
 import cv2
 import numpy as np
-from skimage.morphology import convex_hull_image, erosion, square
+from skimage.morphology import convex_hull_image, erosion
+from skimage.morphology.footprints import square
 
 from src.core.metrics import timed
 from src.core.types import AlgorithmOrigin, MinutiaCandidate, MinutiaType
