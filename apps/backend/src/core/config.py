@@ -113,21 +113,15 @@ class Config:
         )
     )
 
-    # Generative AI / LLM
-    llm_provider: Literal["local", "openai"] = field(
-        default_factory=lambda: os.getenv(
-            "LLM_PROVIDER", "local"  # type: ignore[return-value]
-        )
+    # Generative AI / LLM - ADR-006 Compatible
+    llm_api_base: str = field(
+        default_factory=lambda: os.getenv("LLM_API_BASE", "http://localhost:11434/v1")
     )
-    local_model_name: str = field(
-        default_factory=lambda: os.getenv(
-            "LOCAL_MODEL_NAME", "llama3.1:latest"
-        )
+    llm_model_name: str = field(
+        default_factory=lambda: os.getenv("LLM_MODEL_NAME", "qwen3:8b")
     )
-    remote_model_name: str = field(
-        default_factory=lambda: os.getenv(
-            "REMOTE_MODEL_NAME", "gpt-4"
-        )
+    llm_api_key: SecretStr | None = field(
+        default_factory=lambda: SecretStr(os.getenv("LLM_API_KEY")) if os.getenv("LLM_API_KEY") else None
     )
     # AI Tracing (OpenTelemetry / Arize Phoenix)
     enable_ai_tracing: bool = field(

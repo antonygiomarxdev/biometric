@@ -1,102 +1,126 @@
 """
 Interfaces base para el pipeline biométrico.
 Clean Architecture: Dependency Inversion via Structural Subtyping (Protocols).
+
+Utiliza un patrón de Pipeline Uniforme (Nivel 4 de extensibilidad) donde
+todos los componentes de procesamiento de imagen son `IPipelineStep`.
 """
 
-from typing import Protocol, List, Tuple, runtime_checkable
+from __future__ import annotations
+
+import asyncio
+from dataclasses import dataclass, field
+from typing import Protocol, List, runtime_checkable
 import numpy as np
 
-from src.core.types import MinutiaCandidate, NormalizedFingerprint, MatchResult
+from src.core.types import MinutiaCandidate, NormalizedFingerprint, MatchResult, TripletVector
 
 
-class PreProcessResult:
-    """Resultado de un pre-procesador: imagen procesada + máscara de calidad opcional."""
-    def __init__(self, image: np.ndarray, quality_mask: np.ndarray | None = None) -> None:
-        self.image = image
-        self.quality_mask = quality_mask
+# ---------------------------------------------------------------------------
+# Pipeline context: single source of truth for shared state.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(slots=True)
+class PipelineContext:
+    """Per-image state that flows through the pipeline.
+
+    The :class:`FingerprintService` creates one of these per image and
+    threads it through every step. Hooks read what they need and write
+    what they produce. Using a typed context object keeps the
+    orchestrator generic and open to extension.
+    """
+
+    # Input (always present)
+    raw_image: np.ndarray
+    fingerprint_id: str = "unknown"
+
+    # Stage outputs
+    preprocessed_image: np.ndarray | None = None
+    quality_mask: np.ndarray | None = None  # bool, True = valid
+    roi_mask: np.ndarray | None = None  # bool, True = inside the core ROI disc
+    orientation_field: np.ndarray | None = None  # radians, per-block
+    coherence_field: np.ndarray | None = None  # [0..1], per-block
+
+    # Enhancement output
+    enhanced_image: np.ndarray | None = None  # after Gabor / binarisation
+
+    # Detector outputs
+    candidate_groups: list[list[MinutiaCandidate]] = field(default_factory=list)
+    candidates: list[MinutiaCandidate] = field(default_factory=list)
+
+    # Core singularity (forensic anchor). Populated by SingularityDetector.
+    core: tuple[int, int] | None = None
+
+    # Final Output
+    normalized_fingerprint: NormalizedFingerprint | None = None
+
+    # Provenance / debugging
+    warnings: list[str] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Uniform Pipeline Step
+# ---------------------------------------------------------------------------
 
 
 @runtime_checkable
-class IPreProcessor(Protocol):
-    """Protocolo para hooks de pre-procesamiento (QualityMask, Binarization, etc.)."""
-    def process(self, image: np.ndarray) -> PreProcessResult:
-        """
-        Procesa la imagen antes de la extracción.
-        Args:
-            image: Imagen en escala de grises (uint8).
-        Returns:
-            PreProcessResult con la imagen procesada y máscara de calidad opcional.
-        """
-        ...
+class IPipelineStep(Protocol):
+    """Uniform interface for all fingerprint processing components.
+
+    Enhancers, Extractors, Post-Processors, and Normalizers all implement
+    this protocol. They read from and mutate the `PipelineContext`.
+    """
+    def process(self, ctx: PipelineContext) -> None: ...
 
 
-@runtime_checkable
-class IPostProcessor(Protocol):
-    """Protocolo para hooks de post-procesamiento (filtrado topológico, fusión, etc.)."""
-    def filter(
-        self,
-        candidates: List[MinutiaCandidate],
-        quality_mask: np.ndarray | None = None,
-    ) -> List[MinutiaCandidate]:
-        """
-        Filtra y limpia la lista de minucias después de la extracción.
-        Args:
-            candidates: Lista cruda de minucias detectadas.
-            quality_mask: Máscara de calidad opcional (True = zona válida).
-        Returns:
-            Lista filtrada de minucias.
-        """
-        ...
+class AsyncPipelineStep:
+    """Base class for steps that want non-blocking execution.
+
+    Override :meth:`process_async` if the step has native async I/O
+    (e.g. GPU kernel launches).  The default wraps :meth:`process`
+    in a thread-pool executor, keeping the event loop free.
+    """
+
+    def process(self, ctx: PipelineContext) -> None:
+        """Default sync no-op. Subclasses must override one of process/process_async."""
+
+    async def process_async(self, ctx: PipelineContext) -> None:
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, self.process, ctx)
+
+
+# (Legacy aliases removed — use the Canonical protocols below)
+
+
+# ---------------------------------------------------------------------------
+# Canonical protocols for the processing layer (enhance / extract / normalise)
+# ---------------------------------------------------------------------------
 
 
 class IEnhancer(Protocol):
-    """Protocolo para estrategias de mejora de imagen (CPU/IA)."""
-    
-    def enhance(self, img: np.ndarray, resize: bool = True) -> np.ndarray:
-        """
-        Mejora la calidad de la huella.
-        Args:
-            img: Imagen en escala de grises (uint8).
-            resize: Si debe redimensionar la imagen a las dimensiones estándar.
-        Returns:
-            Imagen mejorada (generalmente binaria o normalizada).
-        """
-        ...
-
+    """Image enhancement interface (used by CpuEnhancer, GpuEnhancer, etc.)."""
+    def enhance(self, img: np.ndarray, resize: bool = True) -> np.ndarray: ...
 
 @runtime_checkable
 class IFeatureExtractor(Protocol):
-    """Protocolo para extracción de características."""
-    
-    def extract(self, image: np.ndarray) -> List[MinutiaCandidate]:
-        """
-        Extrae minucias de una imagen procesada.
-        Args:
-            image: Imagen procesada.
-        Returns:
-            Lista de candidatos a minucias.
-        """
-        ...
+    """Feature extraction interface (used by SkeletonMinutiaeExtractor, etc.)."""
+    def extract(self, image: np.ndarray) -> List[MinutiaCandidate]: ...
 
 
 class INormalizer(Protocol):
-    """Protocolo para normalización y limpieza de minucias."""
-    
-    def normalize(self, minutiae: List[MinutiaCandidate], img_shape: Tuple[int, int]) -> NormalizedFingerprint:
-        """
-        Ordena, filtra y normaliza coordenadas.
-        Args:
-            minutiae: Lista de minucias crudas.
-            img_shape: Dimensiones de la imagen original (alto, ancho).
-        Returns:
-            Estructura inmutable con minucias finales y orientaciones globales.
-        """
-        ...
+    """Normalisation interface (used by MinutiaNormalizer, etc.)."""
+    def normalize(self, minutiae: List[MinutiaCandidate], img_shape: tuple[int, int]) -> NormalizedFingerprint: ...
+
+
+# ---------------------------------------------------------------------------
+# Matcher (separate subsystem)
+# ---------------------------------------------------------------------------
 
 
 class IMatcher(Protocol):
     """Protocolo para el motor de búsqueda biométrica."""
-    
+
     async def match(self, probe: np.ndarray, top_k: int = 5) -> MatchResult:
         """
         Busca coincidencias para un vector único.
@@ -107,7 +131,7 @@ class IMatcher(Protocol):
             El mejor resultado encontrado.
         """
         ...
-    
+
     async def match_batch(self, probes: np.ndarray, top_k: int = 5) -> List[MatchResult]:
         """
         Busca coincidencias para múltiples vectores en lote.
@@ -118,3 +142,12 @@ class IMatcher(Protocol):
             Lista de resultados correspondientes.
         """
         ...
+
+
+class IVectorizer(Protocol):
+    """Protocol for fingerprint vectorization (RAG chunking).
+
+    Returns a list of `TripletVector` chunks, not a single global vector.
+    Each chunk represents a local invariant structure.
+    """
+    def vectorize(self, ctx: PipelineContext) -> List[TripletVector]: ...

@@ -76,10 +76,23 @@ class MatchResult:
     person_id: Optional[str]
     score: float  # Combined score
     confidence: float
-    
+
     # Métricas detalladas
     l2_distance: float
     cosine_distance: float
     combined_score: float
-    
+
     metadata: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class TripletVector:
+    """
+    A local invariant structure (RAG chunk) representing a Delaunay triangle
+    of three minutiae points.
+
+    - `features`: Invariant vector (side lengths + angles + types) for KNN search.
+    - `weight`: Forensic importance weight (0.0 to 1.0). Higher = closer to Core.
+    """
+    features: List[float]
+    weight: float
