@@ -36,6 +36,21 @@ services:
       timeout: 20s
       retries: 3
 
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: biometric_qdrant_dev
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   createbuckets:
     image: minio/mc:latest
     depends_on:
@@ -76,12 +91,15 @@ services:
       MINIO_SECRET_KEY: minioadmin
       MINIO_BUCKET: fingerprints
       MINIO_SECURE: "false"
+      QDRANT_HOST: qdrant:6333
       # CORS: Permitir origen del frontend
       CORS_ORIGINS: "http://localhost:5173,http://localhost:3000"
     depends_on:
       postgres:
         condition: service_healthy
       minio:
+        condition: service_healthy
+      qdrant:
         condition: service_healthy
     user: "1000:1000"
 
@@ -108,3 +126,5 @@ volumes:
     name: biometric_pgdata_dev
   minio_data:
     name: biometric_minio_data
+  qdrant_data:
+    name: biometric_qdrant_data

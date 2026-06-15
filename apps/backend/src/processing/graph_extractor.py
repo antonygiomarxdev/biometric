@@ -57,7 +57,10 @@ class RidgeGraphExtractor(IPipelineStep):
 
         # 3. Mapear e hidratar Nodos (Weights + Cutoffs)
         nodes: list[RidgeNode] = []
+        id_map: dict[int, int] = {}  # Mapea IDs de sknw a índices de nuestra lista
+        
         for nid in nx_graph.nodes:
+            id_map[nid] = len(nodes)
             pts = nx_graph.nodes[nid].get("o", np.array([0, 0]))
             x, y = int(pts[1]), int(pts[0])
             
@@ -78,13 +81,18 @@ class RidgeGraphExtractor(IPipelineStep):
             
             nodes.append(RidgeNode(x=x, y=y, weight=weight, is_cutoff=is_cutoff))
 
-        # 4. Mapear Aristas
+        # 4. Mapear Aristas (usando el id_map seguro)
         edges: list[RidgeEdge] = []
         for u, v, data in nx_graph.edges(data=True):
+            if u not in id_map or v not in id_map:
+                continue  # Por si sknw devuelve un edge a un nodo fantasma
+            source_idx = id_map[u]
+            target_idx = id_map[v]
+            
             pts = data.get("pts", np.empty((0, 2), dtype=np.int16))
             path = [(int(p[1]), int(p[0])) for p in pts]
             length = int(data.get("weight", len(pts) - 1))
-            edges.append(RidgeEdge(source=int(u), target=int(v), path=path, length=length))
+            edges.append(RidgeEdge(source=source_idx, target=target_idx, path=path, length=length))
 
         ctx.ridge_graph = RidgeGraph(nodes=nodes, edges=edges)
         logger.info(

@@ -37,6 +37,7 @@ dependencies = [
     "sknw>=0.15",
     "networkx>=3.0",
     "numba>=0.47",
+    "qdrant-client>=1.8.0",
 ]
 
 [project.optional-dependencies]

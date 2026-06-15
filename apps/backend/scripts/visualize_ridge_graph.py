@@ -15,6 +15,8 @@ import cv2
 import matplotlib
 
 matplotlib.use("Agg")
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes
@@ -31,7 +33,7 @@ FIXTURES_DIR = BACKEND_ROOT / "tests" / "fixtures" / "socofing_real"
 OUTPUT_DIR = BACKEND_ROOT / "tests" / "output_visual" / "ridge_graph"
 
 
-def _draw_graph(ax: Axes, img: np.ndarray, graph: RidgeGraph) -> None:
+def _draw_graph(fig: plt.Figure, ax: Axes, img: np.ndarray, graph: RidgeGraph) -> None:
     ax.imshow(img, cmap="gray")
     
     # Texto en el gráfico
@@ -41,19 +43,31 @@ def _draw_graph(ax: Axes, img: np.ndarray, graph: RidgeGraph) -> None:
         verticalalignment='top', bbox=dict(boxstyle='round', facecolor='black', alpha=0.6)
     )
 
-    # Dibujar aristas topológicas (siguiendo la curva real de la cresta)
+    # Configurar el Colormap 'turbo' (Azul -> Rojo)
+    cmap = matplotlib.colormaps.get_cmap("turbo")
+    norm = mcolors.Normalize(vmin=0.0, vmax=1.0)
+
+    # Dibujar aristas topológicas (como Heatmap)
     for edge in graph.edges:
         if not edge.path:
             continue
-        # Extraer todos los puntos de la curva
+        
+        # El peso de la cresta es el promedio de los pesos de sus nodos
+        w_s = graph.nodes[edge.source].weight
+        w_t = graph.nodes[edge.target].weight
+        edge_weight = (w_s + w_t) / 2.0
+        
+        # Mapear el peso a un color del heatmap
+        color = cmap(norm(edge_weight))
+        
         xs_path = [p[0] for p in edge.path]
         ys_path = [p[1] for p in edge.path]
         
-        # Dibujar la curva exacta usando un verde neón brillante para contraste
-        ax.plot(xs_path, ys_path, color="#00FF00", linewidth=1.5, alpha=0.85)
+        # Trazar la curva de la cresta con ese color
+        ax.plot(xs_path, ys_path, color=color, linewidth=1.5, alpha=0.9)
 
-    # Dibujar nodos
-    real_xs, real_ys, real_sizes = [], [], []
+    # Preparar arrays para dibujar los Nodos
+    real_xs, real_ys, real_colors, real_sizes = [], [], [], []
     cutoff_xs, cutoff_ys = [], []
 
     for n in graph.nodes:
@@ -63,20 +77,28 @@ def _draw_graph(ax: Axes, img: np.ndarray, graph: RidgeGraph) -> None:
         else:
             real_xs.append(n.x)
             real_ys.append(n.y)
-            # Escalar el tamaño visual basado en el peso forense (1.0 = gigante, 0.1 = puntito)
+            # El color y el tamaño del nodo también responden al heatmap
+            real_colors.append(cmap(norm(n.weight)))
             real_sizes.append(10 + (40 * n.weight))
 
-    # Dibujar Cutoffs (Basura de escáner) en Naranja con forma de 'x'
+    # Dibujar Cutoffs (Basura de borde) en blanco grisáceo
     if cutoff_xs:
-        ax.scatter(cutoff_xs, cutoff_ys, s=25, c="#FF8800", marker="X", linewidths=1.2, zorder=4, label="Cutoff (Ignore)")
+        ax.scatter(cutoff_xs, cutoff_ys, s=25, c="#AAAAAA", marker="x", linewidths=1.0, zorder=2)
 
-    # Dibujar Minucias Auténticas en Magenta (tamaño = weight)
+    # Dibujar Nodos Auténticos (Color del Heatmap)
     if real_xs:
-        ax.scatter(real_xs, real_ys, s=real_sizes, c="#FF00FF", edgecolors="white", linewidths=0.5, zorder=3, label="Real Minutia")
+        ax.scatter(real_xs, real_ys, s=real_sizes, c=real_colors, edgecolors="white", linewidths=0.5, zorder=3)
 
     ax.set_xticks([])
     ax.set_yticks([])
-    ax.legend(loc="lower right", fontsize=8, facecolor="black", edgecolor="none", labelcolor="white")
+    
+    # Añadir el Colorbar al gráfico
+    sm = cm.ScalarMappable(norm=norm, cmap=cmap)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
+    cbar.set_label("Peso Forense (Importancia)", color="white")
+    cbar.ax.yaxis.set_tick_params(color="white")
+    plt.setp(plt.getp(cbar.ax.axes, 'yticklabels'), color="white")
 
 
 def visualize_one(path: Path, output_dir: Path) -> Path:
@@ -107,8 +129,8 @@ def visualize_one(path: Path, output_dir: Path) -> Path:
     axes[0].set_yticks([])
 
     # Plot the biological graph over the beautifully enhanced Gabor image
-    _draw_graph(axes[1], ctx.enhanced_image, ctx.ridge_graph)
-    axes[1].set_title("2. Biological Ridge Graph (sobre Gabor)", fontsize=11, color="white")
+    _draw_graph(fig, axes[1], ctx.enhanced_image, ctx.ridge_graph)
+    axes[1].set_title("2. Biological Ridge Graph (Heatmap)", fontsize=11, color="white")
 
     fig.suptitle(f"Graph Extraction: {path.name}", fontsize=12, color="white", y=1.02)
     fig.tight_layout()
