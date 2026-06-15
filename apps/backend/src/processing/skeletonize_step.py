@@ -44,11 +44,12 @@ class SkeletonizationStep(IPipelineStep):
 
         # 3. Esqueletización biológica
         skel_bool = skeletonize(binary_bool)
-        
+
         # Guardar como uint8 estricto (0/1)
-        ctx.skeleton = skel_bool.astype(np.uint8)
-        
+        skel: np.ndarray = skel_bool.astype(np.uint8)
+        ctx.skeleton = skel
+
         logger.debug(
-            "SkeletonizationStep: skeleton generated with %d pixels", 
-            int(ctx.skeleton.sum())
+            "SkeletonizationStep: skeleton generated with %d pixels",
+            int(skel.sum()),
         )

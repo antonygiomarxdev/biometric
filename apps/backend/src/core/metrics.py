@@ -10,7 +10,7 @@ no se compartirá. Para producción real, migrar a OpenTelemetry.
 import time
 import logging
 from contextlib import contextmanager
-from typing import Dict, Any
+from typing import Any, Dict, Optional
 from functools import wraps
 
 logger = logging.getLogger(__name__)
@@ -22,7 +22,12 @@ class PerformanceMetrics:
     def __init__(self):
         self.metrics: Dict[str, list] = {}
     
-    def record(self, operation: str, duration_ms: float, metadata: Dict[str, Any] = None):
+    def record(
+        self,
+        operation: str,
+        duration_ms: float,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
         """Registra una métrica de duración."""
         if operation not in self.metrics:
             self.metrics[operation] = []
@@ -76,7 +81,7 @@ def measure_time(operation: str, **metadata):
         metrics.record(operation, duration_ms, metadata)
 
 
-def timed(operation_name: str = None):
+def timed(operation_name: Optional[str] = None):
     """Decorador para medir tiempo de funciones."""
     def decorator(func):
         op_name = operation_name or func.__name__

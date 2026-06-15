@@ -11,11 +11,13 @@ from __future__ import annotations
 
 import logging
 import uuid
+from typing import TypedDict
 
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from src.api.errors import NotFoundError, ValidationError
+from src.db.models import Evidence
 from src.db.repositories.case_repository import CaseRepository
 from src.db.repositories.evidence_repository import EvidenceRepository
 from src.storage.object_storage import storage
@@ -38,6 +40,14 @@ MIME_TO_EXT: dict[str, str] = {
     "image/bmp": ".bmp",
     "image/tiff": ".tiff",
 }
+
+
+class PaginatedEvidence(TypedDict):
+    """Typed return shape of :meth:`EvidenceService.list_evidence`."""
+    items: list[Evidence]
+    total: int
+    skip: int
+    limit: int
 
 
 class EvidenceService:
@@ -151,7 +161,7 @@ class EvidenceService:
         skip: int = 0,
         limit: int = 20,
         case_id: uuid.UUID | None = None,
-    ) -> dict[str, object]:
+    ) -> "PaginatedEvidence":
         """Return a paginated list of evidence, optionally filtered by case.
 
         Args:

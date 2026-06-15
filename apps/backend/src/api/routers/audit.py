@@ -104,7 +104,7 @@ async def list_audit_logs(
             payload=r.payload,
             previous_hash=r.previous_hash,
             current_hash=r.current_hash,
-            created_at=r.created_at.isoformat() if r.created_at else "",
+            created_at=r.created_at,
         )
         for r in rows
     ]

@@ -49,7 +49,7 @@ class ExtremePrivacyStrategy:
 
     def __init__(self) -> None:
         """Initialize the token mapping store for anonymization round-trips."""
-        self._token_map: dict[str, dict[str, str]] = {}
+        self._token_map: dict[int, dict[str, str]] = {}
         self._next_token_id: int = 1
         self._text_masker: DataMasker = DataMasker()
 

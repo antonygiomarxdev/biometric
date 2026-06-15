@@ -189,6 +189,7 @@ class ObjectStorage:
         if not self.client:
             return None
 
+        response = None
         try:
             response = self.client.get_object(self.bucket, object_name)
             return response.read()
@@ -196,11 +197,10 @@ class ObjectStorage:
             logger.error("Error descargando archivo '%s': %s", object_name, e)
             return None
         finally:
-            if "response" in locals():
+            if response is not None:
                 response.close()
-
-            if "response" in locals() and hasattr(response, "release_conn"):
-                response.release_conn()
+                if hasattr(response, "release_conn"):
+                    response.release_conn()
 
     def get_presigned_url(self, object_name: str) -> Optional[str]:
         """Genera una URL firmada temporal para acceso directo.

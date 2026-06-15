@@ -23,7 +23,7 @@ to ``BaseStrategy`` (no scrubbing), ensuring logging is never disrupted.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from src.core.compliance.strategy import IComplianceStrategy  # pragma: no cover
@@ -99,7 +99,7 @@ class ComplianceLogFormatter(logging.Formatter):
         strategy: IComplianceStrategy | None = None,
         fmt: str | None = None,
         datefmt: str | None = None,
-        style: str = "%",
+        style: Literal["%", "{", "$"] = "%",
     ) -> None:
         super().__init__(fmt=fmt, datefmt=datefmt, style=style)
         self._strategy: IComplianceStrategy = strategy or _resolve_strategy()

@@ -29,7 +29,6 @@ from src.core.interfaces import (
 from src.core.metrics import measure_time
 from src.core.types import NormalizedFingerprint
 from src.processing.enhancer import create_enhancer
-from src.processing.enhancers.gpu import GpuEnhancer  # imported for type hinting
 from src.processing.extractor import SkeletonMinutiaeExtractor
 from src.processing.graph_extractor import RidgeGraphExtractor
 from src.processing.skeletonize_step import SkeletonizationStep
@@ -57,28 +56,14 @@ logger = logging.getLogger(__name__)
 
 
 class EnhancerStep(IPipelineStep):
-    """Wraps an enhancer as a pipeline step.
-
-    Supports both the legacy ``IEnhancer`` (with ``enhance(img, resize)``)
-    and the ``IPipelineStep``-based ``GpuEnhancer`` (with ``process(ctx)``).
-    """
-    def __init__(self, enhancer: IEnhancer | IPipelineStep, resize: bool = True):
+    """Wraps an :class:`IEnhancer` as a pipeline step."""
+    def __init__(self, enhancer: IEnhancer, resize: bool = True) -> None:
         self.enhancer = enhancer
         self.resize = resize
 
     def process(self, ctx: PipelineContext) -> None:
         source = ctx.preprocessed_image if ctx.preprocessed_image is not None else ctx.raw_image
-        if hasattr(self.enhancer, "enhance"):
-            # Legacy IEnhancer path (CpuEnhancer, AiEnhancer, etc.)
-            from src.core.interfaces import IEnhancer
-            enh: IEnhancer = self.enhancer  # type: ignore[assignment]
-            ctx.enhanced_image = enh.enhance(source, resize=self.resize)
-        else:
-            # IPipelineStep path (GpuEnhancer)
-            step: IPipelineStep = self.enhancer  # type: ignore[assignment]
-            sub_ctx = PipelineContext(raw_image=source)
-            step.process(sub_ctx)
-            ctx.enhanced_image = sub_ctx.enhanced_image
+        ctx.enhanced_image = self.enhancer.enhance(source, resize=self.resize)
         ctx.preprocessed_image = ctx.enhanced_image
 
 

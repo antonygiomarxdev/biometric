@@ -1,14 +1,17 @@
 """CLI for the fingerprint identification system."""
 
+import subprocess
 import sys
-import logging
 from pathlib import Path
+
 import click
 
-from src.services.fingerprint_service import fingerprint_service
-from src.core.metrics import metrics
-from src.core.config import config
 from src.core.compliance import setup_compliance_logging
+from src.core.config import config
+from src.core.metrics import metrics
+from src.services.fingerprint_service import fingerprint_service
+
+import logging
 
 logging.basicConfig(
     level=getattr(logging, config.log_level),
@@ -31,9 +34,18 @@ def cli():
 
 @cli.command()
 def init_db():
-    """Initialize the database."""
-    click.echo("Initializing database...")
-    db_manager.create_tables()
+    """Apply database migrations via Alembic."""
+    click.echo("Applying database migrations...")
+    backend_root = Path(__file__).resolve().parents[2]
+    result = subprocess.run(
+        ["alembic", "upgrade", "head"],
+        cwd=str(backend_root / "src"),
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        click.echo(f"ERROR: {result.stderr}", err=True)
+        sys.exit(result.returncode)
     click.echo("OK Database initialized")
 
 

@@ -10,13 +10,23 @@ from __future__ import annotations
 
 import logging
 import uuid
+from typing import TypedDict
 
 from sqlalchemy.orm import Session
 
 from src.api.errors import IntegrityError, NotFoundError
+from src.db.models import Case
 from src.db.repositories.case_repository import CaseRepository
 
 logger = logging.getLogger(__name__)
+
+
+class PaginatedCases(TypedDict):
+    """Typed return shape of :meth:`CaseService.list_cases`."""
+    items: list[Case]
+    total: int
+    skip: int
+    limit: int
 
 
 class CaseService:
@@ -47,7 +57,7 @@ class CaseService:
         skip: int = 0,
         limit: int = 20,
         status: str | None = None,
-    ) -> dict[str, object]:
+    ) -> "PaginatedCases":
         """Return a paginated list of cases, optionally filtered by status.
 
         Args:

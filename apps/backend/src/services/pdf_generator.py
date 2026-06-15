@@ -302,7 +302,10 @@ class PDFGeneratorService:
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
-        return doc.write_pdf()
+        pdf_bytes = doc.write_pdf()
+        if pdf_bytes is None:
+            raise RuntimeError("WeasyPrint returned no PDF bytes")
+        return pdf_bytes
 
 
 # Module-level singleton for convenience (mirrors existing pattern

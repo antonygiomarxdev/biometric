@@ -121,7 +121,9 @@ class Config:
         default_factory=lambda: os.getenv("LLM_MODEL_NAME", "qwen3:8b")
     )
     llm_api_key: SecretStr | None = field(
-        default_factory=lambda: SecretStr(os.getenv("LLM_API_KEY")) if os.getenv("LLM_API_KEY") else None
+        default_factory=lambda: (
+            SecretStr(value) if (value := os.getenv("LLM_API_KEY")) else None
+        )
     )
     # AI Tracing (OpenTelemetry / Arize Phoenix)
     enable_ai_tracing: bool = field(

@@ -54,7 +54,7 @@ class CpuEnhancer(BaseEnhancer):
         # 4. Gabor filtering (Optimized)
         binim = self._ridge_filter(normim, orientim, mean_freq)
 
-        result = np.uint8(binim * 255)
+        result: np.ndarray = (binim * 255).astype(np.uint8)
         white_ratio = np.sum(result > 127) / result.size
         logger.info(
             f"Enhancement completado - shape: {result.shape}, píxeles blancos: {100*white_ratio:.1f}%"
