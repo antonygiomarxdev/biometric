@@ -170,7 +170,7 @@ class SkeletonMinutiaeExtractor:
         logger.debug("Aplicando filtrado geométrico...")
         mask = self._create_mask(skel)
         candidates_before = len(candidates)
-        candidates = self._filter_candidates(candidates, mask, skel.shape)
+        candidates = self._filter_candidates(candidates, mask, (int(skel.shape[0]), int(skel.shape[1])))
         logger.info(
             f"Minutiae después de filtrado: {len(candidates)} (eliminadas: {candidates_before - len(candidates)})"
         )

@@ -106,7 +106,7 @@ class NormalizerStep(IPipelineStep):
         # absolute coordinates match the image dimensions.
         img_shape = ctx.enhanced_image.shape if ctx.enhanced_image is not None else ctx.raw_image.shape
         normalized_fp = self.normalizer.normalize(
-            ctx.candidates, img_shape
+            ctx.candidates, (int(img_shape[0]), int(img_shape[1]))
         )
         ctx.normalized_fingerprint = replace(normalized_fp, id=ctx.fingerprint_id)
 

@@ -13,17 +13,14 @@ when the skin stretches or compresses.
 
 from __future__ import annotations
 
-import time
-from typing import Any
 import logging
+import time
 
 import networkx as nx
-import numpy as np
-
 from nebula3.Config import Config as NebulaConfig
 from nebula3.gclient.net import ConnectionPool, Session
 
-from src.core.types import RidgeGraph, CoarseMatch
+from src.core.types import CoarseMatch, RidgeGraph
 
 log = logging.getLogger(__name__)
 
