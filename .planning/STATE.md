@@ -1,44 +1,36 @@
 ---
-gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-current_phase: 10
-status: completed
-last_updated: "2026-06-15T13:00:00.000Z"
+gsd_state_version: 2.0
+milestone: v2.0-alpha
+milestone_name: V2 Alpha (Graph Topology)
+current_phase: 11
+status: planning
+last_updated: "2026-06-15T14:00:00.000Z"
 progress:
-  total_phases: 10
+  total_phases: 14
   completed_phases: 10
-  total_plans: 34
-  completed_plans: 34
-  percent: 100
+  percent: 71
 ---
 
-# State: Biometric
+# State: Biometric v2.0 Alpha
 
 **Last updated:** 2026-06-15
-**Current phase:** 10
-**Status:** Phase 10 Completed (RAG Dactilar)
+**Current phase:** 11
+**Status:** Planning Phase 11 (Graph Topology & NebulaGraph)
 
 ## Project Reference
 
 See: `.planning/PROJECT.md`
-**Core value:** Darle al perito forense una herramienta digital para identificar huellas latentes más rápido y con trazabilidad, manteniendo su criterio como autoridad final.
-**Competitive Advantage:** Doble motor de Inteligencia Artificial (Visión Computacional para el procesamiento de la imagen + GenAI para la automatización de la burocracia judicial).
+**Architectural Mandate:** "No Legacy". Old implementations (like Phase 10 pgvector RAG) must be deleted entirely once the Phase 11 NebulaGraph architecture proves superior. 
 
-## Phase Progress
+## Milestone Progress
 
-| Phase | Status | Progress |
-|-------|--------|----------|
-| 1. Flujo Core Forense | ✅ Completado | 100% |
-| 2. IA Visión Computacional | ✅ Completado | 100% (6/6 planes) |
-| 3. Global Compliance & Security | ✅ Completado | 100% (4/4 planes) |
-| 4. IA Generativa (Dictámenes) | ✅ Completado | 100% (5/5 planes) |
-| 5. Clean Architecture Refactor | ✅ Completado | 100% (7/7 planes) |
-| 6. Test Coverage & Quality | 🏃‍♂️ En progreso | 50% (2/4 planes) |
-
-## Current Work
-
-Phase 06 (Test Coverage & Quality) — Plan 03 completed: AI & Processing modules at 91% combined coverage with 121 passing tests.
+| Phase | Status |
+|-------|--------|
+| **v1.0 MILESTONE** | ✅ **COMPLETED** (Phases 1-10) |
+| 11. Topología de Grafos (NebulaGraph) | 🏃‍♂️ Planning |
+| 12. Motor Híbrido (Coarse-to-Fine) | ⏳ Pendiente |
+| 13. Reconocimiento Facial | ⏳ Pendiente |
+| 14. Sincronización P2P | ⏳ Pendiente |
 
 ## Completed Plans
 
