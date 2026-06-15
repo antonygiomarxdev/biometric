@@ -89,6 +89,8 @@ class MatchResult:
 class RidgeNode:
     x: int
     y: int
+    weight: float = 1.0          # Forensic importance (1.0 = core, decays outwards)
+    is_cutoff: bool = False      # True if it's an artificial boundary truncation
 
 @dataclass(frozen=True, slots=True)
 class RidgeEdge:

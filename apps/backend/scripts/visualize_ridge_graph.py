@@ -52,12 +52,31 @@ def _draw_graph(ax: Axes, img: np.ndarray, graph: RidgeGraph) -> None:
         # Dibujar la curva exacta usando un verde neón brillante para contraste
         ax.plot(xs_path, ys_path, color="#00FF00", linewidth=1.5, alpha=0.85)
 
-    # Dibujar nodos (Magenta brillante para bifurcaciones/terminaciones)
-    xs = [n.x for n in graph.nodes]
-    ys = [n.y for n in graph.nodes]
-    ax.scatter(xs, ys, s=20, c="#FF00FF", edgecolors="white", linewidths=0.8, zorder=3)
+    # Dibujar nodos
+    real_xs, real_ys, real_sizes = [], [], []
+    cutoff_xs, cutoff_ys = [], []
+
+    for n in graph.nodes:
+        if n.is_cutoff:
+            cutoff_xs.append(n.x)
+            cutoff_ys.append(n.y)
+        else:
+            real_xs.append(n.x)
+            real_ys.append(n.y)
+            # Escalar el tamaño visual basado en el peso forense (1.0 = gigante, 0.1 = puntito)
+            real_sizes.append(10 + (40 * n.weight))
+
+    # Dibujar Cutoffs (Basura de escáner) en Naranja con forma de 'x'
+    if cutoff_xs:
+        ax.scatter(cutoff_xs, cutoff_ys, s=25, c="#FF8800", marker="X", linewidths=1.2, zorder=4, label="Cutoff (Ignore)")
+
+    # Dibujar Minucias Auténticas en Magenta (tamaño = weight)
+    if real_xs:
+        ax.scatter(real_xs, real_ys, s=real_sizes, c="#FF00FF", edgecolors="white", linewidths=0.5, zorder=3, label="Real Minutia")
+
     ax.set_xticks([])
     ax.set_yticks([])
+    ax.legend(loc="lower right", fontsize=8, facecolor="black", edgecolor="none", labelcolor="white")
 
 
 def visualize_one(path: Path, output_dir: Path) -> Path:
