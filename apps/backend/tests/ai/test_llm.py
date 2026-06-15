@@ -1,4 +1,4 @@
-"""Tests for LLM factory and provider adapters + AiConfig.
+"""Tests for LLM factory and provider adapters.
 
 The LLM module has been simplified to always use ``OpenAICompatibleProvider``
 (the standard REST-compatible interface). This avoids vendor lock-in and
@@ -139,69 +139,3 @@ class TestLLMFactory:
                 LLMFactory.create("default")
         finally:
             LLMFactory._providers.update(saved)
-
-
-class TestAiConfig:
-    """AiConfig defaults and environment overrides."""
-
-    def test_default_values(self) -> None:
-        """Default AiConfig uses CPU provider and standard model names."""
-        from src.ai.config import AiConfig
-
-        config = AiConfig()
-        assert config.model_dir == "data/models/"
-        assert config.use_gpu is False  # conftest forces GPU=false
-        assert config.input_size == 512
-        assert config.confidence_threshold == 0.5
-        assert config.segmentation_model == "segment"
-        assert config.enhancement_model == "enhance"
-        assert config.extraction_model == "extract"
-        assert config.provider == "CPUExecutionProvider"
-
-    def test_env_overrides(self) -> None:
-        """Constructor parameters override defaults (functional equivalent of env var test).
-
-        Environment-variable defaults in ``AiConfig`` are evaluated at class
-        definition time (Python dataclass field default), not at instantiation
-        time, so ``monkeypatch.setenv`` after import has no effect.  Instead
-        we verify the constructor passes values through correctly.
-        """
-        from src.ai.config import AiConfig
-
-        config = AiConfig(
-            model_dir="/custom/models/",
-            input_size=256,
-            confidence_threshold=0.75,
-            segmentation_model="my_segment",
-        )
-        assert config.model_dir == "/custom/models/"
-        assert config.input_size == 256
-        assert config.confidence_threshold == 0.75
-        assert config.segmentation_model == "my_segment"
-
-    def test_resolve_provider_fallback_to_cpu(self) -> None:
-        """_resolve_provider returns CPU when CUDA is not available."""
-        from src.ai.config import _resolve_provider
-
-        # conftest patches torch.cuda.is_available → False
-        provider = _resolve_provider(use_gpu=True, gpu_device_id=0)
-        assert provider == "CPUExecutionProvider"
-
-    @patch("src.ai.config.torch.cuda.is_available", return_value=True)
-    @patch("src.ai.config.torch.cuda.get_device_name", return_value="Tesla T4")
-    def test_resolve_provider_cuda(
-        self, mock_get_name: MagicMock, mock_is_avail: MagicMock
-    ) -> None:
-        """_resolve_provider returns CUDA when GPU is available."""
-        from src.ai.config import _resolve_provider
-
-        provider = _resolve_provider(use_gpu=True, gpu_device_id=0)
-        assert provider == "CUDAExecutionProvider"
-        mock_get_name.assert_called_once_with(0)
-
-    def test_resolve_provider_cpu_when_gpu_not_requested(self) -> None:
-        """_resolve_provider returns CPU when use_gpu is False."""
-        from src.ai.config import _resolve_provider
-
-        provider = _resolve_provider(use_gpu=False, gpu_device_id=0)
-        assert provider == "CPUExecutionProvider"

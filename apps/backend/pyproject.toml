@@ -41,12 +41,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-ai = [
-    "torch>=2.0.0",
-    "onnx>=1.15.0",
-    "onnxruntime>=1.15.0",
-    "onnxruntime-gpu>=1.15.0",
-]
 tracing = [
     "arize-phoenix>=17.0.0",
     "opentelemetry-sdk>=1.25.0",

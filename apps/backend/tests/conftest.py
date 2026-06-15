@@ -86,40 +86,6 @@ def _mock_gpu_detection() -> Generator[None, None, None]:
 
 
 @pytest.fixture(autouse=True, scope="session")
-def _mock_onnx_runtime() -> Generator[None, None, None]:
-    """Mock ONNX Runtime ``InferenceSession`` to avoid loading real models.
-
-    Prevents ``ModelManager.load_model`` from reading ``.onnx`` files from
-    disk and creating real inference sessions.
-    """
-    with (
-        patch("onnxruntime.InferenceSession", return_value=MagicMock()),
-    ):
-        yield
-
-
-@pytest.fixture(autouse=True, scope="session")
-def _mock_model_manager() -> Generator[None, None, None]:
-    """Mock ``ModelManager`` session loading to prevent file-system access.
-
-    ``load_model`` and ``get_session`` are patched so that no code path
-    can accidentally load an ONNX model from disk during test execution.
-    """
-    fake_session = MagicMock()
-    with (
-        patch(
-            "src.ai.model_manager.ModelManager.load_model",
-            return_value=fake_session,
-        ),
-        patch(
-            "src.ai.model_manager.ModelManager.get_session",
-            return_value=fake_session,
-        ),
-    ):
-        yield
-
-
-@pytest.fixture(autouse=True, scope="session")
 def _mock_llm_api_calls() -> Generator[None, None, None]:
     """Prevent real LLM API calls by mocking the low-level HTTP client.
 

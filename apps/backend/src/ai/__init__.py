@@ -1,14 +1,6 @@
-"""AI module: ONNX model management, GPU detection, and inference configuration."""
+"""AI module: LLM-based assistant and forensic report generation.
 
-from .config import AiConfig
-from .model_manager import ModelManager
-from src.processing.enhancers.ai import SegmentationEnhancer, EnhancementEnhancer
-from src.processing.extractor import AiFeatureExtractor
-
-__all__ = [
-    "ModelManager",
-    "AiConfig",
-    "SegmentationEnhancer",
-    "EnhancementEnhancer",
-    "AiFeatureExtractor",
-]
+The legacy ONNX-based pipeline (model manager, CNN extraction /
+enhancement / segmentation) was removed in the no-legacy cleanup.
+Only LLM-driven text-to-SQL and dictamen generation remain.
+"""

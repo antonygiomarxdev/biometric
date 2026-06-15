@@ -15,7 +15,6 @@ import cv2
 import numpy as np
 
 if TYPE_CHECKING:
-    from src.ai.model_manager import ModelManager
     from src.domain.forensic_rules import IForensicValidationStrategy
 
 
@@ -409,36 +408,3 @@ class FingerprintService:
 
 
 fingerprint_service = FingerprintService()
-
-
-def create_ai_fingerprint_service(
-    model_manager: "ModelManager",
-    use_segmentation: bool = True,
-    use_enhancement: bool = True,
-    use_dl_extractor: bool = True,
-) -> FingerprintService:
-    """Create a FingerprintService configured with AI components.
-
-    Falls back to CPU components for any disabled AI stage.
-    """
-    from src.processing.enhancer import create_enhancer
-    from src.processing.extractor import AiFeatureExtractor
-    from src.ai import AiConfig
-
-    AiConfig()
-    enhancer: Optional[IEnhancer] = None
-    if use_segmentation and use_enhancement:
-        enhancer = create_enhancer("full_ai", model_manager=model_manager)
-    elif use_segmentation:
-        enhancer = create_enhancer("segmentation", model_manager=model_manager)
-    elif use_enhancement:
-        enhancer = create_enhancer("enhancement", model_manager=model_manager)
-
-    extractors: List[IFeatureExtractor] = []
-    if use_dl_extractor:
-        extractors.append(AiFeatureExtractor(model_manager))
-
-    return FingerprintService(
-        enhancer=enhancer,
-        extractors=extractors if extractors else None,
-    )
