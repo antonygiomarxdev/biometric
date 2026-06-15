@@ -1,12 +1,12 @@
 """Database ORM models and migrations."""
 
-from .models import Base, Case, Evidence, FingerprintVector, AuditLog, User
+from .models import Base, Case, Evidence, AuditLog, User, RagVectorChunk
 
 __all__ = [
     "Base",
     "Case",
     "Evidence",
-    "FingerprintVector",
     "AuditLog",
     "User",
+    "RagVectorChunk",
 ]

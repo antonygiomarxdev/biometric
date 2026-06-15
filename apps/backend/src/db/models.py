@@ -27,6 +27,9 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 import uuid6
 
 
+RAG_VECTOR_DIM: int = 9  # Must match RagTripletVectorizer.FEATURE_DIM
+
+
 class Base(DeclarativeBase):
     """Declarative base for all ORM models."""
 
@@ -121,15 +124,21 @@ class Evidence(Base):
         return f"<Evidence(id={self.id}, fingerprint_id={self.fingerprint_id})>"
 
 
-class FingerprintVector(Base):
+class RagVectorChunk(Base):
     """
-    Fingerprint vector embedding stored for similarity search via pgvector.
+    RAG chunk: a single local invariant structure (Delaunay triangle)
+    belonging to a fingerprint enrollment.
 
-    The `embedding` column uses Vector(256) with a dedicated HNSW index
-    for efficient approximate nearest-neighbour queries (per D-08).
+    Phase 10 (RAG Dactilar): a single enrolled fingerprint produces
+    many chunks (one per triangle), each with a forensic weight based
+    on its proximity to the Core. This is the 1-to-N storage that
+    powers the weighted KNN search in the matching engine.
+
+    The `embedding` column is a 9-dim Vector (3 sides + 3 angles + 3
+    type flags) matching `RagTripletVectorizer.FEATURE_DIM`.
     """
 
-    __tablename__ = "fingerprint_vectors"
+    __tablename__ = "rag_vector_chunks"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -137,41 +146,34 @@ class FingerprintVector(Base):
         default=uuid7,
         server_default=text("gen_random_uuid()"),
     )
-    evidence_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("evidences.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
     person_id: Mapped[str] = mapped_column(
         String(100), nullable=False, index=True
     )
-    name: Mapped[str] = mapped_column(String(200), nullable=False)
-    document: Mapped[str] = mapped_column(
-        String(100), nullable=False, index=True
-    )
     embedding: Mapped[list[float]] = mapped_column(
-        Vector(256), nullable=False
+        Vector(RAG_VECTOR_DIM), nullable=False
     )
-    num_minutiae: Mapped[int] = mapped_column(Integer, nullable=False)
-    minutiae_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    weight: Mapped[float] = mapped_column(
+        Float, nullable=False, default=1.0
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
 
     __table_args__ = (
         Index(
-            "idx_fingerprint_vectors_embedding",
+            "idx_rag_vector_chunks_embedding",
             embedding,
             postgresql_using="hnsw",
             postgresql_with={"m": 16, "ef_construction": 200},
             postgresql_ops={"embedding": "vector_cosine_ops"},
         ),
+        Index("idx_rag_vector_chunks_person_id", person_id),
     )
 
     def __repr__(self) -> str:
         return (
-            f"<FingerprintVector(id={self.id}, person_id={self.person_id})>"
+            f"<RagVectorChunk(id={self.id}, person_id={self.person_id}, "
+            f"weight={self.weight:.3f})>"
         )
 
 
