@@ -23,6 +23,12 @@ myenv
 # cache files
 __pycache__
 data/
+# Track model card (provenance) and metadata, but not the binary artifacts
+!data/models/MODEL_CARD.md
+!data/models/.gitkeep
+!data/training/.gitkeep
+!data/training/metadata.json
+!data/training/train_log.json
 
 .dockerignore
 

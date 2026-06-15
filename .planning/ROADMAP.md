@@ -116,11 +116,13 @@ Plans:
 - **Fase 8:** Reconocimiento Facial (Multimodal)
 - **Fase 9:** Sincronización entre múltiples laboratorios regionales.
 
-### Phase 8: Fingerprint CPU Engine Refactor (Modular Pre/Post Hooks & Fusion)
-**Goal:** Restructure the existing CPU fingerprint processing pipeline (`FingerprintService`) into a modular Hexagonal-like chain (Pre-processors -> Core Extractors -> Post-processors) to eliminate false positives (>200) without relying on AI models.
-**Status:** Not Started
-**Plans:** 3 plans
-- [ ] 08-01-PLAN.md — Define strict pipeline abstractions and implement initial pre-processing hooks.
-- [ ] 08-02-PLAN.md — Refactor core extractors and implement post-processing heuristics.
-- [ ] 08-03-PLAN.md — Refactor FingerprintService to orchestrate the new modular pipeline.
+- [x] **Phase 08:** Fingerprint CPU Engine Refactor (Modular Pre/Post Hooks & Fusion)
+- [x] **Phase 09 (ARCHIVADA/PIVOT):** Extracción IA con CNN. *Decisión: El modelo entrenado como post-processor fue archivado en favor del acercamiento geométrico experto (RAG).*
+- [x] **Phase 10 (ACTUAL):** RAG Dactilar (Matching Geométrico Vectorial)
+  - Chunking de huellas usando Triangulación de Delaunay.
+  - Asignación de pesos basados en distancia al Core.
+  - Reglas de validación forense estricta (>=8 enroll, >=2 search) vía Patrón Strategy.
+  - Relación 1-to-N en Base de Datos usando `pgvector`.
+  - Aggregation matching combinando Similitud × Peso del Chunk.
+  - Blueprint arquitectónico documentado: Escalamiento a 50M+ huellas vía Embudo Coarse-to-Fine y Caching (Redis).
 

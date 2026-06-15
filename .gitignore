@@ -45,3 +45,7 @@ data/
 *.png
 .env
 .env.local
+
+# Internal Tools
+.codegraph/
+.playwright-mcp/

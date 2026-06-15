@@ -45,13 +45,6 @@ tracing = [
     "opentelemetry-sdk>=1.25.0",
     "openinference-instrumentation-llama-index>=4.0.0",
 ]
-dev = [
-    "pytest>=7.4.0",
-    "pytest-asyncio>=0.21.0",
-    "pytest-cov>=4.1.0",
-    "ruff>=0.1.0",
-    "mypy>=1.7.0",
-]
 
 [project.scripts]
 biometric = "src.api.cli:cli"
@@ -123,4 +116,10 @@ exclude_lines = [
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "hypothesis>=6.100.0",
+    "ruff>=0.1.0",
+    "mypy>=1.7.0",
 ]
