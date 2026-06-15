@@ -41,20 +41,21 @@ def _draw_graph(ax: Axes, img: np.ndarray, graph: RidgeGraph) -> None:
         verticalalignment='top', bbox=dict(boxstyle='round', facecolor='black', alpha=0.6)
     )
 
-    # Dibujar aristas topológicas (Cian)
+    # Dibujar aristas topológicas (siguiendo la curva real de la cresta)
     for edge in graph.edges:
-        if edge.source >= len(graph.nodes) or edge.target >= len(graph.nodes):
+        if not edge.path:
             continue
-        sx = graph.nodes[edge.source].x
-        sy = graph.nodes[edge.source].y
-        tx = graph.nodes[edge.target].x
-        ty = graph.nodes[edge.target].y
-        ax.plot([sx, tx], [sy, ty], color="cyan", linewidth=0.8, alpha=0.8)
+        # Extraer todos los puntos de la curva
+        xs_path = [p[0] for p in edge.path]
+        ys_path = [p[1] for p in edge.path]
+        
+        # Dibujar la curva exacta usando un verde neón brillante para contraste
+        ax.plot(xs_path, ys_path, color="#00FF00", linewidth=1.5, alpha=0.85)
 
-    # Dibujar nodos (Magenta para bifurcaciones/terminaciones)
+    # Dibujar nodos (Magenta brillante para bifurcaciones/terminaciones)
     xs = [n.x for n in graph.nodes]
     ys = [n.y for n in graph.nodes]
-    ax.scatter(xs, ys, s=15, c="#FF00FF", edgecolors="white", linewidths=0.5, zorder=3)
+    ax.scatter(xs, ys, s=20, c="#FF00FF", edgecolors="white", linewidths=0.8, zorder=3)
     ax.set_xticks([])
     ax.set_yticks([])
 
