@@ -45,6 +45,10 @@ data/
 output_*.png
 output_*.jpg
 *.BMP.png
+tests/output_visual/
+
+# Track curated SOCOFing fixtures (10 images, ~400KB total)
+!tests/fixtures/socofing_real/*.BMP
 
 # Docker
 .dockerignore

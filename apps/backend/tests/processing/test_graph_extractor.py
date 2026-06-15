@@ -1,10 +1,25 @@
+"""Tests for the RidgeGraphExtractor.
+
+Covers synthetic patterns, real SOCOFing images from
+``tests/fixtures/socofing_real/`` (10 images, 2 persons x 5 fingers,
+tracked in git for portable CI).
+"""
+
 from __future__ import annotations
 
+from pathlib import Path
+
+import cv2
 import numpy as np
 import pytest
 
 from src.core.interfaces import PipelineContext
 from src.core.types import RidgeEdge, RidgeGraph, RidgeNode
+
+
+SOCOFING_FIXTURES = (
+    Path(__file__).resolve().parents[1] / "fixtures" / "socofing_real"
+)
 
 
 @pytest.fixture
@@ -26,6 +41,28 @@ def vertical_ridges() -> np.ndarray:
     for x in range(5, 50, 7):
         img[:, x : x + 3] = 255
     return img
+
+
+@pytest.fixture
+def socofing_image_paths() -> list[Path]:
+    if not SOCOFING_FIXTURES.exists():
+        pytest.skip(f"SOCOFing fixtures not found: {SOCOFING_FIXTURES}")
+    paths = sorted(SOCOFING_FIXTURES.glob("*.BMP"))
+    if not paths:
+        pytest.skip("No SOCOFing .BMP fixtures in tests/fixtures/socofing_real/")
+    return paths
+
+
+def _load_graph(path: Path) -> RidgeGraph:
+    from src.processing.graph_extractor import RidgeGraphExtractor
+
+    img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    assert img is not None, f"Could not load {path}"
+    extractor = RidgeGraphExtractor()
+    ctx = PipelineContext(raw_image=img)
+    extractor.process(ctx)
+    assert ctx.ridge_graph is not None
+    return ctx.ridge_graph
 
 
 class TestRidgeGraphExtractor:
@@ -139,3 +176,72 @@ class TestRidgeGraphExtractor:
 
         assert ctx.ridge_graph is not None
         assert ctx.ridge_graph.num_nodes >= 5
+
+    def test_fingerprint_like_pattern_produces_connected_graph(self) -> None:
+        from src.processing.graph_extractor import RidgeGraphExtractor
+
+        rng = np.random.default_rng(seed=42)
+        img = np.zeros((150, 150), dtype=np.uint8)
+        cx, cy = 75, 75
+        for angle in np.linspace(0, 2 * np.pi, 30, endpoint=False):
+            for r in range(20, 70, 3):
+                x = int(cx + r * np.cos(angle))
+                y = int(cy + r * np.sin(angle))
+                if 0 <= x < 150 and 0 <= y < 150:
+                    img[y - 1 : y + 2, x - 1 : x + 2] = 255
+
+        extractor = RidgeGraphExtractor()
+        ctx = PipelineContext(raw_image=img)
+        extractor.process(ctx)
+
+        assert ctx.ridge_graph is not None
+        assert ctx.ridge_graph.num_nodes > 10
+        assert ctx.ridge_graph.num_edges > 10
+        for edge in ctx.ridge_graph.edges:
+            assert edge.source != edge.target
+            assert 0 <= edge.source < ctx.ridge_graph.num_nodes
+            assert 0 <= edge.target < ctx.ridge_graph.num_nodes
+
+
+class TestRidgeGraphExtractorSOCOFing:
+    """Real-world validation using curated SOCOFing fixtures."""
+
+    def test_all_fixtures_produce_non_empty_graphs(
+        self, socofing_image_paths: list[Path]
+    ) -> None:
+        for path in socofing_image_paths:
+            graph = _load_graph(path)
+            assert not graph.is_empty(), f"{path.name} produced empty graph"
+            assert graph.num_nodes > 0
+            assert graph.num_edges > 0
+
+    def test_fixtures_have_consistent_node_density(
+        self, socofing_image_paths: list[Path]
+    ) -> None:
+        node_counts: list[int] = []
+        for path in socofing_image_paths:
+            graph = _load_graph(path)
+            node_counts.append(graph.num_nodes)
+
+        assert len(node_counts) == 10
+        mean_nodes = float(np.mean(node_counts))
+        assert mean_nodes > 10, f"Mean node count too low: {mean_nodes}"
+        assert max(node_counts) < mean_nodes * 5, "Outlier in node count"
+
+    def test_fixtures_produce_connected_components(
+        self, socofing_image_paths: list[Path]
+    ) -> None:
+        for path in socofing_image_paths:
+            graph = _load_graph(path)
+            if graph.num_edges == 0:
+                continue
+            for edge in graph.edges:
+                assert 0 <= edge.source < graph.num_nodes
+                assert 0 <= edge.target < graph.num_nodes
+
+    def test_per_image_extraction(self, socofing_image_paths: list[Path]) -> None:
+        for path in socofing_image_paths[:3]:
+            graph = _load_graph(path)
+            assert graph.num_nodes >= 20, (
+                f"{path.name}: too few nodes ({graph.num_nodes}) for real fingerprint"
+            )
