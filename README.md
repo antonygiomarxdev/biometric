@@ -50,7 +50,9 @@ graph TD
 
 ## 🔎 RAG Dactilar: Cómo encontramos latentes rotas
 
-En lugar de extraer un solo vector para toda la huella, Biometric extrae múltiples "Párrafos" (Triángulos), como en un sistema RAG de texto.
+En lugar de extraer un solo vector para toda la huella, Biometric extrae múltiples "Párrafos" (Triángulos), como en un sistema RAG de texto. El sistema asigna automáticamente mayor peso probatorio (colores cálidos) a las estructuras que rodean el núcleo de la huella.
+
+![Mapa de Triangulación RAG Dactilar](docs/assets/rag_map.png)
 
 ```mermaid
 graph LR
