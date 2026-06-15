@@ -1,6 +1,11 @@
 __init__
+ai
 api
 core
+db
+gpu_utils
+main
 processing
+schemas
 services
 storage

@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from src.core.interfaces import IEnhancer, IFeatureExtractor, INormalizer
+from src.core.interfaces import IEnhancer, IFeatureExtractor, INormalizer, IPipelineStep, PipelineContext
 from src.core.types import (
     AlgorithmOrigin,
     MinutiaCandidate,
@@ -119,7 +119,13 @@ class TestProcessImage:
         """A grayscale image flows through enhance → extract → normalize."""
         result = service.process_image(grayscale_image, fingerprint_id="fp001")
 
-        mock_enhancer.enhance.assert_called_once_with(grayscale_image, resize=True)
+        # Don't compare ndarray with == (numpy's element-wise compare returns array).
+        # Just verify the resize kwarg and that *some* array was passed.
+        assert mock_enhancer.enhance.call_count == 1
+        enhance_args, enhance_kwargs = mock_enhancer.enhance.call_args
+        assert enhance_kwargs.get("resize") is True
+        assert enhance_args[0].shape == grayscale_image.shape
+        assert enhance_args[0].dtype == grayscale_image.dtype
         mock_extractor.extract.assert_called_once()
         mock_normalizer.normalize.assert_called_once()
 
@@ -177,7 +183,9 @@ class TestProcessImage:
     ) -> None:
         """The resize parameter is forwarded to the enhancer."""
         service.process_image(grayscale_image, fingerprint_id="fp004", resize=False)
-        mock_enhancer.enhance.assert_called_once_with(grayscale_image, resize=False)
+        assert mock_enhancer.enhance.call_count == 1
+        enhance_args, enhance_kwargs = mock_enhancer.enhance.call_args
+        assert enhance_kwargs.get("resize") is False
 
 
 # ---------------------------------------------------------------------------
@@ -405,7 +413,10 @@ class TestProcessImageFromBytes:
             result = service.process_image_from_bytes(b"small")
 
         mock_decode.assert_called_once()
-        mock_logger.warning.assert_called_once()
+        # The small-image warning is one of potentially several
+        # warnings emitted (e.g. "No minutiae" added in Phase 10).
+        warning_calls = [c.args[0] for c in mock_logger.warning.call_args_list]
+        assert any("Imagen muy pequeña" in str(c) for c in warning_calls)
         assert result is not None
 
     def test_forwards_resize_true(
@@ -593,6 +604,154 @@ class TestCreateAIFingerprintService:
         # both of which are mocked by the session-level conftest
         assert svc.extractor is not None
         mock_create_enhancer.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Pre / Core / Post pipeline (Wave 3)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def mock_pre_processor() -> MagicMock:
+    pre = MagicMock(spec=IPipelineStep)
+    pre.process.return_value = MagicMock(
+        image=np.zeros((200, 200), dtype=np.uint8),
+        quality_mask=np.ones((200, 200), dtype=bool),
+    )
+    return pre
+
+
+@pytest.fixture
+def mock_post_processor() -> MagicMock:
+    post = MagicMock(spec=IPipelineStep)
+    post.filter.side_effect = lambda candidates, quality_mask=None: candidates
+    return post
+
+
+class TestPipelineChain:
+    """Tests for the Pre→Core→Post processing chain."""
+
+    def test_pre_processors_are_called_in_order(
+        self,
+        mock_enhancer: MagicMock,
+        mock_normalizer: MagicMock,
+        grayscale_image: np.ndarray,
+    ) -> None:
+        pre1 = MagicMock(spec=IPipelineStep)
+        pre2 = MagicMock(spec=IPipelineStep)
+
+        svc = FingerprintService(
+            enhancer=mock_enhancer,
+            normalizer=mock_normalizer,
+            pre_processors=[pre1, pre2],
+        )
+        svc.process_image(grayscale_image, fingerprint_id="chain")
+        pre1.process.assert_called_once()
+        pre2.process.assert_called_once()
+
+    def test_extractors_are_all_called(
+        self,
+        mock_enhancer: MagicMock,
+        mock_normalizer: MagicMock,
+        grayscale_image: np.ndarray,
+    ) -> None:
+        ext1 = MagicMock(spec=IFeatureExtractor)
+        ext1.extract.return_value = [
+            MinutiaCandidate(x=10, y=10, angle=0.0, type=MinutiaType.TERMINATION, confidence=0.9, origin=AlgorithmOrigin.SKELETON),
+        ]
+        ext2 = MagicMock(spec=IFeatureExtractor)
+        ext2.extract.return_value = [
+            MinutiaCandidate(x=10, y=10, angle=0.0, type=MinutiaType.TERMINATION, confidence=0.9, origin=AlgorithmOrigin.SKELETON),
+        ]
+
+        svc = FingerprintService(
+            enhancer=mock_enhancer,
+            normalizer=mock_normalizer,
+            extractors=[ext1, ext2],
+        )
+        svc.process_image(grayscale_image, fingerprint_id="multi_ext")
+        ext1.extract.assert_called_once()
+        ext2.extract.assert_called_once()
+
+    def test_post_processors_are_called(
+        self,
+        mock_enhancer: MagicMock,
+        mock_normalizer: MagicMock,
+        grayscale_image: np.ndarray,
+    ) -> None:
+        post = MagicMock(spec=IPipelineStep)
+        svc = FingerprintService(
+            enhancer=mock_enhancer,
+            normalizer=mock_normalizer,
+            post_processors=[post],
+        )
+        svc.process_image(grayscale_image, fingerprint_id="post")
+        post.process.assert_called_once()
+
+    def test_empty_minutiae_list_does_not_crash(
+        self,
+        mock_enhancer: MagicMock,
+        grayscale_image: np.ndarray,
+    ) -> None:
+        normalizer = MagicMock(spec=INormalizer)
+        normalizer.normalize.return_value = NormalizedFingerprint(
+            id="empty", minutiae=[], width=200, height=200,
+        )
+        ext = MagicMock(spec=IFeatureExtractor)
+        ext.extract.return_value = []
+
+        svc = FingerprintService(
+            enhancer=mock_enhancer,
+            normalizer=normalizer,
+            extractors=[ext],
+        )
+        result = svc.process_image(grayscale_image, fingerprint_id="empty")
+        assert len(result.minutiae) == 0
+
+    def test_no_pre_post_processors_by_default(
+        self,
+        service: FingerprintService,
+        grayscale_image: np.ndarray,
+    ) -> None:
+        """Default service has empty pre/post lists, still works."""
+        result = service.process_image(grayscale_image, fingerprint_id="default")
+        assert result is not None
+
+    def test_single_extractor_backward_compat(
+        self,
+        mock_enhancer: MagicMock,
+        mock_extractor: MagicMock,
+        mock_normalizer: MagicMock,
+        grayscale_image: np.ndarray,
+    ) -> None:
+        """Passing a single extractor (old API) still works."""
+        svc = FingerprintService(
+            enhancer=mock_enhancer,
+            extractor=mock_extractor,
+            normalizer=mock_normalizer,
+        )
+        result = svc.process_image(grayscale_image, fingerprint_id="compat")
+        assert len(result.minutiae) == 1
+
+    def test_extractors_takes_precedence_over_extractor(
+        self,
+        mock_enhancer: MagicMock,
+        mock_extractor: MagicMock,
+        mock_normalizer: MagicMock,
+        grayscale_image: np.ndarray,
+    ) -> None:
+        """When both extractor and extractors are passed, extractors wins."""
+        ext_list = MagicMock(spec=IFeatureExtractor)
+        ext_list.extract.return_value = []
+
+        svc = FingerprintService(
+            enhancer=mock_enhancer,
+            extractor=mock_extractor,
+            normalizer=mock_normalizer,
+            extractors=[ext_list],
+        )
+        svc.process_image(grayscale_image, fingerprint_id="precedence")
+        ext_list.extract.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

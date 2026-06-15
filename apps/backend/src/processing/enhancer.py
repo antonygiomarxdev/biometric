@@ -12,6 +12,7 @@ from src.core.interfaces import IEnhancer
 from src.processing.enhancers.ai import EnhancementEnhancer, SegmentationEnhancer
 from src.processing.enhancers.base import EnhancerConfig
 from src.processing.enhancers.cpu import CpuEnhancer
+from src.processing.enhancers.gpu import GpuEnhancer
 
 logger = logging.getLogger(__name__)
 

@@ -24,6 +24,20 @@ Requires-Dist: click>=8.1.0
 Requires-Dist: tqdm>=4.66.0
 Requires-Dist: matplotlib>=3.8.0
 Requires-Dist: minio>=7.2.20
+Requires-Dist: python-jose[cryptography]>=3.3.0
+Requires-Dist: passlib[bcrypt]>=1.7.4
+Requires-Dist: bcrypt<4.1,>=4.0
+Requires-Dist: weasyprint>=62.0
+Provides-Extra: ai
+Requires-Dist: torch>=2.0.0; extra == "ai"
+Requires-Dist: torchvision>=0.15.0; extra == "ai"
+Requires-Dist: onnxruntime>=1.15.0; extra == "ai"
+Requires-Dist: onnxruntime-gpu>=1.15.0; extra == "ai"
+Requires-Dist: segmentation-models-pytorch>=0.3.0; extra == "ai"
+Provides-Extra: tracing
+Requires-Dist: arize-phoenix>=17.0.0; extra == "tracing"
+Requires-Dist: opentelemetry-sdk>=1.25.0; extra == "tracing"
+Requires-Dist: openinference-instrumentation-llama-index>=4.0.0; extra == "tracing"
 Provides-Extra: dev
 Requires-Dist: pytest>=7.4.0; extra == "dev"
 Requires-Dist: pytest-asyncio>=0.21.0; extra == "dev"
