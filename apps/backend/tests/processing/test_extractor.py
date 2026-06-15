@@ -1,4 +1,4 @@
-"""Tests for feature extractors: Skeleton, GradientRidge, and AI.
+"""Tests for feature extractors: Skeleton and AI.
 
 All ONNX inference is mocked via the session-scoped conftest fixtures.
 Skeleton extraction tests use synthetic binary images with known
@@ -213,54 +213,6 @@ class MockMinutia:
         self.type = MinutiaType.TERMINATION
         self.confidence = 1.0
         self.origin = AlgorithmOrigin.SKELETON
-
-
-# ---------------------------------------------------------------------------
-# HarrisCornerExtractor
-# ---------------------------------------------------------------------------
-
-
-class TestHarrisCornerExtractor:
-    """Harris-corner-based extractor."""
-
-    def test_extract_returns_candidates(
-        self, ridge_image: np.ndarray
-    ) -> None:
-        """extract returns a list of candidates for a ridge image."""
-        from src.processing.extractor import HarrisCornerExtractor
-
-        extractor = HarrisCornerExtractor()
-        candidates = extractor.extract(ridge_image)
-
-        assert isinstance(candidates, list)
-        if len(candidates) > 0:
-            c = candidates[0]
-            assert isinstance(c.x, int)
-            assert isinstance(c.y, int)
-            assert c.confidence == 0.7
-            assert c.type == MinutiaType.BIFURCATION
-
-    def test_extract_blank_image(self, blank_binary: np.ndarray) -> None:
-        from src.processing.extractor import HarrisCornerExtractor
-
-        extractor = HarrisCornerExtractor()
-        candidates = extractor.extract(blank_binary)
-        assert isinstance(candidates, list)
-
-    def test_extract_with_high_contrast_image_finds_corners(
-        self,
-    ) -> None:
-        from src.processing.extractor import HarrisCornerExtractor
-
-        extractor = HarrisCornerExtractor()
-        img = np.zeros((60, 60), dtype=np.uint8)
-        img[10:50, 10:50] = 255
-        candidates = extractor.extract(img)
-        assert isinstance(candidates, list)
-        if len(candidates) > 0:
-            c = candidates[0]
-            assert isinstance(c.x, int)
-            assert isinstance(c.y, int)
 
 
 # ---------------------------------------------------------------------------

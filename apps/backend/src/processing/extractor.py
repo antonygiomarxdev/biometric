@@ -5,7 +5,6 @@ Clean Code: Implementación de IFeatureExtractor con tipos estrictos.
 Available extractors
 --------------------
 * :class:`SkeletonMinutiaeExtractor` — traditional Crossing Number on skeleton
-* :class:`GradientRidgeExtractor` — Harris-corner-based validation cross-check
 * :class:`AiFeatureExtractor` — deep-learning extraction via ONNX Runtime
 """
 
@@ -491,50 +490,6 @@ class SkeletonMinutiaeExtractor:
             )
 
         return filtered
-
-
-class GradientRidgeExtractor:
-    """
-    Extractor basado en Harris Corner Detection para encontrar puntos de interés (bifurcaciones/terminaciones)
-    directamente en la imagen mejorada, sin esqueletización.
-    Útil como validación cruzada.
-    """
-
-    def extract(self, image: np.ndarray) -> list[MinutiaCandidate]:
-        import cv2
-
-        # Harris detecta esquinas (cambios fuertes en dos direcciones)
-        # Esto correlaciona bien con bifurcaciones y terminaciones
-        dst = cv2.cornerHarris(image, 2, 3, 0.04)
-        dst = cv2.dilate(dst, None)
-
-        # Umbralización relativa
-        thresh = 0.01 * dst.max()
-        ret, dst_bin = cv2.threshold(dst, thresh, 255, 0)
-        dst_bin = np.uint8(dst_bin)
-
-        # Encontrar centroides de las esquinas detectadas
-        ret, labels, stats, centroids = cv2.connectedComponentsWithStats(dst_bin)
-
-        candidates = []
-        # El label 0 es el fondo
-        for i in range(1, ret):
-            x, y = centroids[i]
-
-            # Harris no distingue tipo, asumimos Bifurcación (mayor complejidad local)
-            # Confianza menor que Skeleton
-            candidates.append(
-                MinutiaCandidate(
-                    x=int(x),
-                    y=int(y),
-                    angle=0.0,  # Harris no da orientación directa
-                    type=MinutiaType.BIFURCATION,
-                    confidence=0.7,
-                    origin=AlgorithmOrigin.GABOR,  # Usamos GABOR como proxy de "no-skeleton"
-                )
-            )
-
-        return candidates
 
 
 class AiFeatureExtractor:
