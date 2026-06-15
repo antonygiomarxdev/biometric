@@ -15,14 +15,54 @@ services:
               count: all
               capabilities: [gpu]
 
+  nebula-metad:
+    image: vesoft/nebula-metad:v3.8.0
+    container_name: biometric_nebula_metad
+    restart: unless-stopped
+    environment:
+      USER: root
+      TZ: UTC
+    volumes:
+      - nebula_meta_data:/usr/local/nebula/data/meta
+
+  nebula-storaged:
+    image: vesoft/nebula-storaged:v3.8.0
+    container_name: biometric_nebula_storaged
+    restart: unless-stopped
+    depends_on:
+      - nebula-metad
+    environment:
+      USER: root
+      TZ: UTC
+    volumes:
+      - nebula_storage_data:/usr/local/nebula/data/storage
+
+  nebula-graphd:
+    image: vesoft/nebula-graphd:v3.8.0
+    container_name: biometric_nebula_graphd
+    restart: unless-stopped
+    depends_on:
+      - nebula-metad
+      - nebula-storaged
+    ports:
+      - "9669:9669"
+    environment:
+      USER: root
+      TZ: UTC
+    volumes:
+      - nebula_graph_data:/usr/local/nebula/data/graph
+
   backend:
     depends_on:
       - ollama
+      - nebula-graphd
     environment:
       LLM_API_BASE: http://ollama:11434/v1
       LLM_MODEL_NAME: llama3
       COMPLIANCE_STRATEGY: extreme
       STORAGE_ENCRYPTION_KEY: "${STORAGE_ENCRYPTION_KEY:-}"
+      NEBULA_HOST: nebula-graphd
+      NEBULA_PORT: "9669"
     deploy:
       resources:
         reservations:
@@ -33,3 +73,9 @@ services:
 
 volumes:
   ollama_data:
+  nebula_meta_data:
+    name: biometric_nebula_meta_data
+  nebula_storage_data:
+    name: biometric_nebula_storage_data
+  nebula_graph_data:
+    name: biometric_nebula_graph_data
