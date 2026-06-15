@@ -152,3 +152,9 @@
 ---
 *Requirements defined: 2025-06-12*
 *Last updated: 2026-06-13*
+
+## Phase 11: Hexagonal Graph Topology (Minutiae Stars)
+- **PHASE11-01**: The system must validate Voronoi topological graph extraction and subgraph isomorphism in an isolated spike.
+- **PHASE11-02**: The system must store enrolled fingerprint graphs (nodes and edges) as JSONB structures in PostgreSQL.
+- **PHASE11-03**: The system must match a latent fingerprint graph against enrolled graphs using NetworkX Subgraph Isomorphism.
+- **PHASE11-04**: The system must provide REST API endpoints to enroll full graphs and query matches using partial latent graphs.

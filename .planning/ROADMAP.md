@@ -111,10 +111,20 @@ Plans:
 4. **Integración con Scanner:** Soporte para captura en vivo (operación policial).
 
 ---
-## Fases Futuras (Post-Fase 4)
+## Fases Futuras (Post-Fase 10)
 
-- **Fase 8:** Reconocimiento Facial (Multimodal)
-- **Fase 9:** Sincronización entre múltiples laboratorios regionales.
+### Phase 11: Hexagonal Graph Topology (Minutiae Stars)
+**Goal:** As a forensic examiner, I want to match latent fingerprints using topological graph structures (Voronoi) so that matches are robust against non-linear elastic skin stretching.
+**Requirements:** [PHASE11-01, PHASE11-02, PHASE11-03, PHASE11-04]
+**Plans:** 4 plans
+Plans:
+- [ ] 11-01-PLAN.md — Spike and TopologicalGraphBuilder
+- [ ] 11-02-PLAN.md — PostgreSQL JSONB Storage
+- [ ] 11-03-PLAN.md — NetworkX Subgraph Matching Service
+- [ ] 11-04-PLAN.md — API Endpoints & E2E Testing
+
+- [ ] **Phase 12:** Reconocimiento Facial (Multimodal)
+- [ ] **Phase 13:** Sincronización entre múltiples laboratorios regionales.
 
 - [x] **Phase 08:** Fingerprint CPU Engine Refactor (Modular Pre/Post Hooks & Fusion)
 - [x] **Phase 09 (ARCHIVADA/PIVOT):** Extracción IA con CNN. *Decisión: El modelo entrenado como post-processor fue archivado en favor del acercamiento geométrico experto (RAG).*
