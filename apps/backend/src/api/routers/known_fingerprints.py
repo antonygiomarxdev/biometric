@@ -1,21 +1,17 @@
 """
-Router for known fingerprint records (``/api/v1/known-fingerprints``).
+RAG-based known fingerprint enrollment router.
 
-Per D-02, D-03:
-  - One router per resource, mounted under ``/api/v1/known-fingerprints``.
-  - Injects ``get_db`` and the lifespan-managed ``ProcessPoolExecutor``
-    via ``Depends(get_db)`` and the ``MatchingService`` dependency.
+Phase 10 (RAG Dactilar): replaces the legacy single-vector flow.
+The endpoint accepts a fingerprint image, runs the full RAG pipeline
+via :class:`RagMatchingService.enroll_async`, and persists weighted
+Delaunay-chunk vectors in the ``rag_vector_chunks`` table.
 
-Endpoints:
-  - ``POST /`` — Upload and register a known (ten-print) fingerprint record.
-
-Per CA-03:
-  - The router is an anemic HTTP controller — all business logic and
-    persistence is delegated to ``MatchingService.register_known()``.
-  - The router MUST NOT import ``FingerprintVector`` or call ``db.add()``,
-    ``db.commit()``, or ``db.refresh()``.
+Per Clean Architecture (CA-03):
+  - The router is an anemic HTTP controller — it extracts the file
+    payload and delegates to the service layer.
+  - The router MUST NOT call ``db.add()`` or import any SQLAlchemy
+    model directly.
 """
-
 from __future__ import annotations
 
 import logging
@@ -25,7 +21,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_db, resources
-from src.services.matching_service import MatchingService
+from src.services.rag_matching_service import RagMatchingService
 
 logger = logging.getLogger(__name__)
 
@@ -35,57 +31,41 @@ router = APIRouter(
 )
 
 
-def _get_matching_service() -> MatchingService:
-    """
-    Dependency provider for ``MatchingService``.
-
-    Uses the application-scoped ``ProcessPoolExecutor`` from the lifespan
-    manager so CPU-heavy processing never blocks the event loop.
-    """
-    return MatchingService(pool=resources.process_pool)
+def _get_rag_matching_service() -> RagMatchingService:
+    """Dependency provider for :class:`RagMatchingService`."""
+    return RagMatchingService(pool=resources.process_pool)
 
 
 @router.post("/")
-async def upload_known(
+async def enroll_known(
     person_id: str = Form(..., description="External person identifier"),
-    name: str = Form(..., description="Full name of the person"),
-    document: str = Form(..., description="Document number (e.g. DNI, passport)"),
     file: UploadFile = File(..., description="Fingerprint image (BMP, PNG, JPEG)"),
     db: Session = Depends(get_db),
-    matching: MatchingService = Depends(_get_matching_service),
+    matching: RagMatchingService = Depends(_get_rag_matching_service),
 ) -> dict[str, Any]:
+    """Enroll a known fingerprint into the RAG chunk store.
+
+    The forensic validation rule (``EnrollmentValidationStrategy``)
+    is enforced inside the service layer: prints with fewer than
+    8 minutiae are rejected before any database write.
     """
-    Upload and register a known (ten-print) fingerprint record.
-
-    Delegates all business logic and persistence to
-    ``MatchingService.register_known()``.  The router only:
-      1. Extracts file bytes from the request.
-      2. Delegates to the service layer.
-      3. Returns the registration summary as a JSON response.
-
-    Returns the allocated database IDs together with extraction metadata.
-    """
-    logger.info("Registering known print — person_id=%s, name=%s", person_id, name)
-
+    logger.info("RAG enrollment — person_id=%s", person_id)
     image_bytes = await file.read()
     if not image_bytes:
         raise HTTPException(status_code=400, detail="Empty file uploaded")
 
-    # Full pipeline: extract, vectorise, persist via the service layer
-    result = await matching.register_known(
+    result = await matching.enroll_async(
         image_bytes=image_bytes,
         person_id=person_id,
-        name=name,
-        document=document,
         db=db,
     )
-
     return {
         "success": True,
-        "vector_id": str(result.vector_id),
         "person_id": result.person_id,
-        "name": result.name,
-        "document": result.document,
-        "minutiae_count": result.minutiae_count,
-        "message": f"Known fingerprint registered for {result.name}",
+        "chunks_inserted": result.chunks_inserted,
+        "total_weight": result.total_weight,
+        "message": (
+            f"Enrolled {result.person_id} into RAG store with "
+            f"{result.chunks_inserted} chunks"
+        ),
     }
