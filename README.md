@@ -64,8 +64,8 @@ graph LR
     Triplet1 --> HNSW[Búsqueda en pgvector\nCosine Distance]
     Triplet2 --> HNSW
     
-    HNSW --> Agg[Suma: (Similitud × Peso)]
-    Agg --> Match[🏆 Match Exacto]
+    HNSW --> Agg["Suma: (Similitud × Peso)"]
+    Agg --> Match["🏆 Match Exacto"]
 ```
 
 ---
