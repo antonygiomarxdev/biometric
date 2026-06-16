@@ -1,6 +1,6 @@
 # Roadmap: Biometric
 
-**Created:** 2025-06-12 | **Updated:** 2026-06-15
+**Created:** 2025-06-12 | **Updated:** 2026-06-16
 **Strategy:** Entregas Verticales (Vertical Slices) agresivas. Arquitectura evolutiva regida por la doctrina "No Legacy" (código obsoleto se destruye).
 
 ---
@@ -15,30 +15,22 @@
 - [x] **Phase 05:** Clean Architecture & Coverage
 - [x] **Phase 06:** Testing y QA (100% Core coverage)
 - [x] **Phase 07:** Despliegue e Infraestructura
-- [x] **Phase 08:** Fingerprint CPU Engine Refactor (Modular Pre/Post Hooks & Fusion)
-- [x] **Phase 09 (ARCHIVADA/PIVOT):** Extracción IA con CNN. *Descartada por RAG Matemático.*
-- [x] **Phase 10:** RAG Dactilar (Matching Geométrico Vectorial 1-to-N con `pgvector`).
+- [x] **Phase 08:** Fingerprint CPU Engine Refactor
+- [x] **Phase 09:** Extracción IA con CNN (Archivada)
+- [x] **Phase 10:** RAG Dactilar (pgvector)
 
 ---
 
 ## 🚀 MILESTONE: v2.0 Alpha (ACTUAL)
 *Escalamiento a 50M+ Huellas mediante Persistencia Políglota y Topología de Grafos.*
 
-- [ ] **Phase 11:** Topología de Grafos y "Micelio Dactilar" (NebulaGraph)
-  - Extraer el esqueleto de crestas continuas de la huella en lugar de minucias aisladas (librería `sknw`).
-  - Modelar la huella como un Grafo Topológico continuo (Minutiae Stars / Ridge Skeleton Graph) tolerante a estiramiento elástico.
-  - Implementar persistencia políglota: Desplegar **NebulaGraph** para búsquedas de Isomorfismo de Subgrafos.
-  - Destruir y purgar el motor antiguo (Phase 10 RAG Dactilar) siguiendo la doctrina "No Legacy" una vez que el motor de Grafos pruebe superioridad matemática.
-- [ ] **Phase 12:** Motor de Búsqueda Híbrido (Coarse-to-Fine)
-  - Filtro veloz con embeddings generados a partir de los grafos.
-  - Integración de Caching en memoria (Redis/Memcached).
-- [ ] **Phase 13:** Reconocimiento Facial (Multimodal)
-- [ ] **Phase 14:** Sincronización P2P entre laboratorios regionales.
-
-- [x] **Phase 12:** Motor de Búsqueda Híbrido
-- [x] **Phase 13:** Reconocimiento Facial
-- [x] **Phase 14:** Infraestructura Qdrant
-- [x] **Phase 15:** Rag Matching Service
-- [x] **Phase 16:** Fingerprint Configuration
-- [x] **Phase 17:** Person/Capture Data Model
-- [ ] **Phase 18 (ACTUAL):** Siguiente Iteración
+- [x] **Phase 11:** Topología de Grafos y "Micelio Dactilar" (NebulaGraph)
+- [x] **Phase 12:** Forensic Standards (Orientation Field & MCC)
+- [x] **Phase 13:** Pristine Extraction (Gabor & Spurious Filtering)
+- [x] **Phase 14:** Robust Singularity Detection (Core & Delta)
+- [x] **Phase 15:** Qdrant-based Chunked Indexing (Delaunay-BoW)
+- [x] **Phase 16:** Spike: Security & Async DB Migration (Argon2id + AsyncSession)
+- [x] **Phase 17:** Person / Fingerprint / Capture — Forensic Data Model
+- [ ] **Phase 18 (ACTUAL):** Siguiente Iteración (Definir Plan)
+- [ ] **Phase 19:** Reconocimiento Facial (Multimodal)
+- [ ] **Phase 20:** Sincronización P2P entre laboratorios regionales
