@@ -18,14 +18,16 @@ import numpy as np
 
 from src.core.types import MccCylinder, RidgeGraph
 
-# Cylinder geometry constants
-_CYLINDER_RADIUS: int = 40        # pixels
+# Cylinder geometry constants — Latent-optimised
+# Standard (Cappelli 2010): R=50, latent (Ferrara et al.): R=70-80 multi-radius
+_CYLINDER_RADIUS: int = 70        # pixels (larger cylinder for latents)
 _CELL_SIZE: int = 8               # pixel per spatial cell
 _DIR_BINS: int = 6                # directional bins covering [0, π)
-_N_SPATIAL: int = 2 * _CYLINDER_RADIUS // _CELL_SIZE + 1  # 11
+_N_SPATIAL: int = 2 * _CYLINDER_RADIUS // _CELL_SIZE + 1  # 18 radial × 18 angular
 
-# LSSR consolidation constants (from Cappelli et al. 2010)
-NREL: int = 5          # number of reinforcement iterations
+# LSSR consolidation constants — Latent-optimised
+# (Cappelli et al. 2010 + Ferrara Forensic adaptation)
+NREL: int = 8          # reinforcement iterations (standard=5, latent=8-10)
 WR: float = 0.6        # weight of original score in reinforcement
 # NOTE: TAU_P1 (distance tolerance) is set dynamically based on
 # the actual scale of the graph (median inter-minutiae distance).
@@ -34,8 +36,8 @@ WR: float = 0.6        # weight of original score in reinforcement
 MU_P1: float = 0.0
 MU_P2: float = 0.0
 MU_P3: float = 0.0
-TAU_P2: float = 0.4    # radian tolerance for orientation difference
-TAU_P3: float = 0.4    # radian tolerance for angle difference
+TAU_P2: float = 0.52   # radians (≈30° = π/6) — wider tolerance for latent distortion
+TAU_P3: float = 0.52   # radians (≈30°) — wider tolerance for latent distortion
 
 
 def _estimate_graph_scale(positions: list[CylinderPosition]) -> float:

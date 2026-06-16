@@ -30,8 +30,10 @@ from src.core.metrics import measure_time
 from src.core.types import NormalizedFingerprint
 from src.processing.enhancer import create_enhancer
 from src.processing.extractor import SkeletonMinutiaeExtractor
+from src.processing.gabor import GaborEnhancerStep
 from src.processing.graph_extractor import RidgeGraphExtractor
 from src.processing.skeletonize_step import SkeletonizationStep
+from src.processing.spurious_filter import SkeletonCleanerStep
 from src.processing.normalization import MinutiaNormalizer
 from src.processing.post_hooks import (
     BorderMaskCleaner,
@@ -128,10 +130,17 @@ def build_production_pipeline(
         
         # 2. Pre-hooks (run on the enhanced image)
         OrientationFieldAnalyzer(),
+        
+        # 2b. Latent-optimised Gabor enhancement (per-block frequency, quality map)
+        GaborEnhancerStep(),
+        
         SingularityDetector(roi_radius=140),
         
         # 3. Skeletonization
         SkeletonizationStep(min_island_size=20),
+        
+        # 3b. Clean spurious structures from skeleton (DPI-scaled thresholds)
+        SkeletonCleanerStep(),
         
         # 4. Extraction
         ExtractorStep(extractors),
@@ -201,9 +210,14 @@ class FingerprintService:
             self.steps.extend(chosen_pre)
             self.steps.append(MaskResizerStep())
         else:
-            self.steps.extend([OrientationFieldAnalyzer(), SingularityDetector(roi_radius=140)])
+            self.steps.extend([
+                OrientationFieldAnalyzer(),
+                GaborEnhancerStep(),
+                SingularityDetector(roi_radius=140),
+            ])
 
         self.steps.append(SkeletonizationStep(min_island_size=20))
+        self.steps.append(SkeletonCleanerStep())
         self.steps.append(ExtractorStep(self.extractors))
         self.steps.append(RidgeGraphExtractor())
         self.steps.append(EnsembleFusionFilter(radius=8.0, min_votes=2))
