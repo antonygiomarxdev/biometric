@@ -19,6 +19,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from sqlalchemy import Engine, create_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.core.config import config
@@ -38,11 +39,14 @@ class AppResources:
     def __init__(self) -> None:
         self.engine: Engine | None = None
         self.session_factory: sessionmaker[Session] | None = None
+        self.async_engine: AsyncEngine | None = None
+        self.async_session_factory: async_sessionmaker[AsyncSession] | None = None
         self.process_pool: ProcessPoolExecutor | None = None
 
     def init_db(self, database_url: str | None = None) -> None:
-        """Create the SQLAlchemy engine and session factory."""
+        """Create SQLAlchemy engines (sync + async) and session factories."""
         url = database_url or config.database_url
+        # Sync engine (legacy)
         self.engine = create_engine(
             url,
             pool_size=config.db_pool_size,
@@ -55,8 +59,21 @@ class AppResources:
             autoflush=False,
             bind=self.engine,
         )
+        # Async engine (modern)
+        async_url = config.async_database_url
+        self.async_engine = create_async_engine(
+            async_url,
+            pool_size=config.db_pool_size,
+            max_overflow=config.db_max_overflow,
+            pool_pre_ping=True,
+            echo=config.log_level == "DEBUG",
+        )
+        self.async_session_factory = async_sessionmaker(
+            bind=self.async_engine,
+            expire_on_commit=False,
+        )
         logger.info(
-            "Database engine initialised (pool_size=%s, max_overflow=%s)",
+            "Database engines initialised (pool_size=%s, max_overflow=%s)",
             config.db_pool_size,
             config.db_max_overflow,
         )
@@ -76,7 +93,7 @@ class AppResources:
             max_workers,
         )
 
-    def dispose(self) -> None:
+    async def dispose(self) -> None:
         """Gracefully shut down all resources."""
         if self.process_pool is not None:
             self.process_pool.shutdown(wait=True)
@@ -84,29 +101,19 @@ class AppResources:
 
         if self.engine is not None:
             self.engine.dispose()
-            logger.info("Database engine disposed")
+            logger.info("Sync database engine disposed")
+
+        if self.async_engine is not None:
+            await self.async_engine.dispose()
+            logger.info("Async database engine disposed")
 
 
 # Singleton — but owned and managed by the lifespan, not by the module.
-# Modules import ``resources`` but never call ``init_*`` directly.
 resources = AppResources()
 
 
 async def get_db() -> AsyncGenerator[Session, None]:
-    """
-    FastAPI dependency that yields a SQLAlchemy session.
-
-    Usage::
-
-        from fastapi import Depends
-        from sqlalchemy.orm import Session
-
-        @router.get("/cases")
-        async def list_cases(db: Session = Depends(get_db)):
-            ...
-
-    The session is automatically closed when the request finishes.
-    """
+    """Legacy sync session (deprecated — new code should use ``get_async_db``)."""
     if resources.session_factory is None:
         raise RuntimeError(
             "Database not initialised. Ensure the lifespan "
@@ -118,6 +125,18 @@ async def get_db() -> AsyncGenerator[Session, None]:
         yield session
     finally:
         session.close()
+
+
+async def get_async_db() -> AsyncGenerator[AsyncSession, None]:
+    """Async session dependency — use for all new code."""
+    if resources.async_session_factory is None:
+        raise RuntimeError(
+            "Async database not initialised. Ensure the lifespan "
+            "context manager has been installed on the FastAPI app."
+        )
+
+    async with resources.async_session_factory() as session:
+        yield session
 
 
 @asynccontextmanager
@@ -153,7 +172,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     finally:
         # ---- shutdown ----
         logger.info("Shutting down — disposing application resources")
-        resources.dispose()
+        await resources.dispose()
         logger.info("Shutdown complete")
 
 """

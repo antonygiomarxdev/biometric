@@ -326,6 +326,16 @@ class Config:
     db_pool_size: int = field(default_factory=lambda: int(os.getenv("DB_POOL_SIZE", "5")))
     db_max_overflow: int = field(default_factory=lambda: int(os.getenv("DB_MAX_OVERFLOW", "10")))
 
+    @property
+    def async_database_url(self) -> str:
+        """Async variant of ``database_url`` using psycopg (v3) driver."""
+        url = self.database_url
+        if url.startswith("postgresql://"):
+            return url.replace("postgresql://", "postgresql+psycopg://", 1)
+        if url.startswith("postgresql+psycopg2://"):
+            return url.replace("postgresql+psycopg2://", "postgresql+psycopg://", 1)
+        return url
+
     # Vector Index (pgvector)
     vector_dimension: int = field(default_factory=lambda: int(os.getenv("VECTOR_DIMENSION", "256")))
     vector_index_lists: int = field(default_factory=lambda: int(os.getenv("VECTOR_INDEX_LISTS", "100")))

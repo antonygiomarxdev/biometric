@@ -11,7 +11,7 @@ Covers:
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -45,34 +45,48 @@ class TestAppResources:
         r = AppResources()
         assert r.engine is None
         assert r.session_factory is None
+        assert r.async_engine is None
+        assert r.async_session_factory is None
         assert r.process_pool is None
 
     def test_init_db_creates_engine(self) -> None:
-        """``init_db()`` creates a SQLAlchemy engine and session factory."""
-        from sqlalchemy import create_engine as real_create_engine
-
+        """``init_db()`` creates SQLAlchemy engines and session factories."""
         from src.api.dependencies import AppResources
 
         mock_engine = MagicMock()
-        with patch("src.api.dependencies.create_engine", return_value=mock_engine):
+        mock_async_engine = MagicMock()
+        with (
+            patch("src.api.dependencies.create_engine", return_value=mock_engine),
+            patch(
+                "src.api.dependencies.create_async_engine",
+                return_value=mock_async_engine,
+            ),
+        ):
             r = AppResources()
             r.init_db(database_url="sqlite:///:memory:")
             assert r.engine is mock_engine
             assert r.session_factory is not None
+            assert r.async_engine is mock_async_engine
+            assert r.async_session_factory is not None
 
     def test_init_db_uses_config_url_when_none(self, sqlite_config: Any) -> None:
         """When ``database_url`` is None, the config default is used."""
         from src.api.dependencies import AppResources
 
         mock_engine = MagicMock()
+        mock_async_engine = MagicMock()
         with (
             patch("src.api.dependencies.create_engine", return_value=mock_engine),
+            patch(
+                "src.api.dependencies.create_async_engine",
+                return_value=mock_async_engine,
+            ),
             patch("src.api.dependencies.config", sqlite_config),
         ):
             r = AppResources()
             r.init_db(database_url=None)
             assert r.engine is mock_engine
-            assert r.session_factory is not None
+            assert r.async_engine is mock_async_engine
 
     def test_init_process_pool(self) -> None:
         """``init_process_pool()`` creates a ``ProcessPoolExecutor``."""
@@ -82,29 +96,39 @@ class TestAppResources:
         r.init_process_pool(max_workers=1)
         assert r.process_pool is not None
 
-    def test_dispose_shuts_down_pool_and_engine(self) -> None:
-        """``dispose()`` shuts down the process pool and disposes the engine."""
+    @pytest.mark.asyncio
+    async def test_dispose_shuts_down_pool_and_engine(self) -> None:
+        """``dispose()`` shuts down the process pool and disposes engines."""
         from src.api.dependencies import AppResources
 
         mock_engine = MagicMock()
+        mock_async_engine = MagicMock()
+        mock_async_engine.dispose = AsyncMock()
         mock_pool = MagicMock()
-        with patch("src.api.dependencies.create_engine", return_value=mock_engine):
+        with (
+            patch("src.api.dependencies.create_engine", return_value=mock_engine),
+            patch(
+                "src.api.dependencies.create_async_engine",
+                return_value=mock_async_engine,
+            ),
+        ):
             r = AppResources()
             r.init_process_pool(max_workers=1)
-            r.process_pool = mock_pool  # Use mock to track shutdown call
+            r.process_pool = mock_pool
             r.init_db(database_url="sqlite:///:memory:")
 
-            r.dispose()
+            await r.dispose()
             mock_pool.shutdown.assert_called_once_with(wait=True)
             mock_engine.dispose.assert_called_once()
+            mock_async_engine.dispose.assert_called_once()
 
-    def test_dispose_safe_when_not_initialized(self) -> None:
+    @pytest.mark.asyncio
+    async def test_dispose_safe_when_not_initialized(self) -> None:
         """``dispose()`` is a no-op when resources were never initialised."""
         from src.api.dependencies import AppResources
 
         r = AppResources()
-        # Should not raise
-        r.dispose()
+        await r.dispose()
 
 
 # ---------------------------------------------------------------------------
@@ -121,11 +145,16 @@ class TestGetDb:
         from src.api.dependencies import AppResources, get_db
 
         mock_engine = MagicMock()
+        mock_async_engine = MagicMock()
         mock_session_factory = MagicMock()
         mock_session = MagicMock()
 
         with (
             patch("src.api.dependencies.create_engine", return_value=mock_engine),
+            patch(
+                "src.api.dependencies.create_async_engine",
+                return_value=mock_async_engine,
+            ),
             patch(
                 "src.api.dependencies.sessionmaker",
                 return_value=mock_session_factory,
@@ -141,7 +170,6 @@ class TestGetDb:
                 session = await gen.__anext__()
                 assert session is mock_session
 
-                # Cleanup — closing the generator calls session.close()
                 try:
                     await gen.__anext__()
                 except StopAsyncIteration:
@@ -330,7 +358,6 @@ class TestLifespan:
         """The lifespan context manager calls init and dispose."""
         from src.api.dependencies import AppResources, lifespan
 
-        # Use a dedicated AppResources so we don't pollute the global one
         test_resources = AppResources()
 
         init_db_called = False
@@ -340,12 +367,15 @@ class TestLifespan:
         def _track_init_db(*args: object, **kwargs: object) -> None:
             nonlocal init_db_called
             init_db_called = True
+            # Must also set async engine to keep init_db from failing
+            test_resources.async_engine = MagicMock()
+            test_resources.async_session_factory = MagicMock()
 
         def _track_init_pool(*args: object, **kwargs: object) -> None:
             nonlocal init_pool_called
             init_pool_called = True
 
-        def _track_dispose() -> None:
+        async def _track_dispose() -> None:
             nonlocal dispose_called
             dispose_called = True
 
