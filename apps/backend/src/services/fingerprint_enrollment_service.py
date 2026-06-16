@@ -30,7 +30,7 @@ from src.db.repositories.fingerprint_capture_repository import (
     FingerprintCaptureRepository,
 )
 from src.db.repositories.fingerprint_repository import FingerprintRepository
-from src.db.repositories.person_repository import PersonRepository
+
 from src.db.repositories.ridge_graph_repository import RidgeGraphRepository
 from src.services.fingerprint_service import FingerprintService
 
@@ -178,8 +178,8 @@ class FingerprintEnrollmentService:
         if self._qdrant is None or not normalized.minutiae:
             return
         try:
-            person: Person | None = PersonRepository.get_by_id(
-                self._session, fingerprint.person_id,
+            person: Person | None = self._session.get(
+                Person, fingerprint.person_id,
             )
             if person is None:
                 return

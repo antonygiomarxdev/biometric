@@ -10,8 +10,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_db
+from src.db.models import Person
 from src.db.repositories.fingerprint_repository import FingerprintRepository
-from src.db.repositories.person_repository import PersonRepository
 from src.schemas.fingerprint_schema import (
     FingerprintCreate,
     FingerprintListResponse,
@@ -40,7 +40,7 @@ def create_fingerprint(
     session: Session = Depends(get_db),
 ) -> Any:
     """Create a new fingerprint slot for a person."""
-    person = PersonRepository.get_by_id(session, person_id)
+    person = session.get(Person, person_id)
     if person is None:
         raise HTTPException(status_code=404, detail="Person not found")
     existing = FingerprintRepository.find_slot(
