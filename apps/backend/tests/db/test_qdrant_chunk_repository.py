@@ -40,8 +40,16 @@ class TestQdrantChunkRepository:
         r.ensure_collection()
         info = client.get_collection("test_create")
         assert info is not None
-        assert info.config.params.vectors.size == 9
-        assert info.config.params.vectors.distance == "Cosine"
+        vectors_config = info.config.params.vectors
+        if isinstance(vectors_config, dict):
+            # In newer qdrant-client versions, vectors is a dict for named vectors (default is "")
+            v_params = vectors_config.get("")
+        else:
+            v_params = vectors_config
+            
+        assert v_params is not None
+        assert v_params.size == 9
+        assert v_params.distance == "Cosine"
 
     def test_ensure_collection_idempotent(self, repo: QdrantChunkRepository) -> None:
         repo.ensure_collection()

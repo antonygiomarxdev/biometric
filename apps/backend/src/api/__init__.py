@@ -1,6 +1,6 @@
 """API package — REST routers and CLI."""
 
-__all__ = ["app"]
+__all__ = []
 
 
 def __getattr__(name: str):

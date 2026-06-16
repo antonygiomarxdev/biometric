@@ -22,6 +22,7 @@ from src.db.repositories.fingerprint_capture_repository import (
 )
 from src.db.repositories.fingerprint_repository import FingerprintRepository
 from src.db.repositories.ridge_graph_repository import RidgeGraphRepository
+from src.db.qdrant_chunk_repository import QdrantChunkRepository
 from src.schemas.capture_schema import (
     CaptureResponse,
     CaptureUpdate,
@@ -38,10 +39,20 @@ log = logging.getLogger(__name__)
 router = APIRouter(tags=["captures"])
 
 
+def _get_qdrant_repo() -> QdrantChunkRepository:
+    return QdrantChunkRepository.from_host()
+
+
 @router.post(
     "/api/v1/fingerprints/{fingerprint_id}/captures",
     response_model=CaptureUploadResponse,
     status_code=201,
+    summary="Upload fingerprint capture",
+    description="Upload an image for a fingerprint slot, process it through the extraction pipeline, and index it in Qdrant.",
+    responses={
+        400: {"description": "Invalid image or extraction failure"},
+        404: {"description": "Fingerprint slot not found"},
+    }
 )
 async def upload_capture(
     fingerprint_id: uuid.UUID,
@@ -52,12 +63,22 @@ async def upload_capture(
     notes: str | None = Form(None),
     session: Session = Depends(get_db),
     fp_service: FingerprintService = Depends(get_fingerprint_service),
+    qdrant_repo: QdrantChunkRepository = Depends(_get_qdrant_repo),
 ) -> Any:
+    """
+    Process and enroll a fingerprint image.
+    
+    This endpoint:
+    1. Saves the image (or handles its binary).
+    2. Runs the RAG extraction pipeline (segmentation, enhancement, minutiae).
+    3. Indexes the results into Qdrant for 1:N searching.
+    4. Persists the capture and RidgeGraph metadata in Postgres.
+    """
     image_bytes = await file.read()
     if not image_bytes:
         raise HTTPException(status_code=400, detail="Empty file")
     svc = FingerprintEnrollmentService(
-        session, fp_service, qdrant_repo=None, nebula_repo=None,
+        session, fp_service, qdrant_repo=qdrant_repo, nebula_repo=None,
     )
     try:
         capture, graphs = svc.create_capture(
@@ -78,11 +99,18 @@ async def upload_capture(
     )
 
 
-@router.get("/api/v1/captures/{capture_id}", response_model=CaptureResponse)
+@router.get(
+    "/api/v1/captures/{capture_id}", 
+    response_model=CaptureResponse,
+    summary="Get capture details",
+    description="Retrieve metadata for a specific fingerprint capture.",
+    responses={404: {"description": "Capture not found"}}
+)
 def get_capture(
     capture_id: uuid.UUID,
     session: Session = Depends(get_db),
 ) -> Any:
+    """Retrieve capture details by ID."""
     c = FingerprintCaptureRepository.get_by_id(session, capture_id)
     if c is None:
         raise HTTPException(status_code=404, detail="Capture not found")
@@ -92,20 +120,30 @@ def get_capture(
 @router.get(
     "/api/v1/captures/{capture_id}/graphs",
     response_model=list[RidgeGraphResponse],
+    summary="List graphs for capture",
+    description="Retrieve the ridge graphs (connected components) extracted during this capture.",
 )
 def get_capture_graphs(
     capture_id: uuid.UUID,
     session: Session = Depends(get_db),
 ) -> Any:
+    """Retrieve all RidgeGraphs associated with a capture."""
     return RidgeGraphRepository.list_by_capture(session, capture_id)
 
 
-@router.patch("/api/v1/captures/{capture_id}", response_model=CaptureResponse)
+@router.patch(
+    "/api/v1/captures/{capture_id}", 
+    response_model=CaptureResponse,
+    summary="Update capture",
+    description="Update mutable fields (like notes or reference status) of a capture.",
+    responses={404: {"description": "Capture not found"}}
+)
 def update_capture(
     capture_id: uuid.UUID,
     data: CaptureUpdate,
     session: Session = Depends(get_db),
 ) -> Any:
+    """Update a capture's metadata."""
     updates = data.model_dump(exclude_unset=True)
     c = FingerprintCaptureRepository.update(session, capture_id, **updates)
     if c is None:
