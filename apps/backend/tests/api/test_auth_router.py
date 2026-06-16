@@ -46,6 +46,8 @@ def _make_mock_user(
     hashed_password: str | None = None,
 ) -> MagicMock:
     """Create a mock ``User`` ORM object with the given attributes."""
+    from src.services.auth_service import get_password_hash
+
     user = MagicMock(spec=User)
     user.id = "550e8400-e29b-41d4-a716-446655440000"
     user.username = username
@@ -53,7 +55,7 @@ def _make_mock_user(
     user.full_name = full_name
     user.role = role
     user.is_active = is_active
-    user.hashed_password = hashed_password or "$2b$12$LJ3m4ys3Lk0TSwHmGsmmyePqJhM7iM9z0k9Z0k9Z0k9Z0k9Z0k9Z0"
+    user.hashed_password = hashed_password or get_password_hash("password123")
     return user
 
 
@@ -116,8 +118,6 @@ class TestLogin:
 
     async def test_returns_401_on_wrong_password(self) -> None:
         """A wrong password returns 401."""
-        from src.services.auth_service import verify_password
-
         mock_db = MagicMock()
         mock_query = MagicMock()
         mock_db.query.return_value = mock_query

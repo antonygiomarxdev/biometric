@@ -10,8 +10,8 @@ from __future__ import annotations
 from datetime import timedelta
 from unittest.mock import patch
 
+import jwt
 import pytest
-from jose import JWTError
 
 from src.services.auth_service import (
     create_access_token,
@@ -45,6 +45,11 @@ class TestVerifyPassword:
         assert verify_password("", hashed) is True
         assert verify_password("non_empty", hashed) is False
 
+    def test_returns_false_for_bcrypt_hash(self) -> None:
+        """Legacy bcrypt hashes return False (migration requires reset)."""
+        bcrypt_hash = "$2b$12$LJ3m4ys3Lk0TSwHmGsmmyePqJhM7iM9z0k9Z0k9Z0k9Z0k9Z0k9Z0"
+        assert verify_password("anything", bcrypt_hash) is False
+
 
 # ---------------------------------------------------------------------------
 # get_password_hash
@@ -59,10 +64,10 @@ class TestGetPasswordHash:
         result = get_password_hash("password123")
         assert isinstance(result, str)
 
-    def test_returns_bcrypt_hash(self) -> None:
-        """Hash starts with bcrypt identifier ``$2b$``."""
+    def test_returns_argon2id_hash(self) -> None:
+        """Hash starts with argon2id identifier ``$argon2id$``."""
         result = get_password_hash("password123")
-        assert result.startswith("$2b$")
+        assert result.startswith("$argon2id$")
 
     def test_different_passwords_different_hashes(self) -> None:
         """Two different passwords produce different hashes."""
@@ -157,7 +162,6 @@ class TestDecodeAccessToken:
     def test_returns_none_for_invalid_signature(self) -> None:
         """A token signed with a different secret returns None."""
         token = create_access_token({"sub": "user"})
-        # Tamper with the signature portion
         parts = token.split(".")
         tampered = f"{parts[0]}.{parts[1]}.invalidsignature"
         result = decode_access_token(tampered)
@@ -169,9 +173,10 @@ class TestDecodeAccessToken:
         assert result is None
 
     def test_returns_none_when_jwt_decode_raises(self) -> None:
-        """When ``jwt.decode`` raises ``JWTError``, returns None."""
-        from src.services.auth_service import jwt as auth_jwt
-
-        with patch.object(auth_jwt, "decode", side_effect=JWTError("Boom")):
+        """When ``jwt.decode`` raises ``PyJWTError``, returns None."""
+        with patch(
+            "src.services.auth_service.jwt.decode",
+            side_effect=jwt.PyJWTError("Boom"),
+        ):
             result = decode_access_token("any_token")
         assert result is None
