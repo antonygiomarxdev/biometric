@@ -193,6 +193,15 @@ class IFineMatcher(Protocol):
     verification, returning a highly discriminative final score.
     """
 
+    def insert_graph(
+        self,
+        fingerprint_id: str,
+        graph: RidgeGraph,
+        person_id: str | None = None,
+    ) -> None:
+        """Persist a RidgeGraph into the fine-matcher store."""
+        ...
+
     def match_subgraph(
         self,
         latent_graph: RidgeGraph,

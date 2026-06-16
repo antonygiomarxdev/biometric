@@ -56,6 +56,7 @@ class NormalizedFingerprint:
     width: int
     height: int
     image: Optional[np.ndarray] = field(default=None, repr=False)
+    ridge_graph: RidgeGraph | None = None
     
     @property
     def vector(self) -> np.ndarray:

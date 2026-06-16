@@ -406,6 +406,23 @@ class Config:
         )
     )
 
+    # NebulaGraph (Graph Database for Fine Matching)
+    nebula_host: str = field(
+        default_factory=lambda: os.getenv("NEBULA_HOST", "localhost")
+    )
+    nebula_port: int = field(
+        default_factory=lambda: int(os.getenv("NEBULA_PORT", "9669"))
+    )
+    nebula_user: str = field(
+        default_factory=lambda: os.getenv("NEBULA_USER", "root")
+    )
+    nebula_password: str = field(
+        default_factory=lambda: os.getenv("NEBULA_PASSWORD", "nebula")
+    )
+    nebula_space: str = field(
+        default_factory=lambda: os.getenv("NEBULA_SPACE", "biometric")
+    )
+
     # Generative AI / LLM - ADR-006 Compatible
     llm_api_base: str = field(
         default_factory=lambda: os.getenv("LLM_API_BASE", "http://localhost:11434/v1")

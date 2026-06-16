@@ -112,7 +112,10 @@ class NormalizerStep(IPipelineStep):
         normalized_fp = self.normalizer.normalize(
             ctx.candidates, (int(img_shape[0]), int(img_shape[1]))
         )
-        ctx.normalized_fingerprint = replace(normalized_fp, id=ctx.fingerprint_id)
+        ridge_graph = ctx.ridge_graph
+        ctx.normalized_fingerprint = replace(
+            normalized_fp, id=ctx.fingerprint_id, ridge_graph=ridge_graph,
+        )
 
 
 # ---------------------------------------------------------------------------

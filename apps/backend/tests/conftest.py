@@ -74,18 +74,6 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 @pytest.fixture(autouse=True, scope="session")
-def _mock_gpu_detection() -> Generator[None, None, None]:
-    """Prevent CUDA/GPU detection — force CPU execution path.
-
-    Patches ``torch.cuda.is_available`` to return ``False`` so that
-    ``_resolve_provider`` in ``src.ai.config`` and ``gpu_utils`` never
-    attempt to select a CUDA provider.
-    """
-    with patch("torch.cuda.is_available", return_value=False):
-        yield
-
-
-@pytest.fixture(autouse=True, scope="session")
 def _mock_llm_api_calls() -> Generator[None, None, None]:
     """Prevent real LLM API calls by mocking the low-level HTTP client.
 
