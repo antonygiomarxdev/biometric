@@ -64,7 +64,8 @@ class PolyglotMatchingService(IMatcher):
 
         # 1. Coarse Match (Topology Embedding -> Qdrant)
         embedding = embed_graph(probe_graph)
-        coarse_candidates = self._coarse.search(embedding, top_k=self._coarse_top_k)
+        embedding_vector = embedding.to_vector()
+        coarse_candidates = self._coarse.search(embedding_vector, top_k=self._coarse_top_k)
         
         if not coarse_candidates:
             return []

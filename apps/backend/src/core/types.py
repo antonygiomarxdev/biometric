@@ -2,6 +2,8 @@
 Tipos estrictos para el dominio biométrico.
 Clean Code: Definiciones inmutables y explícitas.
 """
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import ClassVar, List, NewType, Optional, Tuple
@@ -91,6 +93,32 @@ class RidgeNode:
     y: int
     weight: float = 1.0          # Forensic importance (1.0 = core, decays outwards)
     is_cutoff: bool = False      # True if it's an artificial boundary truncation
+    angle: float = 0.0           # Local ridge orientation in radians [0, π)
+
+
+@dataclass(frozen=True, slots=True)
+class MccCylinder:
+    """Minutia Cylinder-Code descriptor for a single minutia.
+
+    A 3D cylinder capturing the spatio-directional relationship between
+    a central minutia and its neighbours.  Invariant to rotation and
+    translation (not scale — images expected at similar resolution).
+
+    Dimensions:
+        spatial: (C, C) grid spanning [-R, R] px (C = 2R//S + 1)
+        directional: D bins covering [0, π)
+    """
+    values: np.ndarray          # shape: (spatial, spatial, dir_bins)
+
+    @property
+    def num_cells(self) -> int:
+        return int(np.prod(self.values.shape))
+
+    def cosine_similarity(self, other: MccCylinder) -> float:
+        a = self.values.ravel()
+        b = other.values.ravel()
+        denom = (np.linalg.norm(a) * np.linalg.norm(b))
+        return float(np.dot(a, b) / denom) if denom > 0 else 0.0
 
 @dataclass(frozen=True, slots=True)
 class RidgeEdge:

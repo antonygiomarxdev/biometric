@@ -21,7 +21,8 @@ import numpy as np
 from nebula3.Config import Config as NebulaConfig
 from nebula3.gclient.net import ConnectionPool, Session
 
-from src.core.types import CoarseMatch, RidgeGraph
+from src.core.types import CoarseMatch, MccCylinder, RidgeEdge, RidgeGraph, RidgeNode
+from src.processing.mcc_descriptor import compute_cylinders
 
 log = logging.getLogger(__name__)
 
@@ -114,7 +115,8 @@ class NebulaRepository:
                 f"x int, "
                 f"y int, "
                 f"weight float, "
-                f"is_cutoff bool"
+                f"is_cutoff bool, "
+                f"angle float"
                 f")"
             )
             session.execute(
@@ -177,7 +179,7 @@ class NebulaRepository:
                 vid = _vid(fingerprint_id, i)
                 ngql = (
                     f'INSERT VERTEX {_NODE_TAG}('
-                    f'fingerprint_id, node_idx, degree, x, y, weight, is_cutoff) '
+                    f'fingerprint_id, node_idx, degree, x, y, weight, is_cutoff, angle) '
                     f'VALUES "{vid}": ('
                     f'"{fingerprint_id}", '
                     f'{i}, '
@@ -185,7 +187,8 @@ class NebulaRepository:
                     f'{node.x}, '
                     f'{node.y}, '
                     f'{node.weight}, '
-                    f'{"true" if node.is_cutoff else "false"}'
+                    f'{"true" if node.is_cutoff else "false"}, '
+                    f'{node.angle}'
                     f')'
                 )
                 result = session.execute(ngql)
@@ -248,7 +251,7 @@ class NebulaRepository:
                 if candidate_nx is None or candidate_nx.number_of_nodes() == 0:
                     continue
 
-                score = self._compute_structural_score(latent_nx, candidate_nx)
+                score = self._compute_mcc_score(latent_nx, candidate_nx)
                 if score > 0.0:
                     results.append(CoarseMatch(fingerprint_id=fp_id, score=score))
         finally:
@@ -288,6 +291,7 @@ class NebulaRepository:
                 y=node.y,
                 weight=node.weight,
                 is_cutoff=node.is_cutoff,
+                angle=node.angle,
             )
 
         for edge in graph.edges:
@@ -309,7 +313,8 @@ class NebulaRepository:
             f'{_NODE_TAG}.x AS x, '
             f'{_NODE_TAG}.y AS y, '
             f'{_NODE_TAG}.weight AS weight, '
-            f'{_NODE_TAG}.is_cutoff AS is_cutoff'
+            f'{_NODE_TAG}.is_cutoff AS is_cutoff, '
+            f'{_NODE_TAG}.angle AS angle'
         )
         result = session.execute(ngql_lookup)
         if not result.is_succeeded() or result.row_size() == 0:
@@ -326,6 +331,7 @@ class NebulaRepository:
             y = values[4].as_int()
             weight = values[5].as_float()
             is_cutoff = values[6].as_bool()
+            angle = values[7].as_float()
             G.add_node(
                 vid,
                 node_idx=node_idx,
@@ -334,6 +340,7 @@ class NebulaRepository:
                 y=y,
                 weight=weight,
                 is_cutoff=is_cutoff,
+                angle=angle,
             )
 
         # Fetch edges
@@ -354,105 +361,100 @@ class NebulaRepository:
         return G
 
     @staticmethod
-    def _compute_structural_score(
+    def _compute_mcc_score(
         latent: nx.Graph, candidate: nx.Graph
     ) -> float:
-        """Forensic Spatial Alignment Score (RANSAC).
+        """MCC-based fine matching score.
 
-        Unlike strict mathematical graph isomorphism (which fails when
-        noise or elastic skin deformation adds/removes nodes), this
-        method mimics human forensic experts:
-        1. Selects anchor points (highest degree nodes, usually bifurcations).
-        2. Tests random affine transformations between probe and candidate.
-        3. Discards physically impossible transformations (scale < 0.6 or > 1.5).
-        4. Counts "inliers": how many minutiae fall within a spatial
-           tolerance radius after alignment.
+        Builds Minutia Cylinder-Code descriptors for every node in both
+        graphs, then finds the best local correspondences via greedy
+        matching on cylinder cosine similarity.
+
+        The MCC descriptor is rotation-invariant, translation-invariant,
+        and tolerates elastic deformation because it only depends on
+        local neighbourhood structure — not on a global reference frame.
 
         Returns:
-            Ratio of matched minutiae [0.0, 1.0]. A score > 0.6 usually
-            indicates a true match in real-world scenarios.
+            Score in [0.0, 1.0] representing the fraction of well-matched
+            minutiae after global relaxation.
         """
         n_lat = latent.number_of_nodes()
         n_cand = candidate.number_of_nodes()
-        if n_lat < 3 or n_cand < 3:
+        if n_lat < 2 or n_cand < 2:
             return 0.0
 
-        # Extract positions as (N, 2) arrays
-        lat_pts = np.array(
-            [[latent.nodes[n].get("x", 0), latent.nodes[n].get("y", 0)] for n in latent.nodes()],
-            dtype=np.float64,
-        )
-        cand_pts = np.array(
-            [[candidate.nodes[n].get("x", 0), candidate.nodes[n].get("y", 0)] for n in candidate.nodes()],
-            dtype=np.float64,
-        )
+        # Build RidgeGraph from NetworkX for MCC descriptor computation
+        lat_graph = NebulaRepository._from_networkx(latent)
+        cand_graph = NebulaRepository._from_networkx(candidate)
 
-        # Prioritize high-degree nodes for RANSAC sampling (anchors)
-        lat_weights = np.array([latent.nodes[n].get("degree", 1) for n in latent.nodes()], dtype=np.float64)
-        lat_weights /= lat_weights.sum()
+        lat_cylinders = compute_cylinders(lat_graph)
+        cand_cylinders = compute_cylinders(cand_graph)
 
-        def _estimate_affine(src: np.ndarray, dst: np.ndarray) -> tuple[np.ndarray, np.ndarray] | None:
-            A = np.zeros((6, 6))
-            b = np.zeros(6)
-            for i in range(3):
-                sx, sy = src[i]
-                dx, dy = dst[i]
-                A[2*i, 0:3] = [sx, sy, 1]
-                A[2*i+1, 3:6] = [sx, sy, 1]
-                b[2*i] = dx
-                b[2*i+1] = dy
-            try:
-                params = np.linalg.solve(A, b)
-                return params[:3], params[3:]
-            except np.linalg.LinAlgError:
-                return None
-
-        rng = np.random.default_rng(42)  # Deterministic for tests
-        n_iter = 300
-        threshold = 20.0  # Pixels tolerance for inliers
-
-        best_inliers = 0
-
-        for _ in range(n_iter):
-            # 1. Sample 3 points from latent (weighted by degree)
-            idx = rng.choice(n_lat, 3, replace=False, p=lat_weights)
-            lat_sample = lat_pts[idx]
-
-            # 2. Find nearest candidate points for the sample (quick heuristic match)
-            dists = np.linalg.norm(cand_pts[:, None] - lat_sample[None, :], axis=2)
-            nearest_idx = np.argmin(dists, axis=0)
-            cand_sample = cand_pts[nearest_idx]
-
-            # 3. Compute affine transformation
-            M = _estimate_affine(lat_sample, cand_sample)
-            if M is None:
+        # Build similarity matrix: rows = latent, cols = candidate
+        similarity = np.zeros((n_lat, n_cand), dtype=np.float32)
+        for i, lc in enumerate(lat_cylinders):
+            if lc is None:
                 continue
-            
-            # 4. Physical realism check (skin doesn't stretch 500%)
-            a, b, _ = M[0]
-            c, d, _ = M[1]
-            scale = np.sqrt(a*a + b*b)
-            # Shear approximation: dot product of transformed basis vectors
-            shear = abs(a*c + b*d) / (scale*scale + 1e-8)
+            for j, cc in enumerate(cand_cylinders):
+                if cc is None:
+                    continue
+                similarity[i, j] = lc.cosine_similarity(cc)
 
-            if scale < 0.6 or scale > 1.5 or shear > 0.4:
-                continue
+        # Greedy matching with global relaxation
+        used_cand: set[int] = set()
+        total_score = 0.0
+        matched_count = 0
 
-            # 5. Apply transformation to ALL latent points
-            transformed = np.zeros_like(lat_pts)
-            transformed[:, 0] = a * lat_pts[:, 0] + b * lat_pts[:, 1] + M[0][2]
-            transformed[:, 1] = c * lat_pts[:, 0] + d * lat_pts[:, 1] + M[1][2]
+        # Sort latent nodes by their best candidate similarity (highest first)
+        best_per_latent = np.max(similarity, axis=1)
+        order = np.argsort(-best_per_latent)
 
-            # 6. Count global inliers
-            dists_to_cand = np.linalg.norm(cand_pts[:, None] - transformed[None, :], axis=2)
-            min_dists = np.min(dists_to_cand, axis=0)
-            inlier_count = int(np.sum(min_dists < threshold))
-
-            if inlier_count > best_inliers:
-                best_inliers = inlier_count
-                
-                # Fast exit if we found a perfect match
-                if best_inliers == n_lat:
+        for i in order:
+            if best_per_latent[i] < 0.3:
+                continue  # no good match for this node
+            # Find best unused candidate
+            scores = similarity[i]
+            # Sort candidate indices by score descending
+            cand_order = np.argsort(-scores)
+            for j in cand_order:
+                if j not in used_cand and scores[j] >= 0.3:
+                    total_score += scores[j]
+                    matched_count += 1
+                    used_cand.add(j)
                     break
 
-        return best_inliers / max(n_lat, 1)
+        if matched_count == 0:
+            return 0.0
+
+        # Final score: coverage weighted by mean similarity
+        coverage = matched_count / max(n_lat, 1)
+        mean_sim = total_score / matched_count
+        return float(coverage * mean_sim)
+
+    @staticmethod
+    def _from_networkx(G: nx.Graph) -> RidgeGraph:
+        """Rebuild a RidgeGraph from a NetworkX graph (inverse of _to_networkx).
+
+        Preserves node ordering even when node IDs are string VIDs
+        (e.g. "fp-0:3") from NebulaGraph queries.
+        """
+        def _sort_key(n: object) -> int:
+            if isinstance(n, int):
+                return n
+            if isinstance(n, str) and ":" in n:
+                return int(n.rsplit(":", 1)[-1])
+            return 0
+
+        nodes: list[RidgeNode] = []
+        for n in sorted(G.nodes(), key=_sort_key):
+            data = G.nodes[n]
+            nodes.append(
+                RidgeNode(
+                    x=data.get("x", 0),
+                    y=data.get("y", 0),
+                    weight=data.get("weight", 1.0),
+                    is_cutoff=data.get("is_cutoff", False),
+                    angle=data.get("angle", 0.0),
+                )
+            )
+        return RidgeGraph(nodes=nodes, edges=[])

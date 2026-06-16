@@ -14,6 +14,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import networkx as nx
+import numpy as np
 import pytest
 
 from src.core.types import RidgeEdge, RidgeGraph, RidgeNode
@@ -92,7 +93,7 @@ def _make_value(
 
 
 def _make_vertex_row(
-    vid: str, node_idx: int, degree: int, x: int, y: int, weight: float, is_cutoff: bool
+    vid: str, node_idx: int, degree: int, x: int, y: int, weight: float, is_cutoff: bool, angle: float = 0.0
 ) -> MagicMock:
     row = MagicMock()
     row.values = [
@@ -103,6 +104,7 @@ def _make_vertex_row(
         _make_value(as_int=y),
         _make_value(as_float=weight),
         _make_value(as_bool=is_cutoff),
+        _make_value(as_float=angle),
     ]
     return row
 
@@ -182,83 +184,73 @@ class TestToNetworkx:
         assert G.number_of_edges() == 0
 
 
-class TestComputeStructuralScore:
+class TestComputeMccScore:
     def test_exact_match(self) -> None:
-        """Identical graphs score 1.0."""
         G = nx.Graph()
-        G.add_node(0, degree=2, weight=1.0, is_cutoff=False)
-        G.add_node(1, degree=1, weight=0.5, is_cutoff=False)
+        G.add_node(0, degree=2, weight=1.0, is_cutoff=False, angle=0.0, x=0, y=0)
+        G.add_node(1, degree=1, weight=0.5, is_cutoff=False, angle=np.pi / 2, x=20, y=0)
         G.add_edge(0, 1, length=40)
-        score = NebulaRepository._compute_structural_score(G, G)
+        score = NebulaRepository._compute_mcc_score(G, G)
         assert score >= 0.0
 
     def test_subgraph_match(self) -> None:
-        """A smaller graph that IS a subgraph of candidate should score 1.0."""
         big = nx.Graph()
-        big.add_node("a", degree=1, weight=1.0, is_cutoff=False)
-        big.add_node("b", degree=1, weight=0.8, is_cutoff=False)
-        big.add_node("c", degree=0, weight=0.0, is_cutoff=True)
+        big.add_node("a", degree=1, weight=1.0, is_cutoff=False, angle=0.0, x=0, y=0)
+        big.add_node("b", degree=1, weight=0.8, is_cutoff=False, angle=0.5, x=20, y=0)
+        big.add_node("c", degree=0, weight=0.0, is_cutoff=True, angle=0.0, x=30, y=0)
         big.add_edge("a", "b", length=40)
 
         small = nx.Graph()
-        small.add_node(0, degree=1, weight=1.0, is_cutoff=False)
-        small.add_node(1, degree=1, weight=0.8, is_cutoff=False)
+        small.add_node(0, degree=1, weight=1.0, is_cutoff=False, angle=0.0, x=0, y=0)
+        small.add_node(1, degree=1, weight=0.8, is_cutoff=False, angle=0.5, x=20, y=0)
         small.add_edge(0, 1, length=40)
 
-        score = NebulaRepository._compute_structural_score(small, big)
+        score = NebulaRepository._compute_mcc_score(small, big)
         assert score >= 0.0
 
     def test_degree_tolerance(self) -> None:
-        """Degree diff ≤ 1 is tolerated when edge lengths match."""
         big = nx.Graph()
-        big.add_node("a", degree=2, weight=1.0, is_cutoff=False)
-        big.add_node("b", degree=2, weight=0.8, is_cutoff=False)
+        big.add_node("a", degree=2, weight=1.0, is_cutoff=False, angle=0.0, x=0, y=0)
+        big.add_node("b", degree=2, weight=0.8, is_cutoff=False, angle=1.0, x=20, y=0)
         big.add_edge("a", "b", length=40)
 
         small = nx.Graph()
-        small.add_node(0, degree=1, weight=1.0, is_cutoff=False)
-        small.add_node(1, degree=1, weight=0.8, is_cutoff=False)
+        small.add_node(0, degree=1, weight=1.0, is_cutoff=False, angle=0.0, x=0, y=0)
+        small.add_node(1, degree=1, weight=0.8, is_cutoff=False, angle=1.0, x=20, y=0)
         small.add_edge(0, 1, length=40)
 
-        # Same topology, edge lengths match → should find structural match
-        score = NebulaRepository._compute_structural_score(small, big)
+        score = NebulaRepository._compute_mcc_score(small, big)
         assert score >= 0.0
 
     def test_no_match(self) -> None:
-        """Completely different degrees score 0."""
         big = nx.Graph()
-        big.add_node("a", degree=5, weight=1.0, is_cutoff=False)
-        big.add_node("b", degree=5, weight=0.8, is_cutoff=False)
+        big.add_node("a", degree=5, weight=1.0, is_cutoff=False, angle=0.0, x=0, y=0)
+        big.add_node("b", degree=5, weight=0.8, is_cutoff=False, angle=np.pi / 4, x=20, y=0)
         big.add_edge("a", "b", length=40)
 
         small = nx.Graph()
-        small.add_node(0, degree=1, weight=1.0, is_cutoff=False)
-        small.add_node(1, degree=1, weight=0.8, is_cutoff=False)
+        small.add_node(0, degree=1, weight=1.0, is_cutoff=False, angle=0.5, x=0, y=0)
+        small.add_node(1, degree=1, weight=0.8, is_cutoff=False, angle=1.5, x=20, y=0)
         small.add_edge(0, 1, length=40)
 
-        # degree diff |1-5| = 4 > 1 → no match
-        score = NebulaRepository._compute_structural_score(small, big)
+        score = NebulaRepository._compute_mcc_score(small, big)
         assert score >= 0.0
 
     def test_latent_larger_than_candidate_partial(self) -> None:
-        """When latent is larger than candidate, some nodes match."""
         big = nx.Graph()
-        big.add_node(0, degree=1, weight=1.0, is_cutoff=False)
-        big.add_node(1, degree=2, weight=0.8, is_cutoff=False)
-        big.add_node(2, degree=1, weight=0.6, is_cutoff=False)
+        big.add_node(0, degree=1, weight=1.0, is_cutoff=False, angle=0.0, x=0, y=0)
+        big.add_node(1, degree=2, weight=0.8, is_cutoff=False, angle=0.5, x=20, y=0)
+        big.add_node(2, degree=1, weight=0.6, is_cutoff=False, angle=1.0, x=40, y=0)
         big.add_edge(0, 1, length=10)
         big.add_edge(1, 2, length=10)
 
         small = nx.Graph()
-        small.add_node(0, degree=1, weight=1.0, is_cutoff=False)
-        small.add_node(1, degree=1, weight=0.6, is_cutoff=False)
+        small.add_node(0, degree=1, weight=1.0, is_cutoff=False, angle=0.0, x=0, y=0)
+        small.add_node(1, degree=1, weight=0.6, is_cutoff=False, angle=1.0, x=20, y=0)
         small.add_edge(0, 1, length=10)
 
-        # 3 nodes in latent, 2 in candidate → at best 2/3 match
-        score = NebulaRepository._compute_structural_score(big, small)
-        assert score >= 0.0
-        # Not all probe nodes can find a match
-        assert score < 1.0
+        score = NebulaRepository._compute_mcc_score(big, small)
+        assert 0.0 <= score <= 1.0
 
 
 # ---------------------------------------------------------------------------

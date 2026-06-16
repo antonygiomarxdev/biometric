@@ -9,6 +9,7 @@ import sknw
 
 from src.core.interfaces import IPipelineStep, PipelineContext
 from src.core.types import RidgeEdge, RidgeGraph, RidgeNode
+from src.processing.orientation import compute_orientation
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,13 @@ class RidgeGraphExtractor(IPipelineStep):
                 if dist_to_hull < 5.0:
                     is_cutoff = True
             
-            nodes.append(RidgeNode(x=x, y=y, weight=weight, is_cutoff=is_cutoff))
+            # --- Ridge Orientation (Sobel structure tensor) ---
+            angle = compute_orientation(
+                ctx.enhanced_image if ctx.enhanced_image is not None else ctx.raw_image,
+                x, y,
+            )
+            
+            nodes.append(RidgeNode(x=x, y=y, weight=weight, is_cutoff=is_cutoff, angle=angle))
 
         # 4. Mapear Aristas (usando el id_map seguro)
         edges: list[RidgeEdge] = []
