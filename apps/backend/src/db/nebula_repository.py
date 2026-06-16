@@ -364,19 +364,17 @@ class NebulaRepository:
     def _compute_mcc_score(
         latent: nx.Graph, candidate: nx.Graph
     ) -> float:
-        """MCC-based fine matching score.
+        """MCC fine matching with LSSR (Local Similarity Sort with Reinforcement).
 
         Builds Minutia Cylinder-Code descriptors for every node in both
-        graphs, then finds the best local correspondences via greedy
-        matching on cylinder cosine similarity.
-
-        The MCC descriptor is rotation-invariant, translation-invariant,
-        and tolerates elastic deformation because it only depends on
-        local neighbourhood structure — not on a global reference frame.
+        graphs, then runs the LSSR consolidation algorithm from
+        Cappelli et al. 2010.  The reinforcement step uses geometric
+        consistency (rho) to boost scores of pairs that have many
+        mutually-consistent neighbours — the key innovation that makes
+        MCC handle elastic skin deformation.
 
         Returns:
-            Score in [0.0, 1.0] representing the fraction of well-matched
-            minutiae after global relaxation.
+            Score in [0.0, 1.0] representing the LSSR matching score.
         """
         n_lat = latent.number_of_nodes()
         n_cand = candidate.number_of_nodes()
@@ -390,7 +388,19 @@ class NebulaRepository:
         lat_cylinders = compute_cylinders(lat_graph)
         cand_cylinders = compute_cylinders(cand_graph)
 
+        # Get position/orientation metadata for rho computation
+        from src.processing.mcc_descriptor import (
+            extract_positions,
+        )
+        lat_positions = extract_positions(lat_graph)
+        cand_positions = extract_positions(cand_graph)
+
         # Build similarity matrix: rows = latent, cols = candidate
+        n_lat_cyl = sum(1 for c in lat_cylinders if c is not None)
+        n_cand_cyl = sum(1 for c in cand_cylinders if c is not None)
+        if n_lat_cyl < 2 or n_cand_cyl < 2:
+            return 0.0
+
         similarity = np.zeros((n_lat, n_cand), dtype=np.float32)
         for i, lc in enumerate(lat_cylinders):
             if lc is None:
@@ -400,36 +410,29 @@ class NebulaRepository:
                     continue
                 similarity[i, j] = lc.cosine_similarity(cc)
 
-        # Greedy matching with global relaxation
-        used_cand: set[int] = set()
-        total_score = 0.0
-        matched_count = 0
+        # LSSR consolidation
+        n_p = min(n_lat, n_cand)  # Number of pairs to consider
+        from src.processing.mcc_descriptor import consolidation_lssr
 
-        # Sort latent nodes by their best candidate similarity (highest first)
-        best_per_latent = np.max(similarity, axis=1)
-        order = np.argsort(-best_per_latent)
+        reinforced_pairs = consolidation_lssr(
+            similarity,
+            lat_positions,
+            cand_positions,
+            n_p,
+            return_reinforced=True,
+        )
 
-        for i in order:
-            if best_per_latent[i] < 0.3:
-                continue  # no good match for this node
-            # Find best unused candidate
-            scores = similarity[i]
-            # Sort candidate indices by score descending
-            cand_order = np.argsort(-scores)
-            for j in cand_order:
-                if j not in used_cand and scores[j] >= 0.3:
-                    total_score += scores[j]
-                    matched_count += 1
-                    used_cand.add(j)
-                    break
-
-        if matched_count == 0:
+        if not reinforced_pairs:
             return 0.0
 
-        # Final score: coverage weighted by mean similarity
-        coverage = matched_count / max(n_lat, 1)
-        mean_sim = total_score / matched_count
-        return float(coverage * mean_sim)
+        # Final score = mean of the REINFORCED scores for top pairs.
+        # Reinforcement boosts pairs that have many geometrically
+        # consistent neighbours (genuine matches) and leaves random
+        # pairs unchanged (false matches).
+        reinforced_scores = [score for _, _, score in reinforced_pairs]
+        if not reinforced_scores:
+            return 0.0
+        return float(np.mean(reinforced_scores))
 
     @staticmethod
     def _from_networkx(G: nx.Graph) -> RidgeGraph:

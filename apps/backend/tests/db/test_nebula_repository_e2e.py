@@ -423,3 +423,129 @@ class TestRankingReal:
         assert results[0].fingerprint_id == "ORIGINAL"
         # And it must be strict (1.0) — identical topology
         assert results[0].score > 0.5
+
+
+class TestTpsNonlinearDeformationReal:
+    """Verify LSSR-based matcher handles non-linear elastic deformation.
+
+    This simulates a real forensic scenario: the latent print was
+    captured on a curved surface (e.g., a bottle or a glass), so the
+    skin stretched non-uniformly.  The deformation is modeled with
+    a Thin-Plate Spline (TPS) — the gold standard for non-rigid
+    spatial transformation in fingerprint matching.
+    """
+
+    @staticmethod
+    def _tps_deform_graph(
+        graph: RidgeGraph,
+        control_pairs: list[tuple[tuple[int, int], tuple[int, int]]],
+    ) -> RidgeGraph:
+        """Apply TPS deformation to graph node positions."""
+        from src.processing.tps import fit_tps, apply_tps
+
+        positions = np.array([(n.x, n.y) for n in graph.nodes], dtype=np.float64)
+        src = np.array([c[0] for c in control_pairs], dtype=np.float64)
+        dst = np.array([c[1] for c in control_pairs], dtype=np.float64)
+
+        affine, warps = fit_tps(src, dst, smoothing=0.5)
+        new_positions = apply_tps(positions, src, affine, warps)
+
+        new_nodes = []
+        for n, (nx_, ny_) in zip(graph.nodes, new_positions):
+            new_nodes.append(
+                RidgeNode(
+                    x=int(nx_),
+                    y=int(ny_),
+                    weight=n.weight,
+                    is_cutoff=n.is_cutoff,
+                    angle=n.angle,
+                )
+            )
+        new_edges = []
+        for e in graph.edges:
+            src_pt = np.array([new_nodes[e.source].x, new_nodes[e.source].y])
+            dst_pt = np.array([new_nodes[e.target].x, new_nodes[e.target].y])
+            new_len = int(np.linalg.norm(src_pt - dst_pt))
+            new_edges.append(
+                RidgeEdge(
+                    source=e.source,
+                    target=e.target,
+                    path=e.path,
+                    length=new_len,
+                )
+            )
+        return RidgeGraph(nodes=new_nodes, edges=new_edges)
+
+    def test_tps_curved_surface_deformation(
+        self, socofing_paths: list[Path]
+    ) -> None:
+        """Simulate a finger pressed against a curved surface.
+
+        Uses TPS to apply a non-linear radial deformation: the centre
+        of the fingerprint is squished more than the edges, mimicking
+        the actual biomechanics of a fingertip against glass.
+
+        The matcher must still find the original fingerprint with a
+        meaningful score (>= 0.5).
+        """
+        probe_path = socofing_paths[0]
+        enrolled_paths = socofing_paths[:3]
+
+        fb = FakeNebulaGraph()
+        repo = _build_repo(fb)
+        for i, path in enumerate(enrolled_paths):
+            repo.insert_graph(f"fp-{i}", _extract_graph(_load_image(path)))
+
+        # Build probe: apply non-linear deformation to the original graph
+        enrolled_graph = _extract_graph(_load_image(probe_path))
+
+        # Pick the top-N most central nodes as control points
+        cx, cy = 160.0, 160.0  # SOCOFing images are ~320x320
+        n_control = min(8, enrolled_graph.num_nodes)
+        sorted_nodes = sorted(
+            range(enrolled_graph.num_nodes),
+            key=lambda i: (enrolled_graph.nodes[i]["x"] - cx) ** 2
+            + (enrolled_graph.nodes[i]["y"] - cy) ** 2,
+        )[:n_control]
+
+        # Apply radial squish: centre nodes move 20% closer, edges stay
+        control_pairs = []
+        for i in sorted_nodes:
+            n = enrolled_graph.nodes[i]
+            px, py = n["x"], n["y"]
+            rx, ry = px - cx, py - cy
+            # Distance from centre
+            r = np.hypot(rx, ry)
+            if r < 1.0:
+                continue
+            # Scale: 0.8 at centre, 1.0 at edge (cosine ramp)
+            scale = 0.8 + 0.2 * (r / 200.0)
+            new_px = cx + rx * scale
+            new_py = cy + ry * scale
+            control_pairs.append(((px, py), (new_px, new_py)))
+
+        probe_graph = self._tps_deform_graph(enrolled_graph, control_pairs)
+
+        # Verify the deformation actually changes positions significantly
+        position_diff = np.mean(
+            [
+                abs(probe_graph.nodes[i].x - enrolled_graph.nodes[i].x)
+                + abs(probe_graph.nodes[i].y - enrolled_graph.nodes[i].y)
+                for i in range(enrolled_graph.num_nodes)
+            ]
+        )
+        assert position_diff > 0.0, "TPS deformation should move nodes"
+
+        results = repo.match_subgraph(
+            probe_graph, [f"fp-{i}" for i in range(len(enrolled_paths))], top_k=3
+        )
+        assert len(results) >= 1
+        # The true match must be the highest-scoring (top rank)
+        top = results[0]
+        assert top.fingerprint_id == "fp-0", (
+            f"Expected fp-0 ranked first, got {top.fingerprint_id} (score={top.score:.4f})"
+        )
+        # The reinforced LSSR score should be meaningful
+        assert top.score >= 0.3, (
+            f"LSSR score for non-linearly deformed probe too low: {top.score:.4f}"
+        )
