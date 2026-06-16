@@ -62,4 +62,5 @@ def list_fingerprints(
     session: Session = Depends(get_db),
 ) -> Any:
     items = FingerprintRepository.list_by_person(session, person_id)
-    return FingerprintListResponse(items=items, total=len(items))
+    response_items = [FingerprintResponse.model_validate(item) for item in items]
+    return FingerprintListResponse(items=response_items, total=len(response_items))

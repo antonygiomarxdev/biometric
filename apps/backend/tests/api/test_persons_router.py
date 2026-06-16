@@ -1,6 +1,7 @@
 """Tests for persons router (Phase 17)."""
 
 from __future__ import annotations
+from typing import Generator
 
 import uuid
 
@@ -24,7 +25,7 @@ def app() -> FastAPI:
 
 
 @pytest.fixture
-def client(app: FastAPI) -> TestClient:
+def client(app: FastAPI) -> Generator[TestClient, None, None]:
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
