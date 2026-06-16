@@ -192,6 +192,8 @@ class FingerprintEnrollmentService:
                 fingerprint_id=str(fingerprint.id),
                 chunks=chunks,
                 chunk_type="delaunay",
+                capture_id=str(capture.id),
+                graph_id="",
             )
         except Exception as e:
             log.warning("Qdrant indexing failed for capture %s: %s", capture.id, e)

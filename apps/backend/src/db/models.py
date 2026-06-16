@@ -126,12 +126,21 @@ class Evidence(Base):
         nullable=True, index=True,
     )
 
+    fingerprint_capture_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("fingerprint_captures.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+
     case: Mapped["Case"] = relationship("Case", back_populates="evidences")
     matched_fingerprint: Mapped["Fingerprint | None"] = relationship(
         "Fingerprint", backref="matched_evidence"
     )
     matched_person: Mapped["Person | None"] = relationship(
         "Person", backref="evidence_matched_to"
+    )
+    capture: Mapped["FingerprintCapture | None"] = relationship(
+        "FingerprintCapture", backref="evidences",
     )
 
     def __repr__(self) -> str:

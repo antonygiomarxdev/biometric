@@ -106,9 +106,9 @@ class TestQdrantChunkRepository:
         from src.core.types import ChunkHit
 
         hits = [
-            ChunkHit("alice", "fp_1", "delaunay", 1.0, 0.9, 0.9),
-            ChunkHit("alice", "fp_2", "delaunay", 1.0, 0.8, 0.8),
-            ChunkHit("bob", "fp_3", "delaunay", 1.0, 0.7, 0.7),
+            ChunkHit("alice", "fp_1", "cap_1", "g_1", "delaunay", 1.0, 0.9, 0.9),
+            ChunkHit("alice", "fp_2", "cap_2", "g_2", "delaunay", 1.0, 0.8, 0.8),
+            ChunkHit("bob", "fp_3", "cap_3", "g_3", "delaunay", 1.0, 0.7, 0.7),
         ]
         persons = repo.aggregate_scores_by_person(hits)
         assert len(persons) == 2
@@ -218,6 +218,8 @@ class TestDeduplicateChunkHits:
         return ChunkHit(
             person_id=person,
             fingerprint_id=fp,
+            capture_id="",
+            graph_id="",
             chunk_type="delaunay",
             weight=1.0,
             similarity=score,

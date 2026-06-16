@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -38,6 +40,7 @@ class PersonService:
             existing = PersonRepository.find_by_external_id(self._session, data.external_id)
             if existing is not None:
                 raise ValueError(f"Person with external_id={data.external_id} already exists")
+        dob_dt = datetime.combine(data.dob, datetime.min.time()).replace(tzinfo=timezone.utc) if data.dob else None
         return PersonRepository.create(
             self._session,
             external_id=data.external_id,
@@ -45,7 +48,7 @@ class PersonService:
             doc_type=data.doc_type,
             doc_number=data.doc_number,
             sex=(data.sex or "").upper() or None,
-            dob=data.dob,
+            dob=dob_dt,
             notes=data.notes,
         )
 
@@ -57,10 +60,10 @@ class PersonService:
     ) -> list[Person]:
         return PersonRepository.list(self._session, skip=skip, limit=limit, search=search)
 
-    def update_person(self, person_id: uuid.UUID, **fields: object) -> Person | None:
+    def update_person(self, person_id: uuid.UUID, **fields: Any) -> Person | None:
         return PersonRepository.update(self._session, person_id, **fields)
 
-    def find_or_create_person(self, external_id: str, **defaults: object) -> Person:
+    def find_or_create_person(self, external_id: str, **defaults: Any) -> Person:
         existing = PersonRepository.find_by_external_id(self._session, external_id)
         if existing is not None:
             return existing

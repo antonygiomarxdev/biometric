@@ -1,23 +1,16 @@
 """
 Qdrant-backed known fingerprint enrollment router.
 
-Phase 15+ (Qdrant Chunked Indexing): replaces the legacy pgvector
-flow. The endpoint accepts a fingerprint image, runs the full RAG
-pipeline via :class:`QdrantRagMatchingService.enroll_async`, and
-persists weighted Delaunay-chunk vectors in the Qdrant ``fingerprint_chunks``
-collection.
-
-Per Clean Architecture (CA-03):
-  - The router is an anemic HTTP controller — it extracts the file
-    payload and delegates to the service layer.
-  - No SQLAlchemy ``Session`` dependency needed (Qdrant is the store).
+[DEPRECATED] Use POST /api/v1/persons/{id}/fingerprints/{fp_id}/captures
+instead. This endpoint is kept for backward compatibility but will be
+removed in the next release.
 """
 from __future__ import annotations
 
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Response
 
 from src.api.dependencies import resources
 from src.services.rag_matching_service import QdrantRagMatchingService
@@ -37,17 +30,18 @@ def _get_qdrant_matching_service() -> QdrantRagMatchingService:
 
 @router.post("/")
 async def enroll_known(
+    response: Response,
     person_id: str = Form(..., description="External person identifier"),
     file: UploadFile = File(..., description="Fingerprint image (BMP, PNG, JPEG)"),
     matching: QdrantRagMatchingService = Depends(_get_qdrant_matching_service),
 ) -> dict[str, Any]:
-    """Enroll a known fingerprint into the Qdrant chunk store.
+    """[DEPRECATED] Enroll a known fingerprint into the Qdrant chunk store.
 
-    The forensic validation rule (``EnrollmentValidationStrategy``)
-    is enforced inside the service layer: prints with fewer than
-    8 minutiae are rejected before any database write.
+    Use POST /api/v1/persons/{id}/fingerprints/{fp_id}/captures instead.
     """
-    logger.info("Qdrant enrollment — person_id=%s", person_id)
+    response.headers["Deprecation"] = "true"
+    response.headers["Sunset"] = "2026-09-16"
+    logger.warning("Deprecated endpoint called: POST /api/v1/known-fingerprints/ — person_id=%s", person_id)
     image_bytes = await file.read()
     if not image_bytes:
         raise HTTPException(status_code=400, detail="Empty file uploaded")
@@ -62,7 +56,7 @@ async def enroll_known(
         "chunks_inserted": result.chunks_inserted,
         "total_weight": result.total_weight,
         "message": (
-            f"Enrolled {result.person_id} into Qdrant chunk store with "
-            f"{result.chunks_inserted} chunks"
+            f"[DEPRECATED] Enrolled {result.person_id} into Qdrant chunk store with "
+            f"{result.chunks_inserted} chunks. Use POST /api/v1/persons/... instead."
         ),
     }

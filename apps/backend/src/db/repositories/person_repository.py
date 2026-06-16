@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 from datetime import datetime
 
 from sqlalchemy import select
@@ -66,7 +67,7 @@ class PersonRepository:
     def update(
         session: Session,
         person_id: uuid.UUID,
-        **fields: object,
+        **fields: Any,
     ) -> Person | None:
         p = session.get(Person, person_id)
         if p is None:

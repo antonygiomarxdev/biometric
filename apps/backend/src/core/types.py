@@ -252,6 +252,8 @@ class ChunkHit:
     """A single chunk-level hit from Qdrant chunk search."""
     person_id: str
     fingerprint_id: str
+    capture_id: str
+    graph_id: str
     chunk_type: str
     weight: float
     similarity: float

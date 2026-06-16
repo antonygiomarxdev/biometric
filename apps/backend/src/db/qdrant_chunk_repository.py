@@ -122,6 +122,8 @@ class QdrantChunkRepository(IChunkMatcher):
         fingerprint_id: str,
         chunks: list[TripletVector],
         chunk_type: str = "delaunay",
+        capture_id: str = "",
+        graph_id: str = "",
     ) -> int:
         """Insert N chunks for one fingerprint enrollment.
 
@@ -144,6 +146,8 @@ class QdrantChunkRepository(IChunkMatcher):
             payload: dict[str, Any] = {
                 "person_id": person_id,
                 "fingerprint_id": fingerprint_id,
+                "capture_id": capture_id,
+                "graph_id": graph_id,
                 "chunk_type": chunk_type,
                 "weight": chunk.weight,
                 "chunk_index": i,
@@ -215,6 +219,8 @@ class QdrantChunkRepository(IChunkMatcher):
                     ChunkHit(
                         person_id=str(payload.get("person_id", "")),
                         fingerprint_id=str(payload.get("fingerprint_id", "")),
+                        capture_id=str(payload.get("capture_id", "")),
+                        graph_id=str(payload.get("graph_id", "")),
                         chunk_type=str(payload.get("chunk_type", chunk_type)),
                         weight=weight,
                         similarity=similarity,
@@ -385,6 +391,8 @@ class QdrantChunkRepository(IChunkMatcher):
                     ChunkHit(
                         person_id=str(payload.get("person_id", "")),
                         fingerprint_id=str(payload.get("fingerprint_id", "")),
+                        capture_id=str(payload.get("capture_id", "")),
+                        graph_id=str(payload.get("graph_id", "")),
                         chunk_type=str(payload.get("chunk_type", "")),
                         weight=float(payload.get("weight", 1.0)),
                         similarity=1.0,
