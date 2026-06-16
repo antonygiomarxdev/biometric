@@ -7,6 +7,7 @@ import networkx as nx
 import numpy as np
 import sknw
 
+from src.core.config import config
 from src.core.interfaces import IPipelineStep, PipelineContext
 from src.core.types import RidgeEdge, RidgeGraph, RidgeNode
 from src.processing.orientation import compute_orientation
@@ -68,7 +69,7 @@ class RidgeGraphExtractor(IPipelineStep):
             # --- Forensic Weight (Gaussiana) ---
             dist_sq = (x - cx)**2 + (y - cy)**2
             weight = float(np.exp(-dist_sq / (2 * sigma**2)))
-            weight = max(0.01, round(weight, 3))
+            weight = max(config.extraction.graph_weight_floor, round(weight, 3))
             
             # --- Boundary Cutoff Detection ---
             is_cutoff = False

@@ -27,10 +27,11 @@ def create_enhancer(
     """Create a :class:`CpuEnhancer` instance.
 
     Args:
-        config: Optional :class:`EnhancerConfig`; defaults to a fresh
-            :class:`EnhancerConfig`.
+        config: Optional :class:`EnhancerConfig`; defaults to
+            :meth:`EnhancerConfig.from_env` which reads from
+            :class:`EnhancerDefaultsConfig` (env-overridable).
 
     Returns:
         A :class:`CpuEnhancer`.
     """
-    return CpuEnhancer(config or EnhancerConfig())
+    return CpuEnhancer(config or EnhancerConfig.from_env())

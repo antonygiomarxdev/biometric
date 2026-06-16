@@ -16,28 +16,30 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from src.core.config import config
 from src.core.types import MccCylinder, RidgeGraph
 
 # Cylinder geometry constants — Latent-optimised
 # Standard (Cappelli 2010): R=50, latent (Ferrara et al.): R=70-80 multi-radius
-_CYLINDER_RADIUS: int = 70        # pixels (larger cylinder for latents)
-_CELL_SIZE: int = 8               # pixel per spatial cell
-_DIR_BINS: int = 6                # directional bins covering [0, π)
+# Source of truth: src.core.config.{MccConfig,LssrConfig} (env-overridable).
+_CYLINDER_RADIUS: int = config.lssr.cylinder_radius
+_CELL_SIZE: int = config.mcc.cell_size
+_DIR_BINS: int = config.mcc.dir_bins
 _N_SPATIAL: int = 2 * _CYLINDER_RADIUS // _CELL_SIZE + 1  # 18 radial × 18 angular
 
 # LSSR consolidation constants — Latent-optimised
 # (Cappelli et al. 2010 + Ferrara Forensic adaptation)
-NREL: int = 8          # reinforcement iterations (standard=5, latent=8-10)
-WR: float = 0.6        # weight of original score in reinforcement
+NREL: int = config.lssr.nrel
+WR: float = config.lssr.wr
 # NOTE: TAU_P1 (distance tolerance) is set dynamically based on
 # the actual scale of the graph (median inter-minutiae distance).
 # The default of 12 px is for ~10 px ridge spacing (500 ppi scans);
 # real forensic scans can be much higher resolution.
-MU_P1: float = 0.0
-MU_P2: float = 0.0
-MU_P3: float = 0.0
-TAU_P2: float = 0.52   # radians (≈30° = π/6) — wider tolerance for latent distortion
-TAU_P3: float = 0.52   # radians (≈30°) — wider tolerance for latent distortion
+MU_P1: float = config.lssr.mu_p1
+MU_P2: float = config.lssr.mu_p2
+MU_P3: float = config.lssr.mu_p3
+TAU_P2: float = config.lssr.tau_p2
+TAU_P3: float = config.lssr.tau_p3
 
 
 def _estimate_graph_scale(positions: list[CylinderPosition]) -> float:

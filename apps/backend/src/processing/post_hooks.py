@@ -24,6 +24,7 @@ import math
 import cv2
 import numpy as np
 
+from src.core.config import config
 from src.core.interfaces import IPipelineStep, PipelineContext
 from src.core.types import MinutiaCandidate, MinutiaType
 
@@ -270,9 +271,16 @@ class EnsembleFusionFilter(IPipelineStep):
     is the average of members with an agreement bonus, capped at 1.0.
     """
 
-    def __init__(self, radius: float = 8.0, min_votes: int = 2) -> None:
-        self.radius = radius
-        self.min_votes = min_votes
+    def __init__(
+        self,
+        radius: float | None = None,
+        min_votes: int | None = None,
+    ) -> None:
+        fc = config.fusion
+        self.radius = radius if radius is not None else fc.radius
+        self.min_votes = min_votes if min_votes is not None else fc.min_votes
+        self._bonus_max = fc.bonus_max
+        self._bonus_per_member = fc.bonus_per_member
 
     def process(self, ctx: PipelineContext) -> None:
         groups = ctx.candidate_groups
@@ -323,7 +331,7 @@ class EnsembleFusionFilter(IPipelineStep):
                 type_votes[m.type] = type_votes.get(m.type, 0.0) + m.confidence
             majority_type = max(type_votes.items(), key=lambda kv: kv[1])[0]
             base = float(np.mean([m.confidence for m in members]))
-            bonus = min(0.2, (len(members) - 1) * 0.1)
+            bonus = min(self._bonus_max, (len(members) - 1) * self._bonus_per_member)
             fused.append(
                 MinutiaCandidate(
                     x=avg_x, y=avg_y,

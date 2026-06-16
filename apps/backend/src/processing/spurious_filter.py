@@ -15,6 +15,7 @@ import cv2
 import numpy as np
 from scipy import ndimage
 
+from src.core.config import config
 from src.core.interfaces import IPipelineStep, PipelineContext
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,11 @@ _THRESH_500 = {
     'edge': 12,       # px: margin from image border to discard
 }
 
+# Phase 16: tunables for the spurious filter (env-overridable via
+# SPURIOUS_* env vars; see SpuriousFilterConfig in src.core.config).
+_NON_FACING_SPUR_RELAXATION: float = config.spurious_filter.min_recoverable_ratio
+_DPI_SCALE_FLOOR: float = config.spurious_filter.dpi_scale_floor  # min scale (prevent undersized removal)
+
 
 def _estimate_dpi_scale(
     median_period_px: float | None = None,
@@ -48,14 +54,14 @@ def _estimate_dpi_scale(
     scale_factor = actual_ridge_period / 9.25
     """
     if median_period_px is not None and median_period_px > 0:
-        return max(0.25, median_period_px / _RIDGE_PERIOD_500DPI)
+        return max(_DPI_SCALE_FLOOR, median_period_px / _RIDGE_PERIOD_500DPI)
 
     if freq_img is not None:
         valid = freq_img[freq_img > 0]
         if len(valid) > 0:
             median_freq = float(np.median(valid))
             median_period = 1.0 / median_freq
-            return max(0.25, median_period / _RIDGE_PERIOD_500DPI)
+            return max(_DPI_SCALE_FLOOR, median_period / _RIDGE_PERIOD_500DPI)
 
     return 1.0
 
@@ -217,7 +223,7 @@ def remove_spurs_from_minutiae(
             delta = abs((b_angle - e_angle) % np.pi)
             facing = delta > 3 * np.pi / 4  # > 135°
 
-            thresh = float(spur_dist) if facing else float(spur_dist) * 0.7
+            thresh = float(spur_dist) if facing else float(spur_dist) * _NON_FACING_SPUR_RELAXATION
             if d <= thresh:
                 to_remove.add(ei)
 

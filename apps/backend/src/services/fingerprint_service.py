@@ -15,9 +15,11 @@ import cv2
 import numpy as np
 
 if TYPE_CHECKING:
+    from src.core.config import PipelineConfig
     from src.domain.forensic_rules import IForensicValidationStrategy
 
 
+from src.core.config import config
 from src.core.interfaces import (
     AsyncPipelineStep,
     IEnhancer,
@@ -122,8 +124,14 @@ def build_production_pipeline(
     extractors: list[IFeatureExtractor],
     normalizer: INormalizer,
     resize: bool = True,
+    pipeline_config: "PipelineConfig | None" = None,
 ) -> list[IPipelineStep]:
-    """Constructs the canonical processing chain."""
+    """Constructs the canonical processing chain.
+
+    All tunables read from :class:`PipelineConfig` (env-overridable).
+    Pass a custom ``pipeline_config`` to override at construction time.
+    """
+    cfg = pipeline_config or config.pipeline
     return [
         # 1. Enhancement (upscales, gabors, normalises)
         EnhancerStep(enhancer, resize=resize),
@@ -134,29 +142,29 @@ def build_production_pipeline(
         # 2b. Per-block frequency estimation + quality mask
         QualityMaskStep(),
 
-        SingularityDetector(roi_radius=140),
+        SingularityDetector(roi_radius=cfg.singularity_roi_radius),
 
         # 3. Skeletonization
-        SkeletonizationStep(min_island_size=20),
+        SkeletonizationStep(min_island_size=cfg.skeleton_min_island_size),
 
         # 3b. Clean spurious structures from skeleton (DPI-scaled thresholds)
         SkeletonCleanerStep(),
-        
+
         # 4. Extraction
         ExtractorStep(extractors),
         RidgeGraphExtractor(),
-        
+
         # 5. Fusion
-        EnsembleFusionFilter(radius=8.0, min_votes=2),
-        
+        EnsembleFusionFilter(radius=cfg.fusion_radius, min_votes=cfg.fusion_min_votes),
+
         # 5. Post-hooks (cleanup)
         QualityFilter(),
-        SpurRemover(max_distance=10.0),
-        BrokenRidgeHealer(max_distance=8.0),
-        BorderMaskCleaner(border_px=0, roi_mode="core"),
-        OrientationRefiner(window=16, coherence_threshold=0.65),
-        LowConfidenceFilter(threshold=0.75),
-        
+        SpurRemover(max_distance=cfg.spur_max_distance),
+        BrokenRidgeHealer(max_distance=cfg.healer_max_distance),
+        BorderMaskCleaner(border_px=cfg.border_px, roi_mode=cfg.border_roi_mode),
+        OrientationRefiner(window=cfg.orientation_window, coherence_threshold=cfg.orientation_coherence_threshold),
+        LowConfidenceFilter(threshold=cfg.low_confidence_threshold),
+
         # 6. Normalisation
         NormalizerStep(normalizer),
     ]
@@ -189,6 +197,8 @@ class FingerprintService:
         post_processors: Optional[List[IPipelineStep]] = None,
         # RAG Phase 10: forensic business rules
         validation_strategy: Optional["IForensicValidationStrategy"] = None,
+        # Phase 16: algorithm tunables
+        pipeline_config: Optional["PipelineConfig"] = None,
     ):
         self._enhancer: IEnhancer = enhancer or create_enhancer()
         if extractors is not None:
@@ -200,6 +210,9 @@ class FingerprintService:
 
         self.normalizer = normalizer or MinutiaNormalizer()
         self.validation_strategy = validation_strategy
+
+        # Phase 16: centralised tunables
+        cfg = pipeline_config or config.pipeline
 
         # Build dynamic step list from provided hooks or defaults
         self.steps: list[IPipelineStep] = []
@@ -213,14 +226,14 @@ class FingerprintService:
             self.steps.extend([
                 OrientationFieldAnalyzer(),
                 QualityMaskStep(),
-                SingularityDetector(roi_radius=140),
+                SingularityDetector(roi_radius=cfg.singularity_roi_radius),
             ])
 
-        self.steps.append(SkeletonizationStep(min_island_size=20))
+        self.steps.append(SkeletonizationStep(min_island_size=cfg.skeleton_min_island_size))
         self.steps.append(SkeletonCleanerStep())
         self.steps.append(ExtractorStep(self.extractors))
         self.steps.append(RidgeGraphExtractor())
-        self.steps.append(EnsembleFusionFilter(radius=8.0, min_votes=2))
+        self.steps.append(EnsembleFusionFilter(radius=cfg.fusion_radius, min_votes=cfg.fusion_min_votes))
 
         chosen_post = post_hooks if post_hooks is not None else post_processors
         if chosen_post is not None:
@@ -228,11 +241,11 @@ class FingerprintService:
         else:
             self.steps.extend([
                 QualityFilter(),
-                SpurRemover(max_distance=10.0),
-                BrokenRidgeHealer(max_distance=8.0),
-                BorderMaskCleaner(border_px=0, roi_mode="core"),
-                OrientationRefiner(window=16, coherence_threshold=0.65),
-                LowConfidenceFilter(threshold=0.75),
+                SpurRemover(max_distance=cfg.spur_max_distance),
+                BrokenRidgeHealer(max_distance=cfg.healer_max_distance),
+                BorderMaskCleaner(border_px=cfg.border_px, roi_mode=cfg.border_roi_mode),
+                OrientationRefiner(window=cfg.orientation_window, coherence_threshold=cfg.orientation_coherence_threshold),
+                LowConfidenceFilter(threshold=cfg.low_confidence_threshold),
             ])
 
         self.steps.append(NormalizerStep(self.normalizer))

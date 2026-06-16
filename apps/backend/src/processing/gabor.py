@@ -20,6 +20,7 @@ import cv2
 import numpy as np
 from scipy import ndimage, signal
 
+from src.core.config import config
 from src.core.interfaces import IPipelineStep, PipelineContext
 
 logger = logging.getLogger(__name__)
@@ -28,11 +29,11 @@ logger = logging.getLogger(__name__)
 # Constants (500 DPI basis — thresholds are DPI-scaled elsewhere)
 # ---------------------------------------------------------------------------
 
-BLOCK_SIZE: int = 16                # w x w processing block
-WINDOW_LENGTH: int = 32             # projection window along ridge direction
-WINDOW_WIDTH: int = 16              # projection window orthogonal to ridges
-FREQ_MIN: float = 0.04              # cycles/pixel (≈25 px/ridge)
-FREQ_MAX: float = 0.33              # cycles/pixel (≈3 px/ridge)
+BLOCK_SIZE: int = config.gabor.block_size
+WINDOW_LENGTH: int = config.gabor.window_length
+WINDOW_WIDTH: int = config.gabor.window_width
+FREQ_MIN: float = config.gabor.freq_min
+FREQ_MAX: float = config.gabor.freq_max
 
 # Quality-map classification prototypes (Hong 1-NN)
 # Each row: (amplitude, frequency, variance) for 6 clusters.
@@ -46,7 +47,7 @@ _Q_PROTOTYPES: np.ndarray = np.array([
     [0.02, 0.08, 0.05],
 ], dtype=np.float32)
 
-_RECOVERABLE_RATIO: float = 0.40
+_RECOVERABLE_RATIO: float = config.gabor.recoverable_ratio
 
 
 # ---------------------------------------------------------------------------
@@ -204,105 +205,17 @@ def _interpolate_frequency(
 
 
 # ---------------------------------------------------------------------------
-# Quality Map (Hong 1-NN classifier)
-# ---------------------------------------------------------------------------
-
-
-def _detect_peaks_valleys(
-    x_sig: np.ndarray,
-) -> tuple[np.ndarray | None, np.ndarray | None]:
-    """Detect peaks and valleys in a 1D x-signature signal."""
-    from scipy.signal import find_peaks
-
-    x_sig = ndimage.gaussian_filter1d(x_sig, sigma=1.0)
-    peaks, _ = find_peaks(x_sig, distance=3)
-    valleys, _ = find_peaks(-x_sig, distance=3)
-    if len(peaks) < 2 or len(valleys) < 2:
-        return None, None
-    return x_sig[peaks], x_sig[valleys]
-
-
-def compute_quality_mask(
-    norm_img: np.ndarray,
-    orient_img: np.ndarray,
-    freq_img: np.ndarray,
-) -> np.ndarray:
-    """Binary quality mask: True = recoverable fingerprint region.
-
-    Uses a 1-NN classifier on the x-signature feature vector
-    (amplitude, frequency, variance) per 16×16 block.
-    """
-    h, w = norm_img.shape
-    mask = np.zeros((h, w), dtype=bool)
-
-    for y in range(0, h - BLOCK_SIZE + 1, BLOCK_SIZE):
-        for x in range(0, w - BLOCK_SIZE + 1, BLOCK_SIZE):
-            by = y // BLOCK_SIZE
-            bx = x // BLOCK_SIZE
-
-            freq_val = float(freq_img[y, x])
-            if freq_val <= 0:
-                continue
-
-            block = norm_img[y:y + BLOCK_SIZE, x:x + BLOCK_SIZE]
-            theta = float(orient_img[by, bx])
-
-            cos_t = np.cos(theta)
-            sin_t = np.sin(theta)
-            half_l = WINDOW_LENGTH // 2
-            half_w = WINDOW_WIDTH // 2
-            x_coords = np.arange(-half_l, half_l, dtype=np.float32)
-            y_coords = np.arange(-half_w, half_w, dtype=np.float32)
-            col_grid = (BLOCK_SIZE // 2
-                        + x_coords[np.newaxis, :] * cos_t
-                        + y_coords[:, np.newaxis] * sin_t)
-            row_grid = (BLOCK_SIZE // 2
-                        - x_coords[np.newaxis, :] * sin_t
-                        + y_coords[:, np.newaxis] * cos_t)
-            row_grid = np.clip(row_grid, 0, BLOCK_SIZE - 1).astype(np.int32)
-            col_grid = np.clip(col_grid, 0, BLOCK_SIZE - 1).astype(np.int32)
-            rotated = block[row_grid, col_grid]
-            x_sig = np.mean(rotated, axis=0)
-
-            peaks, valleys = _detect_peaks_valleys(x_sig)
-            if peaks is None or valleys is None:
-                continue
-
-            amp = float(np.mean(peaks) - np.mean(valleys))
-            var = float(np.var(x_sig) / (np.mean(x_sig) ** 2 + 1e-6))
-
-            feature = np.array([amp, freq_val, var], dtype=np.float32)
-
-            dists = np.linalg.norm(_Q_PROTOTYPES - feature, axis=1)
-            cluster = int(np.argmin(dists))
-            mask[y:y + BLOCK_SIZE, x:x + BLOCK_SIZE] = (cluster < 4)
-
-    if mask.mean() < _RECOVERABLE_RATIO:
-        logger.warning(
-            "Quality mask: only %.0f%% recoverable (< %.0f%%) — fingerprint may be hopeless",
-            mask.mean() * 100, _RECOVERABLE_RATIO * 100,
-        )
-
-    return mask
-
-
-# ---------------------------------------------------------------------------
 # Pipeline step
 # ---------------------------------------------------------------------------
 
 
 class QualityMaskStep(IPipelineStep):
-    """Compute per-block frequency and quality mask for downstream steps.
+    """Compute per-block frequency for downstream steps.
 
-    This step does NOT apply Gabor filtering — that is handled by
-    :class:`CpuEnhancer`.  It only produces the measurements
-    (frequency map, quality mask) that other steps use:
-
-    - :class:`SkeletonCleanerStep` uses ``ctx.freq_image`` for DPI scaling
-    - :class:`SingularityDetector` and post-hooks intersect with the mask
-
-    Must be placed after :class:`OrientationFieldAnalyzer` so the
-    orientation field is available.
+    This step produces the measurements needed by the DPI scaler.
+    The quality mask is simply inherited from the OrientationFieldAnalyzer
+    (coherence thresholding) which is much more robust for modern scans
+    than legacy variance methods.
     """
 
     def process(self, ctx: PipelineContext) -> None:
@@ -313,23 +226,20 @@ class QualityMaskStep(IPipelineStep):
         img_f32 = source.astype(np.float32)
         norm = (img_f32 - img_f32.mean()) / (img_f32.std() + 1e-8)
 
-        # Block-level orientation (independent of OrientationFieldAnalyzer
-        # so this step works in isolation)
+        # Block-level orientation
         orient = _compute_block_orientation(norm)
 
+        # Local frequency map (used for scaling)
         freq_img = estimate_local_frequency(norm, orient)
-        quality_mask = compute_quality_mask(norm, orient, freq_img)
-
         ctx.freq_image = freq_img
-        if ctx.quality_mask is not None and ctx.quality_mask.shape == quality_mask.shape:
-            ctx.quality_mask = ctx.quality_mask & quality_mask
-        else:
-            ctx.quality_mask = quality_mask
 
-        valid_pct = 100.0 * quality_mask.mean()
+        # Mask logic: we rely on OrientationFieldAnalyzer's mask.
+        if ctx.quality_mask is None:
+            ctx.quality_mask = np.ones(source.shape[:2], dtype=bool)
+
         n_valid = int((freq_img > 0).sum())
         n_total = freq_img.size
         logger.debug(
-            "QualityMaskStep: %.1f%% recoverable, %d/%d blocks have valid frequency",
-            valid_pct, n_valid, n_total,
+            "LocalFrequencyStep: %d/%d blocks have valid frequency",
+            n_valid, n_total,
         )

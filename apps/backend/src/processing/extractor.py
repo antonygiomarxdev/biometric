@@ -15,6 +15,7 @@ import numpy as np
 from skimage.morphology import convex_hull_image, erosion
 from skimage.morphology.footprints import square
 
+from src.core.config import config
 from src.core.metrics import timed
 from src.core.types import AlgorithmOrigin, MinutiaCandidate, MinutiaType
 
@@ -82,7 +83,7 @@ class SkeletonMinutiaeExtractor:
             logger.warning("Imagen completamente blanca después de binarización")
             return []
 
-        if white_pixels < total_pixels * 0.05:
+        if white_pixels < total_pixels * config.extraction.binarized_min_white_ratio:
             logger.warning(
                 f"Muy pocos píxeles blancos ({100*white_pixels/total_pixels:.1f}%) - la imagen podría estar invertida"
             )

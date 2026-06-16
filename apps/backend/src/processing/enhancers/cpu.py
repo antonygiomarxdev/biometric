@@ -9,6 +9,7 @@ import numpy as np
 from scipy import ndimage, signal
 from skimage.morphology import skeletonize
 
+from src.core.config import config
 from src.core.metrics import timed
 from src.processing.enhancers.base import BaseEnhancer, EnhancerConfig
 
@@ -49,7 +50,7 @@ class CpuEnhancer(BaseEnhancer):
             logger.warning(
                 f"Frecuencia inválida: {mean_freq}, usando valor por defecto"
             )
-            mean_freq = 0.1  # Valor por defecto
+            mean_freq = config.enhancer_defaults.mean_freq_default
 
         # 4. Gabor filtering (Optimized)
         binim = self._ridge_filter(normim, orientim, mean_freq)
@@ -60,7 +61,8 @@ class CpuEnhancer(BaseEnhancer):
             f"Enhancement completado - shape: {result.shape}, píxeles blancos: {100*white_ratio:.1f}%"
         )
 
-        if white_ratio < 0.1 or white_ratio > 0.9:
+        ed = config.enhancer_defaults
+        if white_ratio < ed.white_ratio_min or white_ratio > ed.white_ratio_max:
             logger.warning(
                 f"Imagen mejorada tiene distribución extrema de píxeles: {100*white_ratio:.1f}% blancos"
             )
@@ -144,7 +146,7 @@ class CpuEnhancer(BaseEnhancer):
         ind = np.where(freq_1d > 0)[0]
 
         if len(ind) == 0:
-            return 0.1  # Valor por defecto seguro si falla todo
+            return config.enhancer_defaults.mean_freq_default  # safe fallback
 
         non_zero_freqs = freq_1d[ind]
         mean_freq = np.mean(non_zero_freqs)
@@ -214,18 +216,16 @@ class CpuEnhancer(BaseEnhancer):
             angle = -(i * angle_inc + 90)
             filters.append(ndimage.rotate(ref_filter, angle, reshape=False))
 
-        # 2. Convolve image with ALL filters (ideally 3D tensor, here layer loop)
+        # 2. Convolve image with ALL filters
         filtered_layers = np.zeros((num_filters, *normim.shape))
         for i, kern in enumerate(filters):
             filtered_layers[i] = signal.convolve2d(normim, kern, mode="same")
 
         # 3. Select response based on pixel-wise orientation
-        # Convert continuous orientation to discrete index [0, num_filters-1]
         orient_deg = orientim * 180 / np.pi
         orient_idx = np.round(orient_deg / angle_inc).astype(int)
         orient_idx = orient_idx % num_filters
 
-        # Advanced indexing: choose layer i for pixel (x,y)
         rows, cols = normim.shape
         r_idx, c_idx = np.indices((rows, cols))
         final_img = filtered_layers[orient_idx, r_idx, c_idx]

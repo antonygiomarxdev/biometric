@@ -32,7 +32,11 @@ class SkeletonizationStep(IPipelineStep):
         _, binary = cv2.threshold(source, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         binary_bool = binary > 0
 
-        # 2. Limpieza de "pelusas" (elimina manchas blancas desconectadas)
+        # 2. Cerrar pequeños agujeros y espacios entre fragmentos (Morphological Close)
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+        binary_bool = cv2.morphologyEx(binary_bool.astype(np.uint8), cv2.MORPH_CLOSE, kernel) > 0
+
+        # 3. Limpieza de "pelusas" (elimina manchas blancas desconectadas)
         if self.min_island_size > 0:
             binary_bool = remove_small_objects(binary_bool, max_size=self.min_island_size)
 

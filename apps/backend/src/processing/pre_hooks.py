@@ -23,6 +23,7 @@ import logging
 import cv2
 import numpy as np
 
+from src.core.config import config
 from src.core.interfaces import IPipelineStep, PipelineContext
 
 logger = logging.getLogger(__name__)
@@ -72,14 +73,17 @@ class OrientationFieldAnalyzer(IPipelineStep):
 
     def __init__(
         self,
-        block_size: int = 16,
-        min_energy: float = 1e-3,
-        coherence_threshold: float = 0.35,
+        block_size: int | None = None,
+        min_energy: float | None = None,
+        coherence_threshold: float | None = None,
         gaussian_sigma: float = 0.0,
     ) -> None:
-        self.block_size = block_size
-        self.min_energy = min_energy
-        self.coherence_threshold = coherence_threshold
+        oc = config.orientation_field
+        self.block_size = block_size if block_size is not None else oc.block_size
+        self.min_energy = min_energy if min_energy is not None else oc.min_energy
+        self.coherence_threshold = (
+            coherence_threshold if coherence_threshold is not None else oc.coherence_threshold
+        )
         self.gaussian_sigma = gaussian_sigma
         self.orientation_field: np.ndarray | None = None
         self.coherence_field: np.ndarray | None = None
@@ -169,20 +173,23 @@ class SingularityDetector(IPipelineStep):
         poi_core_high: float = 0.75,
         poi_delta_low: float = -0.75,
         poi_delta_high: float = -0.25,
-        doric_radius: int = 4,
-        doric_samples: int = 16,
-        doric_rms_threshold: float = 0.30,
+        doric_radius: int | None = None,
+        doric_samples: int | None = None,
+        doric_rms_threshold: float | None = None,
         roi_radius: int = 130,
+        poi_divisor: float | None = None,
     ) -> None:
+        doric = config.doric
         self.gaussian_sigma = gaussian_sigma
         self.poi_core_low = poi_core_low
         self.poi_core_high = poi_core_high
         self.poi_delta_low = poi_delta_low
         self.poi_delta_high = poi_delta_high
-        self.doric_radius = doric_radius
-        self.doric_samples = doric_samples
-        self.doric_rms_threshold = doric_rms_threshold
+        self.doric_radius = doric_radius if doric_radius is not None else doric.radius
+        self.doric_samples = doric_samples if doric_samples is not None else doric.n_samples
+        self.doric_rms_threshold = doric_rms_threshold if doric_rms_threshold is not None else doric.rms_threshold
         self.roi_radius = roi_radius
+        self._poi_divisor = poi_divisor if poi_divisor is not None else doric.poi_divisor
         self.core: tuple[int, int] | None = None
         self.delta: tuple[int, int] | None = None
         self.poi_map: np.ndarray | None = None
@@ -234,7 +241,7 @@ class SingularityDetector(IPipelineStep):
                     d = neighbors[(k + 1) % len(neighbors)] - neighbors[k]
                     d = ((d + np.pi / 2) % np.pi) - np.pi / 2
                     diff_sum += d
-                poi_map[by, bx] = diff_sum / (2.0 * np.pi)
+                poi_map[by, bx] = diff_sum / self._poi_divisor
 
         self.poi_map = poi_map
 
