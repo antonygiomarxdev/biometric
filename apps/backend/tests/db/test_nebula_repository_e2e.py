@@ -504,15 +504,15 @@ class TestTpsNonlinearDeformationReal:
         n_control = min(8, enrolled_graph.num_nodes)
         sorted_nodes = sorted(
             range(enrolled_graph.num_nodes),
-            key=lambda i: (enrolled_graph.nodes[i]["x"] - cx) ** 2
-            + (enrolled_graph.nodes[i]["y"] - cy) ** 2,
+            key=lambda i: (enrolled_graph.nodes[i].x - cx) ** 2
+            + (enrolled_graph.nodes[i].y - cy) ** 2,
         )[:n_control]
 
         # Apply radial squish: centre nodes move 20% closer, edges stay
         control_pairs = []
         for i in sorted_nodes:
             n = enrolled_graph.nodes[i]
-            px, py = n["x"], n["y"]
+            px, py = n.x, n.y
             rx, ry = px - cx, py - cy
             # Distance from centre
             r = np.hypot(rx, ry)
