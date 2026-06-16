@@ -29,6 +29,7 @@ sys.path.insert(0, str(ROOT))
 
 from src.db.qdrant_chunk_repository import QdrantChunkRepository
 from bulk_enroll_socofing import _SOCOFingFingerprintService
+from src.processing.vectorizer import RagTripletVectorizer
 from src.services.rag_matching_service import QdrantRagMatchingService
 
 logging.basicConfig(level=logging.WARNING)
@@ -83,7 +84,8 @@ def main(limit: int, search_limit: int, qdrant_host: str, qdrant_port: int, coll
         print(f"No images found in {SOCOFING}/Real")
         sys.exit(1)
 
-    service = QdrantRagMatchingService(
+    vectorizer = RagTripletVectorizer()
+    search_svc = QdrantRagMatchingService(
         fingerprint_service=_SOCOFingFingerprintService(),
         chunk_repository=chunk_repo,
     )
@@ -91,7 +93,10 @@ def main(limit: int, search_limit: int, qdrant_host: str, qdrant_port: int, coll
 
     for image, person_id, fname in images:
         t0 = time.perf_counter()
-        result = service.enroll(image, person_id, fingerprint_id=fname)
+        fp_service = _SOCOFingFingerprintService()
+        normalized = fp_service.process_image(image, fingerprint_id=fname)
+        chunks = vectorizer._chunks_from_normalized(normalized)
+        chunk_repo.bulk_insert_chunks(person_id, fname, chunks)
         elapsed = time.perf_counter() - t0
         enrollment_times.append(elapsed)
 
@@ -108,7 +113,7 @@ def main(limit: int, search_limit: int, qdrant_host: str, qdrant_port: int, coll
 
     for image, _, fname in images[:search_limit]:
         t0 = time.perf_counter()
-        results = service.search(image, top_k_per_chunk=5, top_k_persons=10)
+        results = search_svc.search(image, top_k_per_chunk=5, top_k_persons=10)
         elapsed = time.perf_counter() - t0
         search_latencies.append(elapsed * 1000)  # ms
 
@@ -130,7 +135,7 @@ def main(limit: int, search_limit: int, qdrant_host: str, qdrant_port: int, coll
     deformed = cv2.resize(first_image, (w2, h2))
 
     t0 = time.perf_counter()
-    results = service.search(deformed, top_k_per_chunk=5, top_k_persons=10)
+    results = search_svc.search(deformed, top_k_per_chunk=5, top_k_persons=10)
     deform_latency = (time.perf_counter() - t0) * 1000
     top_pid = results[0].person_id if results else "NONE"
     deform_match = top_pid == first_pid

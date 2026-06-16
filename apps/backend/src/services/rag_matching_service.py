@@ -8,6 +8,9 @@ Wires together:
     weighted Delaunay-triangle invariants
   * ``QdrantChunkRepository`` to persist and search chunks in Qdrant
 
+Search-only service. Enrollment is handled by
+:class:`~src.services.fingerprint_enrollment_service.FingerprintEnrollmentService`.
+
 Replaces the deprecated ``RagMatchingService`` (pgvector). No SQLAlchemy
 dependency. Preferred path for production.
 """
@@ -23,10 +26,7 @@ import numpy as np
 
 from src.core.types import NormalizedFingerprint
 from src.db.qdrant_chunk_repository import QdrantChunkRepository
-from src.domain.forensic_rules import (
-    EnrollmentValidationStrategy,
-    SearchValidationStrategy,
-)
+from src.domain.forensic_rules import SearchValidationStrategy
 from src.processing.vectorizer import RagTripletVectorizer
 from src.services.fingerprint_service import FingerprintService
 
@@ -34,15 +34,6 @@ if TYPE_CHECKING:
     from src.domain.forensic_rules import IForensicValidationStrategy
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True, slots=True)
-class EnrollmentResult:
-    """Summary of a successful enrollment into the RAG store."""
-
-    person_id: str
-    chunks_inserted: int
-    total_weight: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,12 +45,11 @@ class SearchHit:
     hits: int
 
 
-
 class QdrantRagMatchingService:
-    """Orchestrates enrollment and search against the Qdrant chunk store.
+    """Orchestrates search against the Qdrant chunk store.
 
-    Preferred path for production. Replaces the deprecated
-    ``RagMatchingService`` (pgvector). No SQLAlchemy ``Session`` required.
+    Enrollment is handled by :class:`FingerprintEnrollmentService`.
+    This service only handles latent search queries.
     """
 
     def __init__(
@@ -98,50 +88,6 @@ class QdrantRagMatchingService:
     # ------------------------------------------------------------------
     # Public API — sync
     # ------------------------------------------------------------------
-
-    def enroll(
-        self,
-        image: np.ndarray,
-        person_id: str,
-        fingerprint_id: str | None = None,
-    ) -> EnrollmentResult:
-        """Enroll a fingerprint into the Qdrant chunk store.
-
-        Args:
-            image: Grayscale fingerprint image.
-            person_id: Person identifier.
-            fingerprint_id: Optional fingerprint-level identifier.
-                Defaults to ``person_id``.
-
-        Returns:
-            EnrollmentResult with inserted chunk count.
-        """
-        fid = fingerprint_id or person_id
-        normalized = self._run_pipeline(
-            image, EnrollmentValidationStrategy(), fid,
-        )
-        chunks = self._vectorizer._chunks_from_normalized(normalized)
-        if not chunks:
-            logger.warning("Enrollment for %s produced 0 chunks", person_id)
-            return EnrollmentResult(
-                person_id=person_id,
-                chunks_inserted=0,
-                total_weight=0.0,
-            )
-        inserted = self._chunk_repo.bulk_insert_chunks(
-            person_id, fid, chunks,
-        )
-        total_weight = sum(c.weight for c in chunks)
-        logger.info(
-            "Enrolled %s: %d chunks, total_weight=%.3f",
-            person_id, inserted, total_weight,
-        )
-        return EnrollmentResult(
-            person_id=person_id,
-            chunks_inserted=inserted,
-            total_weight=total_weight,
-        )
-
     def search(
         self,
         image: np.ndarray,
@@ -181,17 +127,6 @@ class QdrantRagMatchingService:
     # ------------------------------------------------------------------
     # Public API — async (for FastAPI routers)
     # ------------------------------------------------------------------
-
-    async def enroll_async(
-        self,
-        image_bytes: bytes,
-        person_id: str,
-        fingerprint_id: str | None = None,
-    ) -> EnrollmentResult:
-        image = await self._decode_async(image_bytes)
-        return await asyncio.get_running_loop().run_in_executor(
-            self._pool, self.enroll, image, person_id, fingerprint_id,
-        )
 
     async def search_async(
         self,

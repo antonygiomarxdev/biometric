@@ -1,4 +1,4 @@
-"""E2E test: QdrantRagMatchingService orchestrator with a stubbed FingerprintService.
+"""E2E test: QdrantChunkRepository orchestrator with a stubbed FingerprintService.
 
 The image processing pipeline (Gabor, skeleton, etc.) is not the
 focus of Phase 15 — Phase 13/14 cover that. Here we verify the
@@ -30,17 +30,16 @@ from src.core.types import (
 )
 from src.processing.vectorizer import RagTripletVectorizer
 from src.services.fingerprint_service import FingerprintService
-from src.services.rag_matching_service import (
-    EnrollmentResult,
-    QdrantRagMatchingService,
-    SearchHit,
-)
+from src.services.rag_matching_service import QdrantRagMatchingService, SearchHit
 from src.db.qdrant_chunk_repository import QdrantChunkRepository
 
 
 # ---------------------------------------------------------------------------
 # Stub FingerprintService
 # ---------------------------------------------------------------------------
+
+# Spacing between synthetic minutiae in the 5x5 stub grid (pixels)
+_SYNTHETIC_MINUTIA_SPACING: float = 20.0
 
 
 class _StubFingerprintService(FingerprintService):
@@ -73,8 +72,8 @@ class _StubFingerprintService(FingerprintService):
             for j in range(5):
                 minutiae.append(
                     MinutiaCandidate(
-                        x=offset[0] + (i - 2) * 20.0,
-                        y=offset[1] + (j - 2) * 20.0,
+                        x=int(offset[0] + (i - 2) * _SYNTHETIC_MINUTIA_SPACING),
+                        y=int(offset[1] + (j - 2) * _SYNTHETIC_MINUTIA_SPACING),
                         angle=0.0,
                         type=(
                             MinutiaType.BIFURCATION
@@ -124,11 +123,25 @@ def repo(client: QdrantClient) -> QdrantChunkRepository:
 
 
 @pytest.fixture
-def service(repo: QdrantChunkRepository) -> QdrantRagMatchingService:
+def search_svc(repo: QdrantChunkRepository) -> QdrantRagMatchingService:
     return QdrantRagMatchingService(
         fingerprint_service=_StubFingerprintService(),
         chunk_repository=repo,
     )
+
+
+def _enroll(
+    repo: QdrantChunkRepository,
+    image: np.ndarray,
+    person_id: str,
+    fingerprint_id: str,
+) -> int:
+    """Direct enrollment: process_image → vectorize → bulk_insert."""
+    fp_service = _StubFingerprintService()
+    vectorizer = RagTripletVectorizer()
+    normalized = fp_service.process_image(image, fingerprint_id=fingerprint_id)
+    chunks = vectorizer._chunks_from_normalized(normalized)
+    return repo.bulk_insert_chunks(person_id, fingerprint_id, chunks)
 
 
 # ---------------------------------------------------------------------------
@@ -143,34 +156,22 @@ def _dummy_image(seed_id: str) -> np.ndarray:
 
 
 class TestOrchestratorEnroll:
-    """The enroll() path: image → chunks → Qdrant."""
+    """The enroll flow: image → chunks → Qdrant."""
 
-    def test_enroll_returns_enrollment_result(
-        self, service: QdrantRagMatchingService, repo: QdrantChunkRepository,
+    def test_enroll_returns_chunk_count(
+        self, repo: QdrantChunkRepository,
     ) -> None:
-        result = service.enroll(
-            _dummy_image("alice_fp1"), person_id="alice", fingerprint_id="alice_fp1",
-        )
-        assert isinstance(result, EnrollmentResult)
-        assert result.person_id == "alice"
-        assert result.chunks_inserted > 0
-        assert result.total_weight > 0.0
+        result = _enroll(repo, _dummy_image("alice_fp1"), "alice", "alice_fp1")
+        assert result > 0
         # Verify it's actually in Qdrant
-        assert repo.collection_size() == result.chunks_inserted
-
-    def test_enroll_default_fingerprint_id(
-        self, service: QdrantRagMatchingService, repo: QdrantChunkRepository,
-    ) -> None:
-        result = service.enroll(_dummy_image("alice"), person_id="alice")
-        assert result.person_id == "alice"
-        assert result.chunks_inserted > 0
+        assert repo.collection_size() == result
 
     def test_multiple_enrolls_accumulate(
-        self, service: QdrantRagMatchingService, repo: QdrantChunkRepository,
+        self, repo: QdrantChunkRepository,
     ) -> None:
         for fp in ("alice_fp1", "alice_fp2", "bob_fp1"):
-            service.enroll(
-                _dummy_image(fp),
+            _enroll(
+                repo, _dummy_image(fp),
                 person_id=fp.split("_")[0],
                 fingerprint_id=fp,
             )
@@ -182,18 +183,18 @@ class TestOrchestratorSearch:
     """The search() path: probe image → search hits → ranked persons."""
 
     def test_search_after_enroll_finds_owner(
-        self, service: QdrantRagMatchingService, repo: QdrantChunkRepository,
+        self, search_svc: QdrantRagMatchingService, repo: QdrantChunkRepository,
     ) -> None:
         # Enroll all 3
         for person in ("alice", "bob", "carol"):
-            service.enroll(
-                _dummy_image(f"{person}_fp1"),
+            _enroll(
+                repo, _dummy_image(f"{person}_fp1"),
                 person_id=person,
                 fingerprint_id=f"{person}_fp1",
             )
 
         # Search with alice's pattern
-        hits = service.search(_dummy_image("alice_probe"), top_k_persons=3)
+        hits = search_svc.search(_dummy_image("alice_probe"), top_k_persons=3)
         assert len(hits) > 0
         assert isinstance(hits[0], SearchHit)
         assert hits[0].person_id == "alice"
@@ -205,22 +206,22 @@ class TestOrchestratorSearch:
         assert ranked["alice"] >= ranked.get("carol", 0.0)
 
     def test_search_empty_collection_returns_empty(
-        self, service: QdrantRagMatchingService, repo: QdrantChunkRepository,
+        self, search_svc: QdrantRagMatchingService, repo: QdrantChunkRepository,
     ) -> None:
         # No enrollments
-        hits = service.search(_dummy_image("probe"))
+        hits = search_svc.search(_dummy_image("probe"))
         assert hits == []
 
     def test_search_respects_top_k_persons(
-        self, service: QdrantRagMatchingService, repo: QdrantChunkRepository,
+        self, search_svc: QdrantRagMatchingService, repo: QdrantChunkRepository,
     ) -> None:
         for person in ("alice", "bob", "carol"):
-            service.enroll(
-                _dummy_image(f"{person}_fp1"),
+            _enroll(
+                repo, _dummy_image(f"{person}_fp1"),
                 person_id=person,
                 fingerprint_id=f"{person}_fp1",
             )
-        hits = service.search(_dummy_image("alice_probe"), top_k_persons=2)
+        hits = search_svc.search(_dummy_image("alice_probe"), top_k_persons=2)
         assert len(hits) <= 2
 
 
@@ -228,14 +229,12 @@ class TestOrchestratorDelete:
     """The delete path: remove by person_id."""
 
     def test_delete_by_person_removes_chunks(
-        self, service: QdrantRagMatchingService, repo: QdrantChunkRepository,
+        self, repo: QdrantChunkRepository,
     ) -> None:
-        service.enroll(_dummy_image("alice_fp1"), "alice", "alice_fp1")
-        service.enroll(_dummy_image("bob_fp1"), "bob", "bob_fp1")
+        _enroll(repo, _dummy_image("alice_fp1"), "alice", "alice_fp1")
+        _enroll(repo, _dummy_image("bob_fp1"), "bob", "bob_fp1")
         size_before = repo.collection_size()
         assert size_before > 0
-        # QdrantRagMatchingService doesn't expose delete_by_person directly;
-        # use the repo's method.
         deleted = repo.delete_by_person("alice")
         assert deleted > 0
         assert repo.collection_size() < size_before

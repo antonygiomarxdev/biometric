@@ -42,16 +42,15 @@ from src.processing.pre_hooks import OrientationFieldAnalyzer, SingularityDetect
 from src.processing.skeletonize_step import SkeletonizationStep
 from src.processing.spurious_filter import SkeletonCleanerStep
 from src.processing.vectorizer import RagTripletVectorizer
-from src.services.rag_matching_service import (
-    EnrollmentResult,
-    QdrantRagMatchingService,
-    SearchHit,
-)
+from src.db.qdrant_chunk_repository import QdrantChunkRepository
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
 logger = logging.getLogger("bulk_enroll")
 
 SOCOFING = ROOT / "static" / "SOCOFing"
+
+# Synthetic grid spacing for test minutiae generation (pixels)
+_SYNTHETIC_MINUTIA_SPACING: float = 20.0
 
 
 # ---------------------------------------------------------------------------
@@ -93,8 +92,8 @@ class _SOCOFingFingerprintService:
             for j in range(5):
                 minutiae.append(
                     MinutiaCandidate(
-                        x=offset[0] + (i - 2) * 20.0,
-                        y=offset[1] + (j - 2) * 20.0,
+                        x=int(offset[0] + (i - 2) * _SYNTHETIC_MINUTIA_SPACING),
+                        y=int(offset[1] + (j - 2) * _SYNTHETIC_MINUTIA_SPACING),
                         angle=0.0,
                         type=(
                             MinutiaType.BIFURCATION
@@ -184,28 +183,28 @@ def main(limit: int, subset: str, qdrant_host: str, qdrant_port: int, collection
     print(f"Loaded {len(images)} images.")
     print()
 
-    service = QdrantRagMatchingService(
-        fingerprint_service=_SOCOFingFingerprintService(),
-        chunk_repository=chunk_repo,
-    )
+    vectorizer = RagTripletVectorizer()
     total_chunks = 0
     total_time = 0.0
     successes = 0
 
     for image, person_id, fingerprint_id, fname in images:
         t0 = time.perf_counter()
-        result = service.enroll(image, person_id, fingerprint_id=fingerprint_id)
+        fp_service = _SOCOFingFingerprintService()
+        normalized = fp_service.process_image(image, fingerprint_id=fingerprint_id)
+        chunks = vectorizer._chunks_from_normalized(normalized)
+        inserted = chunk_repo.bulk_insert_chunks(person_id, fingerprint_id, chunks)
         elapsed = time.perf_counter() - t0
-        total_chunks += result.chunks_inserted
+        total_chunks += inserted
         total_time += elapsed
-        if result.chunks_inserted > 0:
+        if inserted > 0:
             successes += 1
             status = "OK"
         else:
             status = "SKIP"
         print(
             f"  {status:4s}  {fname:45s}  "
-            f"{result.chunks_inserted:3d} chunks  "
+            f"{inserted:3d} chunks  "
             f"({elapsed:.2f}s)"
         )
 

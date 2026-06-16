@@ -75,7 +75,7 @@ def extract(image_path):
 def register(image_path, person_id, name, document):
     """Register a fingerprint using the new services."""
     click.echo("This command has been migrated to the new service layer.")
-    click.echo("Use POST /api/v1/known-fingerprints/ instead.")
+    click.echo("Use POST /api/v1/persons/{id}/fingerprints/{fp_id}/captures instead.")
 
 
 @cli.command()

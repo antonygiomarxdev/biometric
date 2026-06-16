@@ -20,7 +20,6 @@ from .decisions import router as decisions_router
 from .genai import router as genai_router
 from .reports import router as reports_router
 from .evidence import router as evidence_router
-from .known_fingerprints import router as known_fingerprints_router
 from .latent_search import router as latent_search_router
 from .persons import router as persons_router
 from .fingerprints import router as fingerprints_router
@@ -34,7 +33,6 @@ __all__ = [
     "genai_router",
     "reports_router",
     "evidence_router",
-    "known_fingerprints_router",
     "latent_search_router",
     "persons_router",
     "fingerprints_router",
