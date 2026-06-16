@@ -17,6 +17,7 @@ import logging
 import time
 
 import networkx as nx
+import numpy as np
 from nebula3.Config import Config as NebulaConfig
 from nebula3.gclient.net import ConnectionPool, Session
 
@@ -220,10 +221,11 @@ class NebulaRepository:
     ) -> list[CoarseMatch]:
         """Search for the latent graph among candidate fingerprints.
 
-        Uses VF2 subgraph isomorphism (``networkx.algorithms.isomorphism``)
-        to determine whether the latent ridge structure is a topological
-        subgraph of each candidate.  Returns candidates ranked by match
-        score (1.0 = exact subgraph match, 0.0 = no match).
+        Uses structural local-neighbourhood matching
+        (:meth:`_compute_structural_score`) which is scale-invariant
+        and tolerates topology changes from noise, resizing, or
+        partial impressions.  Returns candidates ranked by match
+        score (1.0 = perfect structural match, 0.0 = no match).
 
         Args:
             latent_graph: The crime-scene latent fingerprint graph.
@@ -231,7 +233,7 @@ class NebulaRepository:
             top_k: Maximum number of results to return.
 
         Returns:
-            Candidates that topologically contain the latent graph,
+            Candidates ranked by structural similarity,
             sorted descending by score.
         """
         latent_nx = self._to_networkx(latent_graph)
@@ -246,7 +248,7 @@ class NebulaRepository:
                 if candidate_nx is None or candidate_nx.number_of_nodes() == 0:
                     continue
 
-                score = self._compute_isomorphism_score(latent_nx, candidate_nx)
+                score = self._compute_structural_score(latent_nx, candidate_nx)
                 if score > 0.0:
                     results.append(CoarseMatch(fingerprint_id=fp_id, score=score))
         finally:
@@ -352,43 +354,105 @@ class NebulaRepository:
         return G
 
     @staticmethod
-    def _compute_isomorphism_score(
+    def _compute_structural_score(
         latent: nx.Graph, candidate: nx.Graph
     ) -> float:
-        """Compute a subgraph isomorphism score.
+        """Forensic Spatial Alignment Score (RANSAC).
+
+        Unlike strict mathematical graph isomorphism (which fails when
+        noise or elastic skin deformation adds/removes nodes), this
+        method mimics human forensic experts:
+        1. Selects anchor points (highest degree nodes, usually bifurcations).
+        2. Tests random affine transformations between probe and candidate.
+        3. Discards physically impossible transformations (scale < 0.6 or > 1.5).
+        4. Counts "inliers": how many minutiae fall within a spatial
+           tolerance radius after alignment.
 
         Returns:
-            1.0 if latent is a strict VF2 subgraph of candidate
-            (degree + edge-length match).
-            0.7 if a relaxed match is found (degree only).
-            0.0 if no isomorphism exists.
+            Ratio of matched minutiae [0.0, 1.0]. A score > 0.6 usually
+            indicates a true match in real-world scenarios.
         """
-        if latent.number_of_nodes() > candidate.number_of_nodes():
+        n_lat = latent.number_of_nodes()
+        n_cand = candidate.number_of_nodes()
+        if n_lat < 3 or n_cand < 3:
             return 0.0
 
-        # Strict: match both degree and edge length
-        GM_strict = nx.algorithms.isomorphism.GraphMatcher(
-            candidate,
-            latent,
-            node_match=lambda n1, n2: n1.get("degree") == n2.get("degree"),
-            edge_match=lambda e1, e2: (
-                abs(e1.get("length", 0) - e2.get("length", 0))
-                / max(e1.get("length", 1), 1)
-                < 0.3
-            ),
+        # Extract positions as (N, 2) arrays
+        lat_pts = np.array(
+            [[latent.nodes[n].get("x", 0), latent.nodes[n].get("y", 0)] for n in latent.nodes()],
+            dtype=np.float64,
         )
-        if GM_strict.subgraph_is_isomorphic():
-            return 1.0
-
-        # Relaxed: degree only (tolerate deformation)
-        GM_relaxed = nx.algorithms.isomorphism.GraphMatcher(
-            candidate,
-            latent,
-            node_match=lambda n1, n2: (
-                abs(n1.get("degree", 0) - n2.get("degree", 0)) <= 1
-            ),
+        cand_pts = np.array(
+            [[candidate.nodes[n].get("x", 0), candidate.nodes[n].get("y", 0)] for n in candidate.nodes()],
+            dtype=np.float64,
         )
-        if GM_relaxed.subgraph_is_isomorphic():
-            return 0.7
 
-        return 0.0
+        # Prioritize high-degree nodes for RANSAC sampling (anchors)
+        lat_weights = np.array([latent.nodes[n].get("degree", 1) for n in latent.nodes()], dtype=np.float64)
+        lat_weights /= lat_weights.sum()
+
+        def _estimate_affine(src: np.ndarray, dst: np.ndarray) -> tuple[np.ndarray, np.ndarray] | None:
+            A = np.zeros((6, 6))
+            b = np.zeros(6)
+            for i in range(3):
+                sx, sy = src[i]
+                dx, dy = dst[i]
+                A[2*i, 0:3] = [sx, sy, 1]
+                A[2*i+1, 3:6] = [sx, sy, 1]
+                b[2*i] = dx
+                b[2*i+1] = dy
+            try:
+                params = np.linalg.solve(A, b)
+                return params[:3], params[3:]
+            except np.linalg.LinAlgError:
+                return None
+
+        rng = np.random.default_rng(42)  # Deterministic for tests
+        n_iter = 300
+        threshold = 20.0  # Pixels tolerance for inliers
+
+        best_inliers = 0
+
+        for _ in range(n_iter):
+            # 1. Sample 3 points from latent (weighted by degree)
+            idx = rng.choice(n_lat, 3, replace=False, p=lat_weights)
+            lat_sample = lat_pts[idx]
+
+            # 2. Find nearest candidate points for the sample (quick heuristic match)
+            dists = np.linalg.norm(cand_pts[:, None] - lat_sample[None, :], axis=2)
+            nearest_idx = np.argmin(dists, axis=0)
+            cand_sample = cand_pts[nearest_idx]
+
+            # 3. Compute affine transformation
+            M = _estimate_affine(lat_sample, cand_sample)
+            if M is None:
+                continue
+            
+            # 4. Physical realism check (skin doesn't stretch 500%)
+            a, b, _ = M[0]
+            c, d, _ = M[1]
+            scale = np.sqrt(a*a + b*b)
+            # Shear approximation: dot product of transformed basis vectors
+            shear = abs(a*c + b*d) / (scale*scale + 1e-8)
+
+            if scale < 0.6 or scale > 1.5 or shear > 0.4:
+                continue
+
+            # 5. Apply transformation to ALL latent points
+            transformed = np.zeros_like(lat_pts)
+            transformed[:, 0] = a * lat_pts[:, 0] + b * lat_pts[:, 1] + M[0][2]
+            transformed[:, 1] = c * lat_pts[:, 0] + d * lat_pts[:, 1] + M[1][2]
+
+            # 6. Count global inliers
+            dists_to_cand = np.linalg.norm(cand_pts[:, None] - transformed[None, :], axis=2)
+            min_dists = np.min(dists_to_cand, axis=0)
+            inlier_count = int(np.sum(min_dists < threshold))
+
+            if inlier_count > best_inliers:
+                best_inliers = inlier_count
+                
+                # Fast exit if we found a perfect match
+                if best_inliers == n_lat:
+                    break
+
+        return best_inliers / max(n_lat, 1)

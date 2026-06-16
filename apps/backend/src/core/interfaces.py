@@ -181,3 +181,21 @@ class ICoarseMatcher(Protocol):
     def search(self, embedding: np.ndarray, top_k: int = 100) -> List[CoarseMatch]:
         """Return the *top_k* candidates ranked by similarity."""
         ...
+
+
+class IFineMatcher(Protocol):
+    """Port for the Fine Matcher (Phase 11-03/11-04).
+    
+    Fine matchers compare a probe RidgeGraph against a shortlist of
+    enrolled candidates using forensic spatial alignment and topological
+    verification, returning a highly discriminative final score.
+    """
+
+    def match_subgraph(
+        self,
+        latent_graph: RidgeGraph,
+        candidate_ids: list[str],
+        top_k: int = 10,
+    ) -> List[CoarseMatch]:
+        """Return the *top_k* candidates ranked by spatial/topological fit."""
+        ...
