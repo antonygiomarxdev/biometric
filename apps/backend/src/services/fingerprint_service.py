@@ -30,7 +30,7 @@ from src.core.metrics import measure_time
 from src.core.types import NormalizedFingerprint
 from src.processing.enhancer import create_enhancer
 from src.processing.extractor import SkeletonMinutiaeExtractor
-from src.processing.gabor import GaborEnhancerStep
+from src.processing.gabor import QualityMaskStep
 from src.processing.graph_extractor import RidgeGraphExtractor
 from src.processing.skeletonize_step import SkeletonizationStep
 from src.processing.spurious_filter import SkeletonCleanerStep
@@ -125,20 +125,20 @@ def build_production_pipeline(
 ) -> list[IPipelineStep]:
     """Constructs the canonical processing chain."""
     return [
-        # 1. Enhancement (upscales, gabors)
+        # 1. Enhancement (upscales, gabors, normalises)
         EnhancerStep(enhancer, resize=resize),
-        
+
         # 2. Pre-hooks (run on the enhanced image)
         OrientationFieldAnalyzer(),
-        
-        # 2b. Latent-optimised Gabor enhancement (per-block frequency, quality map)
-        GaborEnhancerStep(),
-        
+
+        # 2b. Per-block frequency estimation + quality mask
+        QualityMaskStep(),
+
         SingularityDetector(roi_radius=140),
-        
+
         # 3. Skeletonization
         SkeletonizationStep(min_island_size=20),
-        
+
         # 3b. Clean spurious structures from skeleton (DPI-scaled thresholds)
         SkeletonCleanerStep(),
         
@@ -212,7 +212,7 @@ class FingerprintService:
         else:
             self.steps.extend([
                 OrientationFieldAnalyzer(),
-                GaborEnhancerStep(),
+                QualityMaskStep(),
                 SingularityDetector(roi_radius=140),
             ])
 

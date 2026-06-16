@@ -41,6 +41,7 @@ class PipelineContext:
     roi_mask: np.ndarray | None = None  # bool, True = inside the core ROI disc
     orientation_field: np.ndarray | None = None  # radians, per-block
     coherence_field: np.ndarray | None = None  # [0..1], per-block
+    freq_image: np.ndarray | None = None  # cycles/pixel, per-block (-1=invalid)
 
     # Enhancement output
     enhanced_image: np.ndarray | None = None  # after Gabor / binarisation

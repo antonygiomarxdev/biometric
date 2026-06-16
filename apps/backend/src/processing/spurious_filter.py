@@ -269,9 +269,10 @@ class SkeletonCleanerStep(IPipelineStep):
             logger.warning("SkeletonCleanerStep: no skeleton to clean")
             return
 
-        # Build frequency map from orientation field for DPI scaling
-        freq_img: np.ndarray | None = None
-        if ctx.orientation_field is not None:
+        # Reuse frequency map from QualityMaskStep if available, else
+        # recompute it.  Avoids the cost of x-signature projection twice.
+        freq_img: np.ndarray | None = ctx.freq_image
+        if freq_img is None and ctx.orientation_field is not None:
             try:
                 from src.processing.gabor import estimate_local_frequency
                 source = ctx.enhanced_image if ctx.enhanced_image is not None else ctx.raw_image
@@ -286,7 +287,7 @@ class SkeletonCleanerStep(IPipelineStep):
         cleaned = clean_skeleton(ctx.skeleton, thresholds=thresholds)
         ctx.skeleton = cleaned
 
-        before = int(ctx.skeleton.sum())
+        before = int((ctx.skeleton > 0).sum())
         after = int(cleaned.sum())
         logger.debug(
             "SkeletonCleanerStep: %d → %d skeleton pixels (removed %d spurious)",
