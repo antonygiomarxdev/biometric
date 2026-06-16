@@ -3,15 +3,13 @@
 We bypass the real FingerprintService Gabor pipeline (slow + requires
 real Postgres) and exercise the RAG data flow directly:
 
-  RagTripletVectorizer → RagVectorRepository (in-memory SQLite) →
-  weighted_knn_search → aggregate_scores_by_person
+  RagTripletVectorizer → in-memory chunk matching → aggregate_scores_by_person
 
-For true E2E with image processing, use testcontainers (out of scope).
+For true E2E with a real vector store, see ``test_qdrant_chunk_e2e.py``.
 """
 from __future__ import annotations
 
 import math
-import sqlite3
 from typing import Iterator
 from unittest.mock import MagicMock
 
@@ -27,7 +25,6 @@ from src.core.types import (
     NormalizedFingerprint,
 )
 from src.db.models import Base
-from src.db.repositories.rag_vector_repository import RagVectorRepository
 from src.domain.forensic_rules import InsufficientFeaturesError
 from src.processing.vectorizer import RagTripletVectorizer
 
@@ -337,25 +334,6 @@ def test_translation_invariance_fragment_search_finds_owner(
         f"Translation lost triangles: orig={dict(counter_orig)} "
         f"t={dict(counter_t)} overlap={overlap}/{min_count}"
     )
-
-
-def test_aggregate_scores_by_person_picks_correct_owner() -> None:
-    """If we manually populate weighted_scores favoring alice, the
-    aggregate ranking must put alice first.
-    """
-    chunks = [
-        {"person_id": "bob", "weighted_score": 0.3, "weight": 0.3},
-        {"person_id": "alice", "weighted_score": 0.9, "weight": 0.9},
-        {"person_id": "alice", "weighted_score": 0.4, "weight": 0.4},
-        {"person_id": "bob", "weighted_score": 0.2, "weight": 0.2},
-    ]
-    aggregated = RagVectorRepository.aggregate_scores_by_person(chunks)
-    assert len(aggregated) == 2
-    assert aggregated[0]["person_id"] == "alice"
-    assert aggregated[0]["total_score"] == pytest.approx(1.3)
-    assert aggregated[0]["hits"] == 2
-    assert aggregated[1]["person_id"] == "bob"
-    assert aggregated[1]["total_score"] == pytest.approx(0.5)
 
 
 def test_noise_fragment_does_not_produce_high_scoring_match() -> None:

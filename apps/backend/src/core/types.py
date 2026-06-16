@@ -245,3 +245,23 @@ class CoarseMatch:
     fingerprint_id: str
     score: float
     metadata: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class ChunkHit:
+    """A single chunk-level hit from Qdrant chunk search."""
+    person_id: str
+    fingerprint_id: str
+    chunk_type: str
+    weight: float
+    similarity: float
+    weighted_score: float
+
+
+@dataclass(frozen=True, slots=True)
+class PersonHit:
+    """Aggregated person-level result from chunk search."""
+    person_id: str
+    total_score: float
+    hits: int
+    contributing_fingerprints: list[str] = field(default_factory=list)

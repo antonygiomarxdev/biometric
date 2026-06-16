@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import Protocol, List, runtime_checkable
 import numpy as np
 
-from src.core.types import CoarseMatch, MinutiaCandidate, NormalizedFingerprint, MatchResult, RidgeGraph, TripletVector
+from src.core.types import CoarseMatch, MinutiaCandidate, NormalizedFingerprint, MatchResult, RidgeGraph, TripletVector, ChunkHit, PersonHit
 
 
 # ---------------------------------------------------------------------------
@@ -200,4 +200,46 @@ class IFineMatcher(Protocol):
         top_k: int = 10,
     ) -> List[CoarseMatch]:
         """Return the *top_k* candidates ranked by spatial/topological fit."""
+        ...
+
+
+class IChunkMatcher(Protocol):
+    """Port for chunked coarse matchers (Phase 15).
+
+    Unlike :class:`ICoarseMatcher` (single global vector per query),
+    this port accepts N query chunks and returns aggregated person-level
+    hits via weighted score fusion. Concrete adapters include
+    :class:`~src.db.qdrant_chunk_repository.QdrantChunkRepository`.
+    """
+
+    def ensure_collection(self) -> None:
+        """Create the backing collection if it does not already exist."""
+        ...
+
+    def bulk_insert_chunks(
+        self,
+        person_id: str,
+        fingerprint_id: str,
+        chunks: list[TripletVector],
+    ) -> int:
+        """Insert N chunks for one fingerprint enrollment."""
+        ...
+
+    def weighted_knn_search(
+        self,
+        query_chunks: list[TripletVector],
+        top_k_per_chunk: int = 5,
+    ) -> list[ChunkHit]:
+        """Search by chunk, return per-fingerprint hits (deduplicated)."""
+        ...
+
+    def aggregate_scores_by_person(
+        self,
+        hits: list[ChunkHit],
+    ) -> list[PersonHit]:
+        """Group chunk hits by person and sum weighted scores."""
+        ...
+
+    def delete_by_person(self, person_id: str) -> int:
+        """Remove all chunks for a person. Returns count."""
         ...

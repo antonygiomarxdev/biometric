@@ -1,19 +1,15 @@
 """
-RagMatchingService — Phase 10 (RAG Dactilar) end-to-end orchestrator.
+QdrantRagMatchingService — Phase 15+ (Qdrant Chunked Indexing).
 
 Wires together:
   * ``FingerprintService`` with the appropriate forensic validation strategy
     (enrollment requires >=8 minutiae, search accepts >=2)
   * ``RagTripletVectorizer`` to chunk a normalized fingerprint into
     weighted Delaunay-triangle invariants
-  * ``RagVectorRepository`` to persist and search chunks in pgvector
+  * ``QdrantChunkRepository`` to persist and search chunks in Qdrant
 
-This service replaces the legacy single-vector 256-dim matching flow.
-The old approach could not match partial latent prints because the
-query vector was a global aggregation. The RAG approach works on
-local invariant structures, so a 2-minutiae fragment produces a
-query that may match a subset of the chunks enrolled from a full
-ten-print.
+Replaces the deprecated ``RagMatchingService`` (pgvector). No SQLAlchemy
+dependency. Preferred path for production.
 """
 from __future__ import annotations
 
@@ -24,10 +20,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
-from sqlalchemy.orm import Session
 
 from src.core.types import NormalizedFingerprint
-from src.db.repositories.rag_vector_repository import RagVectorRepository
+from src.db.qdrant_chunk_repository import QdrantChunkRepository
 from src.domain.forensic_rules import (
     EnrollmentValidationStrategy,
     SearchValidationStrategy,
@@ -59,23 +54,23 @@ class SearchHit:
     hits: int
 
 
-class RagMatchingService:
-    """Orchestrates enrollment and search against the RAG chunk store.
 
-    The service is fully synchronous in its business logic; async
-    wrappers around the CPU-bound decoding are exposed for the
-    FastAPI router via :meth:`enroll_async` and :meth:`search_async`.
+class QdrantRagMatchingService:
+    """Orchestrates enrollment and search against the Qdrant chunk store.
+
+    Preferred path for production. Replaces the deprecated
+    ``RagMatchingService`` (pgvector). No SQLAlchemy ``Session`` required.
     """
 
     def __init__(
         self,
         fingerprint_service: FingerprintService | None = None,
-        rag_repository: RagVectorRepository | None = None,
+        chunk_repository: QdrantChunkRepository | None = None,
         vectorizer: RagTripletVectorizer | None = None,
         pool: Executor | None = None,
     ) -> None:
         self._fp_service = fingerprint_service
-        self._rag_repo = rag_repository or RagVectorRepository()
+        self._chunk_repo = chunk_repository or QdrantChunkRepository.from_host()
         self._vectorizer = vectorizer or RagTripletVectorizer()
         self._pool = pool
 
@@ -84,7 +79,6 @@ class RagMatchingService:
     # ------------------------------------------------------------------
 
     def _ensure_service(self) -> FingerprintService:
-        """Return the injected FingerprintService, or build a default one."""
         if self._fp_service is None:
             self._fp_service = FingerprintService()
         return self._fp_service
@@ -95,35 +89,36 @@ class RagMatchingService:
         strategy: "IForensicValidationStrategy",
         fingerprint_id: str,
     ) -> NormalizedFingerprint:
-        """Run the full pipeline and apply the validation strategy.
-
-        The validation strategy is applied here (not inside the
-        pipeline) so that the service remains decoupled from any
-        FingerprintService instance the caller might have injected.
-        """
         service = self._ensure_service()
         normalized = service.process_image(image, fingerprint_id=fingerprint_id)
-        # Apply forensic validation after the pipeline produces
-        # candidates. The FingerprintService does this too, but doing
-        # it here keeps RagMatchingService self-contained and lets
-        # unit tests use a mock FingerprintService.
         if hasattr(normalized, "minutiae"):
             strategy.validate(normalized.minutiae)
         return normalized
 
     # ------------------------------------------------------------------
-    # Public API — sync (for tests and CLI)
+    # Public API — sync
     # ------------------------------------------------------------------
 
     def enroll(
         self,
         image: np.ndarray,
         person_id: str,
-        db: Session,
+        fingerprint_id: str | None = None,
     ) -> EnrollmentResult:
-        """Enroll a fingerprint into the RAG chunk store."""
+        """Enroll a fingerprint into the Qdrant chunk store.
+
+        Args:
+            image: Grayscale fingerprint image.
+            person_id: Person identifier.
+            fingerprint_id: Optional fingerprint-level identifier.
+                Defaults to ``person_id``.
+
+        Returns:
+            EnrollmentResult with inserted chunk count.
+        """
+        fid = fingerprint_id or person_id
         normalized = self._run_pipeline(
-            image, EnrollmentValidationStrategy(), person_id
+            image, EnrollmentValidationStrategy(), fid,
         )
         chunks = self._vectorizer._chunks_from_normalized(normalized)
         if not chunks:
@@ -133,50 +128,54 @@ class RagMatchingService:
                 chunks_inserted=0,
                 total_weight=0.0,
             )
-        self._rag_repo.bulk_insert_chunks(db, person_id, chunks)
+        inserted = self._chunk_repo.bulk_insert_chunks(
+            person_id, fid, chunks,
+        )
         total_weight = sum(c.weight for c in chunks)
         logger.info(
             "Enrolled %s: %d chunks, total_weight=%.3f",
-            person_id,
-            len(chunks),
-            total_weight,
+            person_id, inserted, total_weight,
         )
         return EnrollmentResult(
             person_id=person_id,
-            chunks_inserted=len(chunks),
+            chunks_inserted=inserted,
             total_weight=total_weight,
         )
 
     def search(
         self,
         image: np.ndarray,
-        db: Session,
         top_k_per_chunk: int = 5,
+        top_k_persons: int = 10,
     ) -> list[SearchHit]:
-        """Search the RAG store for matches to a latent image."""
+        """Search the Qdrant chunk store for matches to a latent image.
+
+        Args:
+            image: Grayscale fingerprint image (probe).
+            top_k_per_chunk: Nearest neighbors per chunk.
+            top_k_persons: Maximum persons to return.
+
+        Returns:
+            List of SearchHit sorted by total_score descending.
+        """
         normalized = self._run_pipeline(
-            image, SearchValidationStrategy(), "latent"
+            image, SearchValidationStrategy(), "latent",
         )
         chunks = self._vectorizer._chunks_from_normalized(normalized)
         if not chunks:
             return []
-        all_hits: list[dict] = []
-        for chunk in chunks:
-            all_hits.extend(
-                self._rag_repo.weighted_knn_search(
-                    db,
-                    query_embedding=chunk.features,
-                    top_k=top_k_per_chunk,
-                )
-            )
-        aggregated = self._rag_repo.aggregate_scores_by_person(all_hits)
+        hits = self._chunk_repo.weighted_knn_search(
+            chunks,
+            top_k_per_chunk=top_k_per_chunk,
+        )
+        person_hits = self._chunk_repo.aggregate_scores_by_person(hits)
         return [
             SearchHit(
-                person_id=row["person_id"],
-                total_score=row["total_score"],
-                hits=row["hits"],
+                person_id=h.person_id,
+                total_score=h.total_score,
+                hits=h.hits,
             )
-            for row in aggregated
+            for h in person_hits[:top_k_persons]
         ]
 
     # ------------------------------------------------------------------
@@ -187,28 +186,25 @@ class RagMatchingService:
         self,
         image_bytes: bytes,
         person_id: str,
-        db: Session,
+        fingerprint_id: str | None = None,
     ) -> EnrollmentResult:
-        """Async enrollment from raw image bytes (offloads CPU work)."""
         image = await self._decode_async(image_bytes)
         return await asyncio.get_running_loop().run_in_executor(
-            self._pool, self.enroll, image, person_id, db
+            self._pool, self.enroll, image, person_id, fingerprint_id,
         )
 
     async def search_async(
         self,
         image_bytes: bytes,
-        db: Session,
         top_k_per_chunk: int = 5,
+        top_k_persons: int = 10,
     ) -> list[SearchHit]:
-        """Async search from raw image bytes (offloads CPU work)."""
         image = await self._decode_async(image_bytes)
         return await asyncio.get_running_loop().run_in_executor(
-            self._pool, self.search, image, db, top_k_per_chunk
+            self._pool, self.search, image, top_k_per_chunk, top_k_persons,
         )
 
     async def _decode_async(self, image_bytes: bytes) -> np.ndarray:
-        """Decode image bytes in a worker thread."""
         loop = asyncio.get_running_loop()
 
         def _decode(payload: bytes) -> np.ndarray:

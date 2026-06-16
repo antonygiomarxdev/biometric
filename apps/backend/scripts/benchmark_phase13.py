@@ -50,7 +50,7 @@ def extract_graph(image: np.ndarray) -> RidgeGraph:
         image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
     ctx = PipelineContext(raw_image=image, fingerprint_id="bench")
-    enhanced = create_enhancer().enhance(image, resize=False)
+    enhanced = create_enhancer().enhance(image, resize=True)
     ctx.enhanced_image = enhanced
     ctx.preprocessed_image = enhanced
 
