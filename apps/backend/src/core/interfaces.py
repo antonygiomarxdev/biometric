@@ -51,8 +51,9 @@ class PipelineContext:
     candidate_groups: list[list[MinutiaCandidate]] = field(default_factory=list)
     candidates: list[MinutiaCandidate] = field(default_factory=list)
 
-    # Core singularity (forensic anchor). Populated by SingularityDetector.
+    # Singularities (forensic anchors). Populated by SingularityDetector.
     core: tuple[int, int] | None = None
+    delta: tuple[int, int] | None = None
 
     # Final Output
     normalized_fingerprint: NormalizedFingerprint | None = None

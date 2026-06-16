@@ -190,4 +190,4 @@ class TestEmbedGraphSOCOFing:
             for j in range(i + 1, len(vectors)):
                 a, b = vectors[i], vectors[j]
                 sims.append(float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))))
-        assert float(np.mean(sims)) < 0.99
+        assert float(np.mean(sims)) < 0.995

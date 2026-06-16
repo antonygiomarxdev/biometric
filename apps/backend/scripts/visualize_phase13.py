@@ -61,24 +61,26 @@ def _to_uint8(arr: np.ndarray) -> np.ndarray:
     return arr.astype(np.uint8)
 
 
-def _overlay_graph(image: np.ndarray, ctx: PipelineContext) -> np.ndarray:
-    """Draw nodes (green) and edges (red) on a copy of the image."""
+def _overlay_graph(skeleton: np.ndarray, ctx: PipelineContext) -> np.ndarray:
+    """Draw nodes (green) and edges (red) following the exact ridge path."""
     if ctx.ridge_graph is None or ctx.ridge_graph.is_empty():
-        return _to_uint8(image)
+        return _to_uint8(skeleton)
         
-    # El lienzo debe estar en la misma escala que el grafo (resolución del enhanced_image)
-    if ctx.enhanced_image is not None:
-        h, w = ctx.enhanced_image.shape[:2]
-        canvas = cv2.resize(_to_uint8(image), (w, h))
-    else:
-        canvas = _to_uint8(image)
-        
-    out = cv2.cvtColor(canvas, cv2.COLOR_GRAY2BGR)
+    out = cv2.cvtColor(_to_uint8(skeleton), cv2.COLOR_GRAY2BGR)
     
+    # Dibujar la ruta exacta de la cresta (no una línea recta)
     for edge in ctx.ridge_graph.edges:
-        s = ctx.ridge_graph.nodes[edge.source]
-        t = ctx.ridge_graph.nodes[edge.target]
-        cv2.line(out, (s.x, s.y), (t.x, t.y), (0, 0, 255), 1)
+        if hasattr(edge, 'path') and edge.path:
+            # Convertir lista de tuplas (x,y) a array de numpy para cv2.polylines
+            pts = np.array(edge.path, np.int32).reshape((-1, 1, 2))
+            cv2.polylines(out, [pts], isClosed=False, color=(0, 0, 255), thickness=1)
+        else:
+            # Fallback a línea recta si no hay path (no debería pasar)
+            s = ctx.ridge_graph.nodes[edge.source]
+            t = ctx.ridge_graph.nodes[edge.target]
+            cv2.line(out, (s.x, s.y), (t.x, t.y), (0, 0, 255), 1)
+            
+    # Dibujar las minucias (nodos) encima
     for node in ctx.ridge_graph.nodes:
         cv2.circle(out, (node.x, node.y), 4, (0, 255, 0), -1)
     return out
@@ -139,8 +141,8 @@ def make_grid(
         ("4. Quality Mask (recoverable)", _to_uint8(ctx.quality_mask if ctx.quality_mask is not None else np.zeros_like(image))),
         ("5. Skeleton (after SkeletonizationStep)", _to_uint8(skel_before)),
         ("6. Skeleton (after SkeletonCleanerStep)", _to_uint8(skel_after)),
-        ("7. Ridge Graph Overlay", _overlay_graph(image, ctx)),
-        ("8. Stats", np.zeros_like(image)),
+        ("7. Ridge Graph Overlay", _overlay_graph(skel_after, ctx)),
+        ("8. Core & Delta", np.zeros_like(image)),
     ]
 
     for ax, (title, img) in zip(axes.ravel(), stages):
@@ -151,7 +153,19 @@ def make_grid(
         ax.set_title(title, fontsize=10)
         ax.axis("off")
 
-    # Compute and display summary stats in the last panel
+    # Draw Core (green star) and Delta (red triangle) in Panel 8
+    ax8 = axes[1, 3]
+    # Show the enhanced image as background
+    if ctx.enhanced_image is not None:
+        ax8.imshow(ctx.enhanced_image, cmap="gray")
+    if ctx.core is not None:
+        ax8.plot(ctx.core[0], ctx.core[1], marker="*", color="lime", markersize=20, markeredgecolor="white", markeredgewidth=1.5)
+        ax8.annotate("Core", ctx.core, textcoords="offset pixels", xytext=(10, 10), fontsize=10, fontweight="bold", color="lime")
+    if ctx.delta is not None:
+        ax8.plot(ctx.delta[0], ctx.delta[1], marker="v", color="red", markersize=15, markeredgecolor="white", markeredgewidth=1.5)
+        ax8.annotate("Delta", ctx.delta, textcoords="offset pixels", xytext=(10, -15), fontsize=10, fontweight="bold", color="red")
+
+    # Compute and display summary stats in the same panel
     n_nodes = ctx.ridge_graph.num_nodes if ctx.ridge_graph else 0
     n_edges = ctx.ridge_graph.num_edges if ctx.ridge_graph else 0
     pix_before = int(skel_before.sum())
@@ -161,20 +175,25 @@ def make_grid(
     n_freq_total = int(ctx.freq_image.size) if ctx.freq_image is not None else 0
 
     stats_text = (
-        f"Skeleton pixels:  {pix_before}  →  {pix_after}\n"
-        f"Spurious removed: {pix_before - pix_after}\n"
-        f"Quality mask:     {qm_pct:.1f}% recoverable\n"
-        f"Frequency blocks: {n_valid_freq}/{n_freq_total} valid\n"
-        f"Ridge graph:      {n_nodes} nodes, {n_edges} edges"
+        f"Skel: {pix_before} → {pix_after} px\n"
+        f"Mask: {qm_pct:.0f}%\n"
+        f"Freq: {n_valid_freq}/{n_freq_total}\n"
+        f"Graph: {n_nodes}N {n_edges}E"
     )
-    axes[1, 3].text(
-        0.05, 0.5, stats_text, fontsize=12, verticalalignment="center",
+    if ctx.core is not None:
+        stats_text += f"\nCore: ({ctx.core[0]}, {ctx.core[1]})"
+    if ctx.delta is not None:
+        stats_text += f"\nDelta: ({ctx.delta[0]}, {ctx.delta[1]})"
+
+    ax8.text(
+        0.02, 0.05, stats_text, fontsize=9, verticalalignment="bottom",
         family="monospace", color="white",
+        transform=ax8.transAxes,
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="black", alpha=0.6),
     )
-    axes[1, 3].set_facecolor("#1a1a1a")
-    axes[1, 3].set_title("8. Summary Stats", fontsize=10, color="white")
-    axes[1, 3].set_xticks([])
-    axes[1, 3].set_yticks([])
+    ax8.set_title("8. Core & Delta", fontsize=10, color="white")
+    ax8.set_xticks([])
+    ax8.set_yticks([])
 
     plt.tight_layout()
     return fig

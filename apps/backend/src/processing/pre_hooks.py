@@ -146,22 +146,42 @@ class OrientationFieldAnalyzer(IPipelineStep):
 
 
 class SingularityDetector(IPipelineStep):
-    """Locates the Core (and Delta) singularities via the Poincaré index.
+    """Locates the Core (and Delta) singularities via the Poincaré index
+    with DORIC validation to reject false positives from scars/creases.
 
     Requires that a previous hook (e.g. :class:`OrientationFieldAnalyzer`)
     has populated ``ctx.orientation_field`` and ``ctx.coherence_field``.
     Produces a Region-of-Interest (ROI) disc centred on the strongest
-    Core and writes it as the new ``ctx.quality_mask``.
+    valid Core and writes it as the new ``ctx.quality_mask``.
+
+    Algorithm (Módulo 4 of LATENT_AFIS_SOTA):
+    1. Convert ``θ → (Vx=cos(2θ), Vy=sin(2θ))`` for continuous representation.
+    2. Strong Gaussian blur (σ=2.0) on Vx, Vy to suppress scar noise.
+    3. Poincaré Index over 8-connected neighborhood.
+    4. DORIC validation: fit candidate to theoretical Zero-Pole model;
+       reject if RMS residual > 0.15 rad.
     """
 
     def __init__(
         self,
-        window: int = 5,
-        poi_threshold: float = 0.5,
+        gaussian_sigma: float = 2.0,
+        poi_core_low: float = 0.25,
+        poi_core_high: float = 0.75,
+        poi_delta_low: float = -0.75,
+        poi_delta_high: float = -0.25,
+        doric_radius: int = 4,
+        doric_samples: int = 16,
+        doric_rms_threshold: float = 0.15,
         roi_radius: int = 130,
     ) -> None:
-        self.window = window
-        self.poi_threshold = poi_threshold
+        self.gaussian_sigma = gaussian_sigma
+        self.poi_core_low = poi_core_low
+        self.poi_core_high = poi_core_high
+        self.poi_delta_low = poi_delta_low
+        self.poi_delta_high = poi_delta_high
+        self.doric_radius = doric_radius
+        self.doric_samples = doric_samples
+        self.doric_rms_threshold = doric_rms_threshold
         self.roi_radius = roi_radius
         self.core: tuple[int, int] | None = None
         self.delta: tuple[int, int] | None = None
@@ -178,84 +198,166 @@ class SingularityDetector(IPipelineStep):
             ctx.quality_mask = roi_mask
             return
 
-        # Smooth the orientation field in the (cos 2θ, sin 2θ) domain
-        # so 180°-periodic angles average correctly.
+        # 1. Continuous vector field: θ → (Vx, Vy)
         theta = ctx.orientation_field.astype(np.float32)
-        cos2 = np.cos(2 * theta)
-        sin2 = np.sin(2 * theta)
-        kernel_size = 5
-        cos2_s = cv2.blur(cos2, (kernel_size, kernel_size))
-        sin2_s = cv2.blur(sin2, (kernel_size, kernel_size))
-        theta_s = 0.5 * np.arctan2(sin2_s, cos2_s)
+        Vx = np.cos(2 * theta)
+        Vy = np.sin(2 * theta)
 
-        rows, cols = theta_s.shape
-        half = self.window // 2
-        poi_map = np.zeros_like(theta_s, dtype=np.float32)
+        # 2. Strong Gaussian smoothing to suppress scar/crease noise
+        Vx_smooth = cv2.GaussianBlur(Vx, (0, 0), sigmaX=self.gaussian_sigma, sigmaY=self.gaussian_sigma)
+        Vy_smooth = cv2.GaussianBlur(Vy, (0, 0), sigmaX=self.gaussian_sigma, sigmaY=self.gaussian_sigma)
 
-        for by in range(half, rows - half):
-            for bx in range(half, cols - half):
-                angles: list[float] = []
-                for j in range(-half, half + 1):
-                    angles.append(float(theta_s[by - half, bx + j]))
-                for i in range(-half + 1, half + 1):
-                    angles.append(float(theta_s[by + i, bx + half]))
-                for j in range(half - 1, -half - 1, -1):
-                    angles.append(float(theta_s[by + half, bx + j]))
-                for i in range(half - 1, -half, -1):
-                    angles.append(float(theta_s[by + i, bx - half]))
+        # Reconstruct smoothed orientation
+        theta_smooth = 0.5 * np.arctan2(Vy_smooth, Vx_smooth)
 
+        rows, cols = theta_smooth.shape
+
+        # 3. Poincaré Index over 8-connected neighborhood
+        poi_map = np.zeros((rows, cols), dtype=np.float32)
+        # 8 neighbors in clockwise order starting from top-left
+        # (dx, dy) offsets
+        for by in range(1, rows - 1):
+            for bx in range(1, cols - 1):
+                # Sample the 3x3 neighborhood in clockwise order
+                neighbors = [
+                    theta_smooth[by - 1, bx - 1],  # top-left
+                    theta_smooth[by - 1, bx],      # top
+                    theta_smooth[by - 1, bx + 1],  # top-right
+                    theta_smooth[by, bx + 1],      # right
+                    theta_smooth[by + 1, bx + 1],  # bottom-right
+                    theta_smooth[by + 1, bx],      # bottom
+                    theta_smooth[by + 1, bx - 1],  # bottom-left
+                    theta_smooth[by, bx - 1],      # left
+                ]
                 diff_sum = 0.0
-                for k in range(len(angles)):
-                    a = angles[k]
-                    b = angles[(k + 1) % len(angles)]
-                    d = b - a
-                    while d > np.pi / 2:
-                        d -= np.pi
-                    while d <= -np.pi / 2:
-                        d += np.pi
+                for k in range(len(neighbors)):
+                    d = neighbors[(k + 1) % len(neighbors)] - neighbors[k]
+                    # Wrap to [-π/2, π/2] (orientation modulo π)
+                    d = ((d + np.pi / 2) % np.pi) - np.pi / 2
                     diff_sum += d
                 poi_map[by, bx] = diff_sum / np.pi
 
         self.poi_map = poi_map
 
-        if (poi_map > self.poi_threshold).any():
-            by, bx = np.unravel_index(np.argmax(poi_map), poi_map.shape)
-            self.core = (int(bx), int(by))
-        else:
-            self.core = None
+        # 4. DORIC validation — collect valid candidates
+        best_core: tuple[int, int, float] | None = None  # (bx, by, pi_value)
+        best_delta: tuple[int, int, float] | None = None
 
-        if (poi_map < -self.poi_threshold).any():
-            by, bx = np.unravel_index(np.argmin(poi_map), poi_map.shape)
-            self.delta = (int(bx), int(by))
-        else:
-            self.delta = None
+        # We iterate over the whole map, then validate each candidate
+        core_candidates = np.argwhere(
+            (poi_map > self.poi_core_low) & (poi_map < self.poi_core_high)
+        )
+        delta_candidates = np.argwhere(
+            (poi_map > self.poi_delta_low) & (poi_map < self.poi_delta_high)
+        )
+
+        for by, bx in core_candidates:
+            if self._doric_validate(theta_smooth, int(by), int(bx), is_core=True):
+                pi_val = float(poi_map[by, bx])
+                if best_core is None or pi_val > best_core[2]:
+                    best_core = (int(bx), int(by), pi_val)
+
+        for by, bx in delta_candidates:
+            if self._doric_validate(theta_smooth, int(by), int(bx), is_core=False):
+                pi_val = float(poi_map[by, bx])
+                if best_delta is None or abs(pi_val) > abs(best_delta[2]):
+                    best_delta = (int(bx), int(by), pi_val)
+
+        self.core = (best_core[0], best_core[1]) if best_core is not None else None
+        self.delta = (best_delta[0], best_delta[1]) if best_delta is not None else None
+
+        block_size = self._infer_block_size(ctx)
 
         if self.core is not None:
-            block_size = self._infer_block_size(ctx)
             cx = self.core[0] * block_size + block_size // 2
             cy = self.core[1] * block_size + block_size // 2
             ctx.core = (int(cx), int(cy))
             yy, xx = np.mgrid[0:h, 0:w]
             roi_mask = (yy - cy) ** 2 + (xx - cx) ** 2 <= self.roi_radius ** 2
             logger.debug(
-                "SingularityDetector: core at block=(%d,%d) pixel=(%d,%d), ROI=%.1f%%",
+                "SingularityDetector: core at block=(%d,%d) pixel=(%d,%d), "
+                "PI=%.3f, ROI=%.1f%%",
                 self.core[0], self.core[1], cx, cy,
+                best_core[2] if best_core else 0.0,
                 100.0 * roi_mask.mean(),
             )
         else:
             ctx.core = None
             logger.debug("SingularityDetector: no core found, using full image as ROI")
 
-        # Always expose the raw ROI disc so post-processors (e.g.
-        # BorderMaskCleaner) can use it independently of the union
-        # with the orientation-coherence mask.
+        if self.delta is not None:
+            dx = self.delta[0] * block_size + block_size // 2
+            dy = self.delta[1] * block_size + block_size // 2
+            ctx.delta = (int(dx), int(dy))
+            logger.debug(
+                "SingularityDetector: delta at block=(%d,%d) pixel=(%d,%d)",
+                self.delta[0], self.delta[1], dx, dy,
+            )
+        else:
+            ctx.delta = None
+            logger.debug("SingularityDetector: no delta found")
+
         ctx.roi_mask = roi_mask
 
-        # Intersect with any existing mask (e.g. from OrientationFieldAnalyzer)
         if ctx.quality_mask is not None and ctx.quality_mask.shape == roi_mask.shape:
             ctx.quality_mask = ctx.quality_mask & roi_mask
         else:
             ctx.quality_mask = roi_mask
+
+    def _doric_validate(
+        self,
+        theta_smooth: np.ndarray,
+        cy: int,
+        cx: int,
+        is_core: bool,
+    ) -> bool:
+        """DORIC: validate a singularity candidate against the theoretical
+        Zero-Pole model.
+
+        Samples the orientation field on a circle of radius ``r`` blocks
+        around the candidate and checks that the angular progression
+        matches ±0.5 rad/rad (core/delta) with RMS residual < threshold.
+        """
+        r = self.doric_radius
+        N = self.doric_samples
+        rows, cols = theta_smooth.shape
+
+        sampled: list[float] = []
+        for i in range(N):
+            phi = 2.0 * np.pi * i / N
+            sy = cy + r * np.sin(phi)
+            sx = cx + r * np.cos(phi)
+            if sy < 0 or sy >= rows or sx < 0 or sx >= cols:
+                return False  # candidate too close to edge
+
+            # Bilinear interpolation
+            y0, x0 = int(sy), int(sx)
+            y1, x1 = min(y0 + 1, rows - 1), min(x0 + 1, cols - 1)
+            dy, dx = sy - y0, sx - x0
+            val = (
+                theta_smooth[y0, x0] * (1 - dy) * (1 - dx)
+                + theta_smooth[y0, x1] * (1 - dy) * dx
+                + theta_smooth[y1, x0] * dy * (1 - dx)
+                + theta_smooth[y1, x1] * dy * dx
+            )
+            if is_core:
+                expected = 0.5 * phi
+            else:
+                expected = -0.5 * phi
+
+            diff = val - expected
+            # Wrap to [-π/2, π/2]
+            diff = ((diff + np.pi / 2) % np.pi) - np.pi / 2
+            sampled.append(float(diff))
+
+        # Estimate theta_0 (base orientation offset) as mean difference
+        theta_0 = float(np.mean(sampled))
+        residuals = [d - theta_0 for d in sampled]
+        # Wrap residuals
+        residuals = [((r + np.pi / 2) % np.pi) - np.pi / 2 for r in residuals]
+        rms = float(np.sqrt(np.mean(np.array(residuals) ** 2)))
+
+        return rms < self.doric_rms_threshold
 
     def _infer_block_size(self, ctx: PipelineContext) -> int:
         if ctx.orientation_field is None:
