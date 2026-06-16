@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 """
 Router for examiner matching decisions (``/api/v1/decisions``).
 
@@ -8,15 +7,18 @@ system **never** auto-approves — every verdict is recorded and logged to
 the immutable audit hash chain via ``DecisionService`` (D-09).
 """
 
+from __future__ import annotations
+
 import logging
 import uuid
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field, Field
-from sqlalchemy.orm import Session
+from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.dependencies import get_db
+from src.api.dependencies import get_async_db
 from src.services.decision_service import decision_service
 
 logger = logging.getLogger(__name__)
@@ -109,12 +111,12 @@ async def list_decisions(
     limit: int = Query(20, ge=1, le=100),
     case_id: uuid.UUID | None = Query(None, description="Filter by case"),
     verdict: str | None = Query(None, description="Filter by verdict"),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ) -> dict[str, Any]:
     """
     List examiner decisions with optional filters and pagination.
     """
-    return decision_service.list_decisions(
+    return await decision_service.list_decisions(
         db,
         skip=skip,
         limit=limit,
@@ -126,12 +128,12 @@ async def list_decisions(
 @router.get("/{decision_id}", response_model=DecisionResponse)
 async def get_decision(
     decision_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ) -> Any:
     """
     Retrieve a single decision by its UUID.
     """
-    return decision_service.get_decision(db, decision_id)
+    return await decision_service.get_decision(db, decision_id)
 
 
 @router.post(
@@ -142,19 +144,12 @@ async def get_decision(
 )
 async def create_decision(
     body: DecisionCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ) -> Any:
     """
     Submit an examiner matching decision.
-
-    The caller **must** have the ``Perito`` role (T-01-04).  The decision
-    is persisted in the ``decisions`` table **and** logged to the
-    immutable ``AuditLog`` hash chain via ``DecisionService`` (D-09).
-
-    Verdict must be one of: ``Identificación``, ``Exclusión``,
-    ``Inconcluso``.
     """
-    return decision_service.record_verdict(
+    return await decision_service.record_verdict(
         db,
         case_id=body.case_id,
         evidence_id=body.evidence_id,

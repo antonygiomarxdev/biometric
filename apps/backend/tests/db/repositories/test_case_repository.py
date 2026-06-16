@@ -7,7 +7,7 @@ Uses a mocked SQLAlchemy ``Session`` — no real database required.
 from __future__ import annotations
 
 import uuid
-from unittest.mock import MagicMock, create_autospec
+from unittest.mock import AsyncMock, MagicMock, create_autospec
 
 import pytest
 from sqlalchemy.orm import Session
@@ -48,45 +48,57 @@ def _make_mock_case(**kwargs: object) -> MagicMock:
 class TestList:
     """Tests for :meth:`CaseRepository.list`."""
 
-    def test_returns_all_cases(self, repo: CaseRepository, session: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_returns_all_cases(self, repo: CaseRepository, session: MagicMock) -> None:
         """Returns paginated list of cases."""
         mock_case = _make_mock_case()
-        session.scalars.return_value.all.return_value = [mock_case]
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = [mock_case]
+        session.execute = AsyncMock(return_value=mock_result)
 
-        result = repo.list(session, skip=0, limit=20)
+        result = await repo.list(session, skip=0, limit=20)
 
         assert result == [mock_case]
-        session.scalars.assert_called_once()
+        session.execute.assert_called_once()
 
-    def test_applies_status_filter(
+    @pytest.mark.asyncio
+    async def test_applies_status_filter(
         self, repo: CaseRepository, session: MagicMock
     ) -> None:
         """Filters by status when provided."""
         mock_case = _make_mock_case(status="closed")
-        session.scalars.return_value.all.return_value = [mock_case]
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = [mock_case]
+        session.execute = AsyncMock(return_value=mock_result)
 
-        result = repo.list(session, skip=0, limit=10, status="closed")
+        result = await repo.list(session, skip=0, limit=10, status="closed")
 
         assert result == [mock_case]
 
-    def test_empty_result(self, repo: CaseRepository, session: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_empty_result(self, repo: CaseRepository, session: MagicMock) -> None:
         """Returns empty list when no cases match."""
-        session.scalars.return_value.all.return_value = []
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = []
+        session.execute = AsyncMock(return_value=mock_result)
 
-        result = repo.list(session, skip=0, limit=20)
+        result = await repo.list(session, skip=0, limit=20)
 
         assert result == []
 
-    def test_applies_offset_and_limit(
+    @pytest.mark.asyncio
+    async def test_applies_offset_and_limit(
         self, repo: CaseRepository, session: MagicMock
     ) -> None:
         """Applies offset and limit to the query."""
         mock_case = _make_mock_case()
-        session.scalars.return_value.all.return_value = [mock_case]
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = [mock_case]
+        session.execute = AsyncMock(return_value=mock_result)
 
-        repo.list(session, skip=10, limit=5)
+        await repo.list(session, skip=10, limit=5)
 
-        session.scalars.assert_called_once()
+        session.execute.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -97,33 +109,42 @@ class TestList:
 class TestCount:
     """Tests for :meth:`CaseRepository.count`."""
 
-    def test_returns_total_count(
+    @pytest.mark.asyncio
+    async def test_returns_total_count(
         self, repo: CaseRepository, session: MagicMock
     ) -> None:
         """Returns total count of cases."""
-        session.scalar.return_value = 42
+        mock_result = MagicMock()
+        mock_result.scalar.return_value = 42
+        session.execute = AsyncMock(return_value=mock_result)
 
-        result = repo.count(session)
+        result = await repo.count(session)
 
         assert result == 42
 
-    def test_with_status_filter(
+    @pytest.mark.asyncio
+    async def test_with_status_filter(
         self, repo: CaseRepository, session: MagicMock
     ) -> None:
         """Counts only cases matching the status."""
-        session.scalar.return_value = 5
+        mock_result = MagicMock()
+        mock_result.scalar.return_value = 5
+        session.execute = AsyncMock(return_value=mock_result)
 
-        result = repo.count(session, status="closed")
+        result = await repo.count(session, status="closed")
 
         assert result == 5
 
-    def test_returns_zero_when_empty(
+    @pytest.mark.asyncio
+    async def test_returns_zero_when_empty(
         self, repo: CaseRepository, session: MagicMock
     ) -> None:
         """Returns 0 when no cases match."""
-        session.scalar.return_value = 0
+        mock_result = MagicMock()
+        mock_result.scalar.return_value = 0
+        session.execute = AsyncMock(return_value=mock_result)
 
-        result = repo.count(session)
+        result = await repo.count(session)
 
         assert result == 0
 
@@ -136,34 +157,38 @@ class TestCount:
 class TestGetById:
     """Tests for :meth:`CaseRepository.get_by_id`."""
 
-    def test_returns_case_when_found(
+    @pytest.mark.asyncio
+    async def test_returns_case_when_found(
         self, repo: CaseRepository, session: MagicMock
     ) -> None:
         """Returns the case when found by UUID."""
         mock_case = _make_mock_case()
-        session.get.return_value = mock_case
+        session.get = AsyncMock(return_value=mock_case)
 
-        result = repo.get_by_id(session, mock_case.id)
+        result = await repo.get_by_id(session, mock_case.id)
 
         assert result is mock_case
 
-    def test_returns_none_when_not_found(
+    @pytest.mark.asyncio
+    async def test_returns_none_when_not_found(
         self, repo: CaseRepository, session: MagicMock
     ) -> None:
         """Returns None when no case exists with the given UUID."""
-        session.get.return_value = None
+        session.get = AsyncMock(return_value=None)
 
-        result = repo.get_by_id(session, uuid.uuid4())
+        result = await repo.get_by_id(session, uuid.uuid4())
 
         assert result is None
 
-    def test_passes_uuid_to_session_get(
+    @pytest.mark.asyncio
+    async def test_passes_uuid_to_session_get(
         self, repo: CaseRepository, session: MagicMock
     ) -> None:
         """Calls session.get with the correct model and UUID."""
         case_id = uuid.uuid4()
+        session.get = AsyncMock()
 
-        repo.get_by_id(session, case_id)
+        await repo.get_by_id(session, case_id)
 
         session.get.assert_called_once()
 
@@ -176,24 +201,30 @@ class TestGetById:
 class TestGetByCaseNumber:
     """Tests for :meth:`CaseRepository.get_by_case_number`."""
 
-    def test_returns_case_when_found(
+    @pytest.mark.asyncio
+    async def test_returns_case_when_found(
         self, repo: CaseRepository, session: MagicMock
     ) -> None:
         """Returns the case when found by case_number."""
         mock_case = _make_mock_case()
-        session.scalar.return_value = mock_case
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_case
+        session.execute = AsyncMock(return_value=mock_result)
 
-        result = repo.get_by_case_number(session, "CASE-001")
+        result = await repo.get_by_case_number(session, "CASE-001")
 
         assert result is mock_case
 
-    def test_returns_none_when_not_found(
+    @pytest.mark.asyncio
+    async def test_returns_none_when_not_found(
         self, repo: CaseRepository, session: MagicMock
     ) -> None:
         """Returns None when no case exists with the given case_number."""
-        session.scalar.return_value = None
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        session.execute = AsyncMock(return_value=mock_result)
 
-        result = repo.get_by_case_number(session, "CASE-999")
+        result = await repo.get_by_case_number(session, "CASE-999")
 
         assert result is None
 
@@ -206,7 +237,8 @@ class TestGetByCaseNumber:
 class TestCreate:
     """Tests for :meth:`CaseRepository.create`."""
 
-    def test_creates_and_returns_case(
+    @pytest.mark.asyncio
+    async def test_creates_and_returns_case(
         self, repo: CaseRepository, session: MagicMock
     ) -> None:
         """Adds a Case to the session, commits, refreshes, and returns it."""
@@ -215,9 +247,10 @@ class TestCreate:
         def _refresh(case: MagicMock) -> None:
             case.id = case_id
 
-        session.refresh.side_effect = _refresh
+        session.commit = AsyncMock()
+        session.refresh = AsyncMock(side_effect=_refresh)
 
-        result = repo.create(
+        result = await repo.create(
             session,
             case_number="CASE-001",
             title="Test Case",
@@ -233,13 +266,15 @@ class TestCreate:
         session.commit.assert_called_once()
         session.refresh.assert_called_once()
 
-    def test_defaults_description_and_status(
+    @pytest.mark.asyncio
+    async def test_defaults_description_and_status(
         self, repo: CaseRepository, session: MagicMock
     ) -> None:
         """Uses empty string for description and 'open' for status by default."""
-        session.refresh.side_effect = lambda c: None
+        session.commit = AsyncMock()
+        session.refresh = AsyncMock(side_effect=lambda c: None)
 
-        result = repo.create(
+        result = await repo.create(
             session,
             case_number="CASE-002",
             title="Default Case",
@@ -257,13 +292,16 @@ class TestCreate:
 class TestUpdate:
     """Tests for :meth:`CaseRepository.update`."""
 
-    def test_updates_all_fields(
+    @pytest.mark.asyncio
+    async def test_updates_all_fields(
         self, repo: CaseRepository, session: MagicMock
     ) -> None:
         """Updates all provided fields on the case."""
         mock_case = _make_mock_case()
+        session.commit = AsyncMock()
+        session.refresh = AsyncMock()
 
-        result = repo.update(
+        result = await repo.update(
             session,
             mock_case,
             title="Updated Title",
@@ -278,23 +316,29 @@ class TestUpdate:
         session.refresh.assert_called_once()
         assert result is mock_case
 
-    def test_partial_update(self, repo: CaseRepository, session: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_partial_update(self, repo: CaseRepository, session: MagicMock) -> None:
         """Only updates fields that are not None."""
         mock_case = _make_mock_case()
+        session.commit = AsyncMock()
+        session.refresh = AsyncMock()
 
-        repo.update(session, mock_case, title="Only Title")
+        await repo.update(session, mock_case, title="Only Title")
 
         assert mock_case.title == "Only Title"
         assert mock_case.description == "A forensic test case"
         assert mock_case.status == "open"
 
-    def test_skips_none_fields(
+    @pytest.mark.asyncio
+    async def test_skips_none_fields(
         self, repo: CaseRepository, session: MagicMock
     ) -> None:
         """Does not change fields when None is passed."""
         mock_case = _make_mock_case()
+        session.commit = AsyncMock()
+        session.refresh = AsyncMock()
 
-        repo.update(session, mock_case, title=None, description=None, status=None)
+        await repo.update(session, mock_case, title=None, description=None, status=None)
 
         assert mock_case.title == "Test Case"
         assert mock_case.description == "A forensic test case"
@@ -309,22 +353,28 @@ class TestUpdate:
 class TestDelete:
     """Tests for :meth:`CaseRepository.delete`."""
 
-    def test_deletes_case(self, repo: CaseRepository, session: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_deletes_case(self, repo: CaseRepository, session: MagicMock) -> None:
         """Deletes the case from the session and commits."""
         mock_case = _make_mock_case()
+        session.delete = AsyncMock()
+        session.commit = AsyncMock()
 
-        repo.delete(session, mock_case)
+        await repo.delete(session, mock_case)
 
         session.delete.assert_called_once_with(mock_case)
         session.commit.assert_called_once()
 
-    def test_deletes_by_id(self, repo: CaseRepository, session: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_deletes_by_id(self, repo: CaseRepository, session: MagicMock) -> None:
         """Deletes the case by UUID when a UUID is passed."""
         case_id = uuid.uuid4()
         mock_case = _make_mock_case(id=case_id)
-        session.get.return_value = mock_case
+        session.get = AsyncMock(return_value=mock_case)
+        session.delete = AsyncMock()
+        session.commit = AsyncMock()
 
-        repo.delete(session, case_id)
+        await repo.delete(session, case_id)
 
         session.get.assert_called_once()
         session.delete.assert_called_once_with(mock_case)

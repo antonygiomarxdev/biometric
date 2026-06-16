@@ -8,16 +8,16 @@ are delegated to :class:`~src.services.evidence_service.EvidenceService`.
 
 import logging
 import uuid
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.dependencies import get_db
+from src.api.dependencies import get_async_db
 from src.services.evidence_service import evidence_service
-from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -78,12 +78,12 @@ async def list_evidence(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     case_id: uuid.UUID | None = Query(None, description="Filter by case"),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ) -> dict[str, object]:
     """
     List evidence items with optional case filter and pagination.
     """
-    result = evidence_service.list_evidence(
+    result = await evidence_service.list_evidence(
         db, skip=skip, limit=limit, case_id=case_id
     )
     return {
@@ -97,12 +97,12 @@ async def list_evidence(
 @router.get("/{evidence_id}", response_model=EvidenceResponse)
 async def get_evidence(
     evidence_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ) -> object:
     """
     Retrieve a single evidence item by its UUID.
     """
-    return evidence_service.get_evidence(db, evidence_id)
+    return await evidence_service.get_evidence(db, evidence_id)
 
 
 @router.post(
@@ -116,18 +116,10 @@ async def create_evidence(
         ..., min_length=1, max_length=100, description="Fingerprint identifier"
     ),
     file: UploadFile | None = None,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ) -> object:
     """
     Register new evidence, optionally uploading a fingerprint image.
-
-    If ``file`` is provided:
-    - MIME type is validated against the allow-list (T-01-05).
-    - The image is stored in MinIO object storage.
-    - The resulting ``image_path`` is saved on the evidence record.
-
-    If no file is provided the evidence entry is created with
-    ``image_path = NULL`` (metadata-only registration).
     """
     return await evidence_service.create_evidence(
         db,
@@ -140,19 +132,19 @@ async def create_evidence(
 @router.get("/{evidence_id}/image")
 async def get_evidence_image(
     evidence_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ) -> Response:
     """Serve the evidence image from MinIO object storage."""
-    image_data = evidence_service.get_evidence_image(db, evidence_id)
+    image_data = await evidence_service.get_evidence_image(db, evidence_id)
     return Response(content=image_data, media_type="image/png")
 
 
 @router.delete("/{evidence_id}", status_code=204)
 async def delete_evidence(
     evidence_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ) -> None:
     """
     Delete an evidence item.
     """
-    evidence_service.delete_evidence(db, evidence_id)
+    await evidence_service.delete_evidence(db, evidence_id)

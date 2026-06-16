@@ -1,0 +1,4 @@
+pwdlib[argon2]>=0.2.0
+PyJWT>=2.8.0
+sqlalchemy>=2.0.0
+aiosqlite>=0.20.0

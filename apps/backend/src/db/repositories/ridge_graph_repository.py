@@ -1,21 +1,21 @@
-"""Repository for :class:`~src.db.models.RidgeGraph`."""
+"""Async repository for :class:`~src.db.models.RidgeGraph`."""
 
 from __future__ import annotations
 
 import uuid
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import RidgeGraph
 
 
 class RidgeGraphRepository:
-    """Persistence gateway for the ``ridge_graphs`` table."""
+    """Async persistence gateway for the ``ridge_graphs`` table."""
 
     @staticmethod
-    def create(
-        session: Session,
+    async def create(
+        session: AsyncSession,
         *,
         capture_id: uuid.UUID,
         graph_index: int = 1,
@@ -44,17 +44,17 @@ class RidgeGraphRepository:
             singularity_type=singularity_type,
         )
         session.add(g)
-        session.commit()
-        session.refresh(g)
+        await session.commit()
+        await session.refresh(g)
         return g
 
     @staticmethod
-    def get_by_id(session: Session, graph_id: uuid.UUID) -> RidgeGraph | None:
-        return session.get(RidgeGraph, graph_id)
+    async def get_by_id(session: AsyncSession, graph_id: uuid.UUID) -> RidgeGraph | None:
+        return await session.get(RidgeGraph, graph_id)
 
     @staticmethod
-    def list_by_capture(
-        session: Session,
+    async def list_by_capture(
+        session: AsyncSession,
         capture_id: uuid.UUID,
     ) -> list[RidgeGraph]:
         stmt = (
@@ -62,20 +62,22 @@ class RidgeGraphRepository:
             .where(RidgeGraph.capture_id == capture_id)
             .order_by(RidgeGraph.graph_index)
         )
-        return list(session.execute(stmt).scalars().all())
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
 
     @staticmethod
-    def count_by_capture(session: Session, capture_id: uuid.UUID) -> int:
+    async def count_by_capture(session: AsyncSession, capture_id: uuid.UUID) -> int:
         stmt = select(func.count()).select_from(RidgeGraph).where(
             RidgeGraph.capture_id == capture_id
         )
-        return int(session.execute(stmt).scalar_one())
+        result = await session.execute(stmt)
+        return int(result.scalar_one())
 
     @staticmethod
-    def delete(session: Session, graph_id: uuid.UUID) -> bool:
-        g = session.get(RidgeGraph, graph_id)
+    async def delete(session: AsyncSession, graph_id: uuid.UUID) -> bool:
+        g = await session.get(RidgeGraph, graph_id)
         if g is None:
             return False
-        session.delete(g)
-        session.commit()
+        await session.delete(g)
+        await session.commit()
         return True

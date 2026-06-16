@@ -1,8 +1,9 @@
 """
 Integration tests for the reports router (``GET /api/v1/reports/{case_id}``).
 
-Uses ``FastAPI`` with mocked ``get_db`` dependency and mocked
-``pdf_generator_service`` to avoid actual PDF rendering.
+Uses ``FastAPI`` with mocked ``get_async_db`` dependency (``run_sync``
+bridges to a mock sync session) and mocked ``pdf_generator_service``
+to avoid actual PDF rendering.
 """
 
 from __future__ import annotations
@@ -16,38 +17,13 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from src.api.dependencies import get_db
+from src.api.dependencies import get_async_db
 from src.db.models import Case, Evidence
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _make_app(mock_session: MagicMock) -> FastAPI:
-    """Construct a minimal FastAPI with only the reports router."""
-    from fastapi.responses import JSONResponse
-
-    from src.api.errors import NotFoundError
-    from src.api.routers.reports import router
-
-    application = FastAPI()
-    application.dependency_overrides[get_db] = lambda: mock_session
-
-    # Register the NotFoundError handler (matches the one in src/main.py)
-    @application.exception_handler(NotFoundError)
-    async def _not_found_handler(
-        request: Any,  # noqa: ANN401
-        exc: NotFoundError,
-    ) -> JSONResponse:
-        return JSONResponse(
-            status_code=exc.status_code,
-            content=exc.to_dict(),
-        )
-
-    application.include_router(router)
-    return application
 
 
 def _make_mock_case(
@@ -74,6 +50,55 @@ def _make_mock_evidence(case_id: UUID) -> MagicMock:
     return ev
 
 
+def _make_mock_session(
+    case: MagicMock | None = None,
+    evidences: list[MagicMock] | None = None,
+) -> MagicMock:
+    """Create a mock AsyncSession whose execute() returns case then evidence results."""
+    mock_db = MagicMock()
+    call_idx = 0
+
+    mock_case_result = MagicMock()
+    mock_case_result.scalar_one_or_none.return_value = case
+
+    mock_ev_result = MagicMock()
+    mock_ev_result.scalars.return_value.all.return_value = evidences or []
+
+    async def _execute_side_effect(*args: object, **kwargs: object) -> MagicMock:
+        nonlocal call_idx
+        call_idx += 1
+        if case is not None and call_idx == 1:
+            return mock_case_result
+        return mock_ev_result
+
+    mock_db.execute = _execute_side_effect
+    return mock_db
+
+
+def _make_app(mock_session: MagicMock) -> FastAPI:
+    """Construct a minimal FastAPI with only the reports router."""
+    from fastapi.responses import JSONResponse
+
+    from src.api.errors import NotFoundError
+    from src.api.routers.reports import router
+
+    application = FastAPI()
+    application.dependency_overrides[get_async_db] = lambda: mock_session
+
+    @application.exception_handler(NotFoundError)
+    async def _not_found_handler(
+        request: Any,  # noqa: ANN401
+        exc: NotFoundError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=exc.to_dict(),
+        )
+
+    application.include_router(router)
+    return application
+
+
 # ---------------------------------------------------------------------------
 # GET /api/v1/reports/{case_id}
 # ---------------------------------------------------------------------------
@@ -86,31 +111,9 @@ class TestGenerateReport:
     async def test_returns_pdf_for_existing_case(self) -> None:
         """It returns a PDF binary response for an existing case."""
         case_id = uuid4()
-        mock_db = MagicMock()
         mock_case = _make_mock_case(case_id=case_id)
         mock_evidence = _make_mock_evidence(case_id)
-
-        # Mock the case query
-        mock_execute_result = MagicMock()
-        mock_execute_result.scalar_one_or_none.return_value = mock_case
-        mock_db.execute.return_value = mock_execute_result
-
-        # Mock the evidence query on second execute call
-        mock_ev_result = MagicMock()
-        mock_ev_result.scalars.return_value.all.return_value = [mock_evidence]
-
-        original_execute = mock_db.execute
-
-        def _execute_side_effect(*args: object, **kwargs: object) -> Any:
-            # First call returns the case, second returns evidence
-            if not hasattr(_execute_side_effect, "call_count"):
-                _execute_side_effect.call_count = 0
-            _execute_side_effect.call_count += 1
-            if _execute_side_effect.call_count == 1:
-                return mock_execute_result
-            return mock_ev_result
-
-        mock_db.execute.side_effect = _execute_side_effect
+        mock_db = _make_mock_session(case=mock_case, evidences=[mock_evidence])
 
         app = _make_app(mock_db)
         transport = ASGITransport(app=app)
@@ -130,9 +133,13 @@ class TestGenerateReport:
     async def test_returns_404_for_nonexistent_case(self) -> None:
         """It returns a 404 when the case does not exist."""
         mock_db = MagicMock()
-        mock_execute_result = MagicMock()
-        mock_execute_result.scalar_one_or_none.return_value = None
-        mock_db.execute.return_value = mock_execute_result
+
+        async def _execute(*args: object, **kwargs: object) -> MagicMock:
+            result = MagicMock()
+            result.scalar_one_or_none.return_value = None
+            return result
+
+        mock_db.execute = _execute
 
         app = _make_app(mock_db)
         transport = ASGITransport(app=app)
@@ -146,26 +153,9 @@ class TestGenerateReport:
     async def test_returns_500_on_pdf_generation_error(self) -> None:
         """It returns 500 when pdf_generator_service.generate fails."""
         case_id = uuid4()
-        mock_db = MagicMock()
         mock_case = _make_mock_case(case_id=case_id)
         mock_evidence = _make_mock_evidence(case_id)
-
-        mock_execute_result = MagicMock()
-        mock_execute_result.scalar_one_or_none.return_value = mock_case
-        mock_db.execute.return_value = mock_execute_result
-
-        mock_ev_result = MagicMock()
-        mock_ev_result.scalars.return_value.all.return_value = [mock_evidence]
-
-        def _execute_side_effect(*args: object, **kwargs: object) -> Any:
-            if not hasattr(_execute_side_effect, "call_count"):
-                _execute_side_effect.call_count = 0
-            _execute_side_effect.call_count += 1
-            if _execute_side_effect.call_count == 1:
-                return mock_execute_result
-            return mock_ev_result
-
-        mock_db.execute.side_effect = _execute_side_effect
+        mock_db = _make_mock_session(case=mock_case, evidences=[mock_evidence])
 
         app = _make_app(mock_db)
         transport = ASGITransport(app=app)
@@ -183,7 +173,7 @@ class TestGenerateReport:
 
     async def test_rejects_invalid_uuid(self) -> None:
         """An invalid UUID in the path returns 422."""
-        mock_db = MagicMock()
+        mock_db = _make_mock_session()
         app = _make_app(mock_db)
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:

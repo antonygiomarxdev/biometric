@@ -1,4 +1,4 @@
-"""Repository for :class:`~src.db.models.Person`."""
+"""Async repository for :class:`~src.db.models.Person`."""
 
 from __future__ import annotations
 
@@ -7,17 +7,17 @@ from typing import Any
 from datetime import datetime
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import Person
 
 
 class PersonRepository:
-    """Persistence gateway for the ``persons`` table."""
+    """Async persistence gateway for the ``persons`` table."""
 
     @staticmethod
-    def create(
-        session: Session,
+    async def create(
+        session: AsyncSession,
         *,
         external_id: str | None = None,
         full_name: str | None = None,
@@ -33,22 +33,23 @@ class PersonRepository:
             sex=sex, dob=dob, notes=notes,
         )
         session.add(p)
-        session.commit()
-        session.refresh(p)
+        await session.commit()
+        await session.refresh(p)
         return p
 
     @staticmethod
-    def get_by_id(session: Session, person_id: uuid.UUID) -> Person | None:
-        return session.get(Person, person_id)
+    async def get_by_id(session: AsyncSession, person_id: uuid.UUID) -> Person | None:
+        return await session.get(Person, person_id)
 
     @staticmethod
-    def find_by_external_id(session: Session, external_id: str) -> Person | None:
+    async def find_by_external_id(session: AsyncSession, external_id: str) -> Person | None:
         stmt = select(Person).where(Person.external_id == external_id)
-        return session.execute(stmt).scalar_one_or_none()
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
 
     @staticmethod
-    def list(
-        session: Session,
+    async def list(
+        session: AsyncSession,
         *,
         skip: int = 0,
         limit: int = 20,
@@ -61,29 +62,30 @@ class PersonRepository:
                 Person.full_name.ilike(like) | Person.external_id.ilike(like)
             )
         stmt = stmt.order_by(Person.created_at.desc()).offset(skip).limit(limit)
-        return list(session.execute(stmt).scalars().all())
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
 
     @staticmethod
-    def update(
-        session: Session,
+    async def update(
+        session: AsyncSession,
         person_id: uuid.UUID,
         **fields: Any,
     ) -> Person | None:
-        p = session.get(Person, person_id)
+        p = await session.get(Person, person_id)
         if p is None:
             return None
         for key, value in fields.items():
             if value is not None and hasattr(p, key):
                 setattr(p, key, value)
-        session.commit()
-        session.refresh(p)
+        await session.commit()
+        await session.refresh(p)
         return p
 
     @staticmethod
-    def delete(session: Session, person_id: uuid.UUID) -> bool:
-        p = session.get(Person, person_id)
+    async def delete(session: AsyncSession, person_id: uuid.UUID) -> bool:
+        p = await session.get(Person, person_id)
         if p is None:
             return False
-        session.delete(p)
-        session.commit()
+        await session.delete(p)
+        await session.commit()
         return True

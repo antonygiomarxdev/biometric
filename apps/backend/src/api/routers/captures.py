@@ -14,9 +14,9 @@ from fastapi import (
     HTTPException,
     UploadFile,
 )
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.dependencies import get_db, get_fingerprint_service
+from src.api.dependencies import get_async_db, get_fingerprint_service
 from src.db.repositories.fingerprint_capture_repository import (
     FingerprintCaptureRepository,
 )
@@ -48,7 +48,6 @@ def _get_qdrant_repo() -> QdrantChunkRepository:
     response_model=CaptureUploadResponse,
     status_code=201,
     summary="Upload fingerprint capture",
-    description="Upload an image for a fingerprint slot, process it through the extraction pipeline, and index it in Qdrant.",
     responses={
         400: {"description": "Invalid image or extraction failure"},
         404: {"description": "Fingerprint slot not found"},
@@ -61,27 +60,18 @@ async def upload_capture(
     is_reference: bool = Form(False),
     is_exemplar: bool = Form(True),
     notes: str | None = Form(None),
-    session: Session = Depends(get_db),
+    session: AsyncSession = Depends(get_async_db),
     fp_service: FingerprintService = Depends(get_fingerprint_service),
     qdrant_repo: QdrantChunkRepository = Depends(_get_qdrant_repo),
 ) -> Any:
-    """
-    Process and enroll a fingerprint image.
-    
-    This endpoint:
-    1. Saves the image (or handles its binary).
-    2. Runs the RAG extraction pipeline (segmentation, enhancement, minutiae).
-    3. Indexes the results into Qdrant for 1:N searching.
-    4. Persists the capture and RidgeGraph metadata in Postgres.
-    """
     image_bytes = await file.read()
     if not image_bytes:
         raise HTTPException(status_code=400, detail="Empty file")
-    svc = FingerprintEnrollmentService(
-        session, fp_service, qdrant_repo=qdrant_repo, nebula_repo=None,
-    )
     try:
-        capture, graphs = svc.create_capture(
+        svc = FingerprintEnrollmentService(
+            session, fp_service, qdrant_repo=qdrant_repo, nebula_repo=None,
+        )
+        capture, graphs = await svc.create_capture(
             fingerprint_id=fingerprint_id,
             image_bytes=image_bytes,
             image_dpi=image_dpi,
@@ -91,8 +81,22 @@ async def upload_capture(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    capture_dto = CaptureResponse.model_validate(capture)
-    capture_dto.graphs = [RidgeGraphResponse.model_validate(g) for g in graphs]
+    capture_dto = CaptureResponse(
+        id=capture.id,
+        fingerprint_id=capture.fingerprint_id,
+        capture_index=capture.capture_index,
+        image_uri=capture.image_uri,
+        image_dpi=capture.image_dpi,
+        image_quality_score=capture.image_quality_score,
+        algorithm_version=capture.algorithm_version,
+        processed_at=capture.processed_at,
+        num_minutiae=capture.num_minutiae,
+        num_graphs=capture.num_graphs,
+        is_reference=capture.is_reference,
+        is_exemplar=capture.is_exemplar,
+        notes=capture.notes,
+        graphs=[RidgeGraphResponse.model_validate(g) for g in graphs],
+    )
     return CaptureUploadResponse(
         capture=capture_dto,
         graphs_created=len(graphs),
@@ -103,49 +107,62 @@ async def upload_capture(
     "/api/v1/captures/{capture_id}", 
     response_model=CaptureResponse,
     summary="Get capture details",
-    description="Retrieve metadata for a specific fingerprint capture.",
     responses={404: {"description": "Capture not found"}}
 )
-def get_capture(
+async def get_capture(
     capture_id: uuid.UUID,
-    session: Session = Depends(get_db),
+    session: AsyncSession = Depends(get_async_db),
 ) -> Any:
     """Retrieve capture details by ID."""
-    c = FingerprintCaptureRepository.get_by_id(session, capture_id)
+    c = await FingerprintCaptureRepository.get_by_id(session, capture_id)
     if c is None:
         raise HTTPException(status_code=404, detail="Capture not found")
-    return c
+    return CaptureResponse(
+        id=c.id, fingerprint_id=c.fingerprint_id,
+        capture_index=c.capture_index, image_uri=c.image_uri,
+        image_dpi=c.image_dpi, image_quality_score=c.image_quality_score,
+        algorithm_version=c.algorithm_version, processed_at=c.processed_at,
+        num_minutiae=c.num_minutiae, num_graphs=c.num_graphs,
+        is_reference=c.is_reference, is_exemplar=c.is_exemplar,
+        notes=c.notes, graphs=[],
+    )
 
 
 @router.get(
     "/api/v1/captures/{capture_id}/graphs",
     response_model=list[RidgeGraphResponse],
     summary="List graphs for capture",
-    description="Retrieve the ridge graphs (connected components) extracted during this capture.",
 )
-def get_capture_graphs(
+async def get_capture_graphs(
     capture_id: uuid.UUID,
-    session: Session = Depends(get_db),
+    session: AsyncSession = Depends(get_async_db),
 ) -> Any:
     """Retrieve all RidgeGraphs associated with a capture."""
-    return RidgeGraphRepository.list_by_capture(session, capture_id)
+    return await RidgeGraphRepository.list_by_capture(session, capture_id)
 
 
 @router.patch(
     "/api/v1/captures/{capture_id}", 
     response_model=CaptureResponse,
     summary="Update capture",
-    description="Update mutable fields (like notes or reference status) of a capture.",
     responses={404: {"description": "Capture not found"}}
 )
-def update_capture(
+async def update_capture(
     capture_id: uuid.UUID,
     data: CaptureUpdate,
-    session: Session = Depends(get_db),
+    session: AsyncSession = Depends(get_async_db),
 ) -> Any:
     """Update a capture's metadata."""
     updates = data.model_dump(exclude_unset=True)
-    c = FingerprintCaptureRepository.update(session, capture_id, **updates)
+    c = await FingerprintCaptureRepository.update(session, capture_id, **updates)
     if c is None:
         raise HTTPException(status_code=404, detail="Capture not found")
-    return c
+    return CaptureResponse(
+        id=c.id, fingerprint_id=c.fingerprint_id,
+        capture_index=c.capture_index, image_uri=c.image_uri,
+        image_dpi=c.image_dpi, image_quality_score=c.image_quality_score,
+        algorithm_version=c.algorithm_version, processed_at=c.processed_at,
+        num_minutiae=c.num_minutiae, num_graphs=c.num_graphs,
+        is_reference=c.is_reference, is_exemplar=c.is_exemplar,
+        notes=c.notes, graphs=[],
+    )

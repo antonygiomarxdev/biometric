@@ -1,20 +1,8 @@
-"""
-FingerprintEnrollmentService — orchestrates image → capture → graphs.
-
-The end-to-end pipeline for POST /api/v1/fingerprints/{id}/captures:
-  1. Decode image bytes (CV2)
-  2. Run FingerprintService.process_image
-  3. Extract connected components from the resulting RidgeGraph
-  4. Persist FingerprintCapture (with SHA-256 of image)
-  5. Persist one RidgeGraph per connected component
-  6. Persist to NebulaGraph (each minutia vertex gets capture_id + graph_id)
-  7. Vectorise into chunks, store in Qdrant with extended payload
-  8. Update Fingerprint.capture_count + timestamps
-  9. Return the capture + graph count
-"""
+"""Async FingerprintEnrollmentService — image → capture → graphs pipeline."""
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import uuid
@@ -22,7 +10,7 @@ import uuid
 import cv2
 import networkx as nx
 import numpy as np
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.types import NormalizedFingerprint, RidgeEdge, RidgeNode
 from src.db.models import Fingerprint, FingerprintCapture, Person, RidgeGraph
@@ -30,7 +18,6 @@ from src.db.repositories.fingerprint_capture_repository import (
     FingerprintCaptureRepository,
 )
 from src.db.repositories.fingerprint_repository import FingerprintRepository
-
 from src.db.repositories.ridge_graph_repository import RidgeGraphRepository
 from src.services.fingerprint_service import FingerprintService
 
@@ -40,7 +27,7 @@ log = logging.getLogger(__name__)
 class FingerprintEnrollmentService:
     def __init__(
         self,
-        session: Session,
+        session: AsyncSession,
         fingerprint_service: FingerprintService,
         qdrant_repo=None,
         nebula_repo=None,
@@ -50,7 +37,7 @@ class FingerprintEnrollmentService:
         self._qdrant = qdrant_repo
         self._nebula = nebula_repo
 
-    def create_capture(
+    async def create_capture(
         self,
         fingerprint_id: uuid.UUID,
         image_bytes: bytes,
@@ -59,7 +46,7 @@ class FingerprintEnrollmentService:
         is_exemplar: bool = True,
         notes: str | None = None,
     ) -> tuple[FingerprintCapture, list[RidgeGraph]]:
-        fp = FingerprintRepository.get_by_id(self._session, fingerprint_id)
+        fp = await FingerprintRepository.get_by_id(self._session, fingerprint_id)
         if fp is None:
             raise ValueError(f"Fingerprint {fingerprint_id} not found")
 
@@ -69,11 +56,13 @@ class FingerprintEnrollmentService:
         img = cv2.imdecode(nparr, cv2.IMREAD_GRAYSCALE)
         if img is None:
             raise ValueError("Failed to decode image bytes")
-        normalized: NormalizedFingerprint = self._fp_service.process_image(
-            img, fingerprint_id=str(fingerprint_id),
+
+        loop = asyncio.get_running_loop()
+        normalized: NormalizedFingerprint = await loop.run_in_executor(
+            None, self._fp_service.process_image, img, str(fingerprint_id),
         )
 
-        capture = FingerprintCaptureRepository.create(
+        capture = await FingerprintCaptureRepository.create(
             self._session,
             fingerprint_id=fingerprint_id,
             image_uri=f"minio://pending/{fingerprint_id}/{image_hash[:12]}.bmp",
@@ -102,7 +91,7 @@ class FingerprintEnrollmentService:
                     ],
                 }
                 core = next((n for n in nodes if not n.is_cutoff and n.weight >= 0.9), None)
-                g = RidgeGraphRepository.create(
+                g = await RidgeGraphRepository.create(
                     self._session,
                     capture_id=capture.id,
                     graph_index=idx,
@@ -116,20 +105,20 @@ class FingerprintEnrollmentService:
                 )
                 graphs.append(g)
 
-        FingerprintCaptureRepository.update(
+        await FingerprintCaptureRepository.update(
             self._session, capture.id,
             num_minutiae=len(normalized.minutiae) if normalized.minutiae else 0,
             num_graphs=len(graphs),
         )
 
-        FingerprintRepository.increment_capture_count(self._session, fingerprint_id)
+        await FingerprintRepository.increment_capture_count(self._session, fingerprint_id)
 
-        self._index_external(
+        await self._index_external(
             capture=capture, fingerprint=fp, graphs=graphs,
             normalized=normalized,
         )
 
-        self._session.refresh(capture)
+        await self._session.refresh(capture)
         return capture, graphs
 
     def _extract_connected_components(
@@ -167,7 +156,7 @@ class FingerprintEnrollmentService:
             components.append((region, rnodes, redges))
         return components
 
-    def _index_external(
+    async def _index_external(
         self,
         capture: FingerprintCapture,
         fingerprint: Fingerprint,
@@ -178,7 +167,7 @@ class FingerprintEnrollmentService:
         if self._qdrant is None or not normalized.minutiae:
             return
         try:
-            person: Person | None = self._session.get(
+            person: Person | None = await self._session.get(
                 Person, fingerprint.person_id,
             )
             if person is None:

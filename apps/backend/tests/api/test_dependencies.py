@@ -198,8 +198,8 @@ class TestGetDb:
 class TestGetCurrentUser:
     """Tests for :func:`get_current_user`."""
 
-    def test_raises_on_invalid_token(self) -> None:
-        """An invalid or malformed token raises HTTP 401."""
+    @pytest.mark.asyncio
+    async def test_raises_on_invalid_token(self) -> None:
         from src.api.dependencies import get_current_user
 
         mock_db = MagicMock()
@@ -210,12 +210,12 @@ class TestGetCurrentUser:
             ),
         ):
             with pytest.raises(HTTPException) as exc_info:
-                get_current_user(token="invalid", db=mock_db)
+                await get_current_user(token="invalid", db=mock_db)
             assert exc_info.value.status_code == 401
             assert "Could not validate credentials" in exc_info.value.detail
 
-    def test_raises_when_token_missing_sub(self) -> None:
-        """A token without a ``sub`` claim raises HTTP 401."""
+    @pytest.mark.asyncio
+    async def test_raises_when_token_missing_sub(self) -> None:
         from src.api.dependencies import get_current_user
 
         mock_db = MagicMock()
@@ -226,18 +226,21 @@ class TestGetCurrentUser:
             ),
         ):
             with pytest.raises(HTTPException) as exc_info:
-                get_current_user(token="no-sub-token", db=mock_db)
+                await get_current_user(token="no-sub-token", db=mock_db)
             assert exc_info.value.status_code == 401
 
-    def test_raises_when_user_not_found(self) -> None:
-        """A token with a non-existent username raises HTTP 401."""
+    @pytest.mark.asyncio
+    async def test_raises_when_user_not_found(self) -> None:
         from src.api.dependencies import get_current_user
 
         mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_db.query.return_value = mock_query
-        mock_query.filter.return_value = mock_query
-        mock_query.first.return_value = None
+
+        async def _execute(*args: object, **kwargs: object) -> MagicMock:
+            result = MagicMock()
+            result.scalar_one_or_none.return_value = None
+            return result
+
+        mock_db.execute = _execute
 
         with (
             patch(
@@ -246,22 +249,24 @@ class TestGetCurrentUser:
             ),
         ):
             with pytest.raises(HTTPException) as exc_info:
-                get_current_user(token="valid-token", db=mock_db)
+                await get_current_user(token="valid-token", db=mock_db)
             assert exc_info.value.status_code == 401
 
-    def test_raises_when_user_inactive(self) -> None:
-        """An inactive user account raises HTTP 403."""
+    @pytest.mark.asyncio
+    async def test_raises_when_user_inactive(self) -> None:
         from src.api.dependencies import get_current_user
         from src.db.models import User
 
         mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_db.query.return_value = mock_query
-        mock_query.filter.return_value = mock_query
-
         inactive_user = MagicMock(spec=User)
         inactive_user.is_active = False
-        mock_query.first.return_value = inactive_user
+
+        async def _execute(*args: object, **kwargs: object) -> MagicMock:
+            result = MagicMock()
+            result.scalar_one_or_none.return_value = inactive_user
+            return result
+
+        mock_db.execute = _execute
 
         with (
             patch(
@@ -270,24 +275,26 @@ class TestGetCurrentUser:
             ),
         ):
             with pytest.raises(HTTPException) as exc_info:
-                get_current_user(token="valid-token", db=mock_db)
+                await get_current_user(token="valid-token", db=mock_db)
             assert exc_info.value.status_code == 403
             assert "Inactive" in exc_info.value.detail
 
-    def test_returns_user_when_valid(self) -> None:
-        """A valid token with an active user returns the user object."""
+    @pytest.mark.asyncio
+    async def test_returns_user_when_valid(self) -> None:
         from src.api.dependencies import get_current_user
         from src.db.models import User
 
         mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_db.query.return_value = mock_query
-        mock_query.filter.return_value = mock_query
-
         active_user = MagicMock(spec=User)
         active_user.is_active = True
         active_user.username = "perito1"
-        mock_query.first.return_value = active_user
+
+        async def _execute(*args: object, **kwargs: object) -> MagicMock:
+            result = MagicMock()
+            result.scalar_one_or_none.return_value = active_user
+            return result
+
+        mock_db.execute = _execute
 
         with (
             patch(
@@ -295,7 +302,7 @@ class TestGetCurrentUser:
                 return_value={"sub": "perito1"},
             ),
         ):
-            result = get_current_user(token="valid-token", db=mock_db)
+            result = await get_current_user(token="valid-token", db=mock_db)
             assert result is active_user
 
 

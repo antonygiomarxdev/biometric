@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import uuid
 
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.errors import NotFoundError, ValidationError
 from src.db.repositories.case_repository import CaseRepository
@@ -69,9 +69,9 @@ class DecisionService:
     # Public API
     # ------------------------------------------------------------------
 
-    def list_decisions(
+    async def list_decisions(
         self,
-        db: Session,
+        db: AsyncSession,
         *,
         skip: int = 0,
         limit: int = 20,
@@ -81,7 +81,7 @@ class DecisionService:
         """Return a paginated list of decisions, optionally filtered.
 
         Args:
-            db: SQLAlchemy ORM session.
+            db: Async SQLAlchemy session.
             skip: Number of records to skip (offset).
             limit: Maximum number of records to return.
             case_id: Optional filter by case UUID.
@@ -91,10 +91,10 @@ class DecisionService:
             A dict with ``items`` (list of ORM objects), ``total``,
             ``skip``, and ``limit``.
         """
-        items = self._decision_repo.list(
+        items = await self._decision_repo.list(
             db, skip=skip, limit=limit, case_id=case_id, verdict=verdict
         )
-        total = self._decision_repo.count(
+        total = await self._decision_repo.count(
             db, case_id=case_id, verdict=verdict
         )
 
@@ -105,15 +105,15 @@ class DecisionService:
             "limit": limit,
         }
 
-    def get_decision(
+    async def get_decision(
         self,
-        db: Session,
+        db: AsyncSession,
         decision_id: uuid.UUID,
     ) -> object:
         """Retrieve a single decision by UUID.
 
         Args:
-            db: SQLAlchemy ORM session.
+            db: Async SQLAlchemy session.
             decision_id: UUID of the decision to retrieve.
 
         Raises:
@@ -122,7 +122,7 @@ class DecisionService:
         Returns:
             The ``Decision`` ORM instance.
         """
-        decision = self._decision_repo.get_by_id(db, decision_id)
+        decision = await self._decision_repo.get_by_id(db, decision_id)
         if decision is None:
             raise NotFoundError(
                 message=f"Decision not found: {decision_id}",
@@ -130,9 +130,9 @@ class DecisionService:
             )
         return decision
 
-    def record_verdict(
+    async def record_verdict(
         self,
-        db: Session,
+        db: AsyncSession,
         *,
         case_id: uuid.UUID,
         evidence_id: uuid.UUID | None = None,
@@ -147,7 +147,7 @@ class DecisionService:
         transaction.
 
         Args:
-            db: SQLAlchemy ORM session.
+            db: Async SQLAlchemy session.
             case_id: UUID of the parent case.
             evidence_id: Optional UUID of the evidence item.
             verdict: Examiner verdict (Identificación, Exclusión,
@@ -173,7 +173,7 @@ class DecisionService:
             )
 
         # Verify referenced entities exist
-        case = self._case_repo.get_by_id(db, case_id)
+        case = await self._case_repo.get_by_id(db, case_id)
         if case is None:
             raise NotFoundError(
                 message=f"Case not found: {case_id}",
@@ -181,7 +181,7 @@ class DecisionService:
             )
 
         if evidence_id is not None:
-            ev = self._evidence_repo.get_by_id(db, evidence_id)
+            ev = await self._evidence_repo.get_by_id(db, evidence_id)
             if ev is None:
                 raise NotFoundError(
                     message=f"Evidence not found: {evidence_id}",
@@ -189,7 +189,7 @@ class DecisionService:
                 )
 
         # Persist the decision (flush-only — get decision.id before audit)
-        decision = self._decision_repo.create(
+        decision = await self._decision_repo.create(
             db,
             case_id=case_id,
             evidence_id=evidence_id,
@@ -211,8 +211,8 @@ class DecisionService:
             },
         )
 
-        db.commit()
-        db.refresh(decision)
+        await db.commit()
+        await db.refresh(decision)
 
         logger.info(
             "Decision created: id=%s case_id=%s verdict=%s",

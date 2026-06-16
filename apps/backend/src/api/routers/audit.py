@@ -19,9 +19,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy import desc, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.dependencies import get_db
+from src.api.dependencies import get_async_db
 from src.db.models import AuditLog
 
 logger = logging.getLogger(__name__)
@@ -66,7 +66,7 @@ async def list_audit_logs(
     action: Optional[str] = Query(None, description="Filter by action type (INSERT, UPDATE, DELETE, …)"),
     limit: int = Query(50, ge=1, le=500, description="Max results per page"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ) -> AuditLogPage:
     """Fetch audit log history with optional filters and pagination.
 
@@ -85,7 +85,7 @@ async def list_audit_logs(
 
     # Total count
     count_query = select(func.count()).select_from(base_query.subquery())
-    total: int = db.execute(count_query).scalar_one()
+    total: int = await db.run_sync(lambda s: s.execute(count_query).scalar_one())
 
     # Paginated results
     results_query = (
@@ -93,7 +93,7 @@ async def list_audit_logs(
         .offset(offset)
         .limit(limit)
     )
-    rows = db.execute(results_query).scalars().all()
+    rows = await db.run_sync(lambda s: s.execute(results_query).scalars().all())
 
     items = [
         AuditLogEntry(

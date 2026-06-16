@@ -11,9 +11,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.dependencies import get_db
+from src.api.dependencies import get_async_db
 from src.api.errors import NotFoundError
 from src.db.models import Case, Evidence
 from src.services.pdf_generator import pdf_generator_service
@@ -27,7 +27,7 @@ router = APIRouter(
 
 
 @router.get("/{case_id}")
-async def generate_report(case_id: UUID, db: Session = Depends(get_db)) -> Response:
+async def generate_report(case_id: UUID, db: AsyncSession = Depends(get_async_db)) -> Response:
     """
     Generate a signed forensic dictamen (PDF) for the given case.
 
@@ -40,7 +40,7 @@ async def generate_report(case_id: UUID, db: Session = Depends(get_db)) -> Respo
     (mitigates T-01-06: Tampering of PDF export).
     """
     # ── retrieve case ────────────────────────────────────────────
-    result = db.execute(select(Case).where(Case.id == case_id))
+    result = await db.execute(select(Case).where(Case.id == case_id))
     case = result.scalar_one_or_none()
 
     if case is None:
@@ -50,10 +50,8 @@ async def generate_report(case_id: UUID, db: Session = Depends(get_db)) -> Respo
         )
 
     # ── retrieve evidence ────────────────────────────────────────
-    ev_result = db.execute(
-        select(Evidence).where(Evidence.case_id == case_id)
-    )
-    evidences = ev_result.scalars().all()
+    result = await db.execute(select(Evidence).where(Evidence.case_id == case_id))
+    evidences = result.scalars().all()
 
     # ── build case data dict for the template ────────────────────
     case_data = {

@@ -8,9 +8,10 @@ required.  Does NOT import from ``src.db.models``.
 from __future__ import annotations
 
 import uuid
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from src.api.errors import NotFoundError, ValidationError
 from src.services.decision_service import DecisionService
@@ -22,21 +23,21 @@ from src.services.decision_service import DecisionService
 
 
 @pytest.fixture
-def mock_decision_repo() -> MagicMock:
+def mock_decision_repo() -> AsyncMock:
     """Return a mock DecisionRepository."""
-    return MagicMock()
+    return AsyncMock()
 
 
 @pytest.fixture
-def mock_case_repo() -> MagicMock:
+def mock_case_repo() -> AsyncMock:
     """Return a mock CaseRepository."""
-    return MagicMock()
+    return AsyncMock()
 
 
 @pytest.fixture
-def mock_evidence_repo() -> MagicMock:
+def mock_evidence_repo() -> AsyncMock:
     """Return a mock EvidenceRepository."""
-    return MagicMock()
+    return AsyncMock()
 
 
 @pytest.fixture
@@ -47,9 +48,9 @@ def mock_audit_service() -> MagicMock:
 
 @pytest.fixture
 def service(
-    mock_decision_repo: MagicMock,
-    mock_case_repo: MagicMock,
-    mock_evidence_repo: MagicMock,
+    mock_decision_repo: AsyncMock,
+    mock_case_repo: AsyncMock,
+    mock_evidence_repo: AsyncMock,
     mock_audit_service: MagicMock,
 ) -> DecisionService:
     """Return a DecisionService with mock dependencies."""
@@ -62,9 +63,16 @@ def service(
 
 
 @pytest.fixture
-def db() -> MagicMock:
-    """Return a mock SQLAlchemy session."""
-    return MagicMock()
+async def db() -> AsyncSession:
+    """Return a real async SQLAlchemy session against an in-memory SQLite database."""
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    factory = async_sessionmaker(engine, class_=AsyncSession)
+    async with factory() as session:
+        # Mock commit/refresh since the service calls them on mock objects.
+        session.commit = AsyncMock()  # type: ignore[method-assign]
+        session.refresh = AsyncMock()  # type: ignore[method-assign]
+        yield session
+    await engine.dispose()
 
 
 def _make_mock_decision(**kwargs: object) -> MagicMock:
@@ -87,11 +95,12 @@ def _make_mock_decision(**kwargs: object) -> MagicMock:
 class TestListDecisions:
     """Tests for :meth:`DecisionService.list_decisions`."""
 
-    def test_basic_pagination(
+    @pytest.mark.asyncio
+    async def test_basic_pagination(
         self,
         service: DecisionService,
-        db: MagicMock,
-        mock_decision_repo: MagicMock,
+        db: AsyncSession,
+        mock_decision_repo: AsyncMock,
     ) -> None:
         """Returns a dict with items, total, skip, and limit."""
         mock_decision = _make_mock_decision()
@@ -99,7 +108,7 @@ class TestListDecisions:
         mock_decision_repo.list.return_value = [mock_decision]
         mock_decision_repo.count.return_value = 1
 
-        result = service.list_decisions(db, skip=0, limit=20)
+        result = await service.list_decisions(db, skip=0, limit=20)
 
         assert result["total"] == 1
         assert len(result["items"]) == 1
@@ -112,11 +121,12 @@ class TestListDecisions:
             db, case_id=None, verdict=None
         )
 
-    def test_with_case_filter(
+    @pytest.mark.asyncio
+    async def test_with_case_filter(
         self,
         service: DecisionService,
-        db: MagicMock,
-        mock_decision_repo: MagicMock,
+        db: AsyncSession,
+        mock_decision_repo: AsyncMock,
     ) -> None:
         """Applies a case_id filter when provided."""
         mock_decision = _make_mock_decision()
@@ -125,7 +135,7 @@ class TestListDecisions:
         mock_decision_repo.list.return_value = [mock_decision]
         mock_decision_repo.count.return_value = 1
 
-        result = service.list_decisions(
+        result = await service.list_decisions(
             db, skip=0, limit=10, case_id=case_id
         )
 
@@ -135,11 +145,12 @@ class TestListDecisions:
             db, skip=0, limit=10, case_id=case_id, verdict=None
         )
 
-    def test_with_verdict_filter(
+    @pytest.mark.asyncio
+    async def test_with_verdict_filter(
         self,
         service: DecisionService,
-        db: MagicMock,
-        mock_decision_repo: MagicMock,
+        db: AsyncSession,
+        mock_decision_repo: AsyncMock,
     ) -> None:
         """Applies a verdict filter when provided."""
         mock_decision = _make_mock_decision(verdict="Exclusión")
@@ -147,24 +158,25 @@ class TestListDecisions:
         mock_decision_repo.list.return_value = [mock_decision]
         mock_decision_repo.count.return_value = 1
 
-        result = service.list_decisions(
+        result = await service.list_decisions(
             db, skip=0, limit=10, verdict="Exclusión"
         )
 
         assert result["total"] == 1
         assert len(result["items"]) == 1
 
-    def test_empty_result(
+    @pytest.mark.asyncio
+    async def test_empty_result(
         self,
         service: DecisionService,
-        db: MagicMock,
-        mock_decision_repo: MagicMock,
+        db: AsyncSession,
+        mock_decision_repo: AsyncMock,
     ) -> None:
         """Returns empty items list and zero total when no decisions match."""
         mock_decision_repo.list.return_value = []
         mock_decision_repo.count.return_value = 0
 
-        result = service.list_decisions(db, skip=0, limit=20)
+        result = await service.list_decisions(db, skip=0, limit=20)
 
         assert result["total"] == 0
         assert result["items"] == []
@@ -178,32 +190,34 @@ class TestListDecisions:
 class TestGetDecision:
     """Tests for :meth:`DecisionService.get_decision`."""
 
-    def test_found(
+    @pytest.mark.asyncio
+    async def test_found(
         self,
         service: DecisionService,
-        db: MagicMock,
-        mock_decision_repo: MagicMock,
+        db: AsyncSession,
+        mock_decision_repo: AsyncMock,
     ) -> None:
         """Returns the decision when found."""
         mock_decision = _make_mock_decision()
         mock_decision_repo.get_by_id.return_value = mock_decision
 
-        result = service.get_decision(db, mock_decision.id)
+        result = await service.get_decision(db, mock_decision.id)
 
         assert result is mock_decision
 
-    def test_not_found(
+    @pytest.mark.asyncio
+    async def test_not_found(
         self,
         service: DecisionService,
-        db: MagicMock,
-        mock_decision_repo: MagicMock,
+        db: AsyncSession,
+        mock_decision_repo: AsyncMock,
     ) -> None:
         """Raises NotFoundError when the decision does not exist."""
         mock_decision_repo.get_by_id.return_value = None
 
         decision_id = uuid.uuid4()
         with pytest.raises(NotFoundError, match="Decision not found"):
-            service.get_decision(db, decision_id)
+            await service.get_decision(db, decision_id)
 
 
 # ---------------------------------------------------------------------------
@@ -214,12 +228,13 @@ class TestGetDecision:
 class TestRecordVerdict:
     """Tests for :meth:`DecisionService.record_verdict`."""
 
-    def test_success(
+    @pytest.mark.asyncio
+    async def test_success(
         self,
         service: DecisionService,
-        db: MagicMock,
-        mock_decision_repo: MagicMock,
-        mock_case_repo: MagicMock,
+        db: AsyncSession,
+        mock_decision_repo: AsyncMock,
+        mock_case_repo: AsyncMock,
         mock_audit_service: MagicMock,
     ) -> None:
         """Creates a decision, logs audit event, and commits."""
@@ -235,12 +250,7 @@ class TestRecordVerdict:
         mock_case_repo.get_by_id.return_value = MagicMock()
         mock_decision_repo.create.return_value = mock_decision
 
-        def _refresh_side_effect(decision: MagicMock) -> None:
-            decision.id = decision_id
-
-        db.refresh.side_effect = _refresh_side_effect
-
-        result = service.record_verdict(
+        result = await service.record_verdict(
             db,
             case_id=case_id,
             verdict="Identificación",
@@ -269,16 +279,17 @@ class TestRecordVerdict:
                 "comments": "Coincide en 12 puntos característicos",
             },
         )
-        db.commit.assert_called_once()
-        db.refresh.assert_called_once_with(mock_decision)
+        db.commit.assert_called_once()  # type: ignore[attr-defined]
+        db.refresh.assert_called_once_with(mock_decision)  # type: ignore[attr-defined]
 
-    def test_with_evidence(
+    @pytest.mark.asyncio
+    async def test_with_evidence(
         self,
         service: DecisionService,
-        db: MagicMock,
-        mock_decision_repo: MagicMock,
-        mock_case_repo: MagicMock,
-        mock_evidence_repo: MagicMock,
+        db: AsyncSession,
+        mock_decision_repo: AsyncMock,
+        mock_case_repo: AsyncMock,
+        mock_evidence_repo: AsyncMock,
         mock_audit_service: MagicMock,
     ) -> None:
         """Creates a decision with an optional evidence reference."""
@@ -296,9 +307,7 @@ class TestRecordVerdict:
         mock_evidence_repo.get_by_id.return_value = MagicMock()
         mock_decision_repo.create.return_value = mock_decision
 
-        db.refresh.side_effect = lambda d: None
-
-        result = service.record_verdict(
+        result = await service.record_verdict(
             db,
             case_id=case_id,
             evidence_id=evidence_id,
@@ -311,12 +320,13 @@ class TestRecordVerdict:
         _, kwargs = mock_audit_service.log_event.call_args
         assert kwargs["record_id"] == decision_id
 
-    def test_without_comments(
+    @pytest.mark.asyncio
+    async def test_without_comments(
         self,
         service: DecisionService,
-        db: MagicMock,
-        mock_decision_repo: MagicMock,
-        mock_case_repo: MagicMock,
+        db: AsyncSession,
+        mock_decision_repo: AsyncMock,
+        mock_case_repo: AsyncMock,
         mock_audit_service: MagicMock,
     ) -> None:
         """Creates a decision with comments=None."""
@@ -331,9 +341,7 @@ class TestRecordVerdict:
         mock_case_repo.get_by_id.return_value = MagicMock()
         mock_decision_repo.create.return_value = mock_decision
 
-        db.refresh.side_effect = lambda d: None
-
-        result = service.record_verdict(
+        result = await service.record_verdict(
             db,
             case_id=case_id,
             verdict="Inconcluso",
@@ -350,15 +358,16 @@ class TestRecordVerdict:
         )
         mock_audit_service.log_event.assert_called_once()
 
-    def test_invalid_verdict(
+    @pytest.mark.asyncio
+    async def test_invalid_verdict(
         self,
         service: DecisionService,
-        db: MagicMock,
-        mock_decision_repo: MagicMock,
+        db: AsyncSession,
+        mock_decision_repo: AsyncMock,
     ) -> None:
         """Raises ValidationError for an invalid verdict."""
         with pytest.raises(ValidationError, match="Invalid verdict"):
-            service.record_verdict(
+            await service.record_verdict(
                 db,
                 case_id=uuid.uuid4(),
                 verdict="No coincide",
@@ -366,19 +375,20 @@ class TestRecordVerdict:
 
         mock_decision_repo.create.assert_not_called()
 
-    def test_case_not_found(
+    @pytest.mark.asyncio
+    async def test_case_not_found(
         self,
         service: DecisionService,
-        db: MagicMock,
-        mock_case_repo: MagicMock,
-        mock_decision_repo: MagicMock,
+        db: AsyncSession,
+        mock_case_repo: AsyncMock,
+        mock_decision_repo: AsyncMock,
         mock_audit_service: MagicMock,
     ) -> None:
         """Raises NotFoundError when the case does not exist."""
         mock_case_repo.get_by_id.return_value = None
 
         with pytest.raises(NotFoundError, match="Case not found"):
-            service.record_verdict(
+            await service.record_verdict(
                 db,
                 case_id=uuid.uuid4(),
                 verdict="Identificación",
@@ -387,13 +397,14 @@ class TestRecordVerdict:
         mock_decision_repo.create.assert_not_called()
         mock_audit_service.log_event.assert_not_called()
 
-    def test_evidence_not_found(
+    @pytest.mark.asyncio
+    async def test_evidence_not_found(
         self,
         service: DecisionService,
-        db: MagicMock,
-        mock_case_repo: MagicMock,
-        mock_evidence_repo: MagicMock,
-        mock_decision_repo: MagicMock,
+        db: AsyncSession,
+        mock_case_repo: AsyncMock,
+        mock_evidence_repo: AsyncMock,
+        mock_decision_repo: AsyncMock,
         mock_audit_service: MagicMock,
     ) -> None:
         """Raises NotFoundError when the evidence does not exist."""
@@ -402,7 +413,7 @@ class TestRecordVerdict:
         mock_evidence_repo.get_by_id.return_value = None
 
         with pytest.raises(NotFoundError, match="Evidence not found"):
-            service.record_verdict(
+            await service.record_verdict(
                 db,
                 case_id=case_id,
                 evidence_id=uuid.uuid4(),
@@ -412,23 +423,24 @@ class TestRecordVerdict:
         mock_decision_repo.create.assert_not_called()
         mock_audit_service.log_event.assert_not_called()
 
-    def test_transaction_rollback_on_error(
+    @pytest.mark.asyncio
+    async def test_transaction_rollback_on_error(
         self,
         service: DecisionService,
-        db: MagicMock,
-        mock_case_repo: MagicMock,
-        mock_decision_repo: MagicMock,
+        db: AsyncSession,
+        mock_case_repo: AsyncMock,
+        mock_decision_repo: AsyncMock,
         mock_audit_service: MagicMock,
     ) -> None:
         """Ensures no commit occurs when validation raises early."""
         mock_case_repo.get_by_id.return_value = None
 
         with pytest.raises(NotFoundError):
-            service.record_verdict(
+            await service.record_verdict(
                 db,
                 case_id=uuid.uuid4(),
                 verdict="Identificación",
             )
 
         mock_decision_repo.create.assert_not_called()
-        db.commit.assert_not_called()
+        db.commit.assert_not_called()  # type: ignore[attr-defined]

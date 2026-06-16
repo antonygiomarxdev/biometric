@@ -1,21 +1,21 @@
-"""Repository for :class:`~src.db.models.FingerprintCapture`."""
+"""Async repository for :class:`~src.db.models.FingerprintCapture`."""
 
 from __future__ import annotations
 
 import uuid
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import FingerprintCapture
 
 
 class FingerprintCaptureRepository:
-    """Persistence gateway for the ``fingerprint_captures`` table."""
+    """Async persistence gateway for the ``fingerprint_captures`` table."""
 
     @staticmethod
-    def create(
-        session: Session,
+    async def create(
+        session: AsyncSession,
         *,
         fingerprint_id: uuid.UUID,
         image_uri: str,
@@ -27,7 +27,7 @@ class FingerprintCaptureRepository:
         is_exemplar: bool = True,
         notes: str | None = None,
     ) -> FingerprintCapture:
-        existing_count = FingerprintCaptureRepository.count_by_fingerprint(
+        existing_count = await FingerprintCaptureRepository.count_by_fingerprint(
             session, fingerprint_id,
         )
         c = FingerprintCapture(
@@ -43,30 +43,31 @@ class FingerprintCaptureRepository:
             notes=notes,
         )
         session.add(c)
-        session.commit()
-        session.refresh(c)
+        await session.commit()
+        await session.refresh(c)
         return c
 
     @staticmethod
-    def count_by_fingerprint(
-        session: Session,
+    async def count_by_fingerprint(
+        session: AsyncSession,
         fingerprint_id: uuid.UUID,
     ) -> int:
         stmt = select(func.count()).select_from(FingerprintCapture).where(
             FingerprintCapture.fingerprint_id == fingerprint_id
         )
-        return int(session.execute(stmt).scalar_one())
+        result = await session.execute(stmt)
+        return int(result.scalar_one())
 
     @staticmethod
-    def get_by_id(
-        session: Session,
+    async def get_by_id(
+        session: AsyncSession,
         capture_id: uuid.UUID,
     ) -> FingerprintCapture | None:
-        return session.get(FingerprintCapture, capture_id)
+        return await session.get(FingerprintCapture, capture_id)
 
     @staticmethod
-    def list_by_fingerprint(
-        session: Session,
+    async def list_by_fingerprint(
+        session: AsyncSession,
         fingerprint_id: uuid.UUID,
     ) -> list[FingerprintCapture]:
         stmt = (
@@ -74,39 +75,41 @@ class FingerprintCaptureRepository:
             .where(FingerprintCapture.fingerprint_id == fingerprint_id)
             .order_by(FingerprintCapture.capture_index)
         )
-        return list(session.execute(stmt).scalars().all())
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
 
     @staticmethod
-    def find_by_image_hash(
-        session: Session,
+    async def find_by_image_hash(
+        session: AsyncSession,
         image_hash_sha256: str,
     ) -> FingerprintCapture | None:
         stmt = select(FingerprintCapture).where(
             FingerprintCapture.image_hash_sha256 == image_hash_sha256
         )
-        return session.execute(stmt).scalar_one_or_none()
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
 
     @staticmethod
-    def update(
-        session: Session,
+    async def update(
+        session: AsyncSession,
         capture_id: uuid.UUID,
         **fields: object,
     ) -> FingerprintCapture | None:
-        c = session.get(FingerprintCapture, capture_id)
+        c = await session.get(FingerprintCapture, capture_id)
         if c is None:
             return None
         for key, value in fields.items():
             if hasattr(c, key):
                 setattr(c, key, value)
-        session.commit()
-        session.refresh(c)
+        await session.commit()
+        await session.refresh(c)
         return c
 
     @staticmethod
-    def delete(session: Session, capture_id: uuid.UUID) -> bool:
-        c = session.get(FingerprintCapture, capture_id)
+    async def delete(session: AsyncSession, capture_id: uuid.UUID) -> bool:
+        c = await session.get(FingerprintCapture, capture_id)
         if c is None:
             return False
-        session.delete(c)
-        session.commit()
+        await session.delete(c)
+        await session.commit()
         return True

@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 """
 CRUD router for forensic cases (``/api/v1/cases``).
 
@@ -7,14 +6,17 @@ All business logic and database operations are delegated to
 :class:`~src.services.case_service.CaseService`.
 """
 
+from __future__ import annotations
+
 import logging
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, Field, Field
-from sqlalchemy.orm import Session
+from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.dependencies import get_db
+from src.api.dependencies import get_async_db
 from src.services.case_service import case_service
 
 logger = logging.getLogger(__name__)
@@ -86,12 +88,12 @@ async def list_cases(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     status: str | None = Query(None, description="Filter by status"),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ) -> dict[str, object]:
     """
     List all forensic cases with optional status filter and pagination.
     """
-    result = case_service.list_cases(db, skip=skip, limit=limit, status=status)
+    result = await case_service.list_cases(db, skip=skip, limit=limit, status=status)
     return {
         "items": [CaseResponse.model_validate(c) for c in result["items"]],
         "total": result["total"],
@@ -103,12 +105,12 @@ async def list_cases(
 @router.get("/{case_id}", response_model=CaseResponse)
 async def get_case(
     case_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ) -> object:
     """
     Retrieve a single case by its UUID.
     """
-    return case_service.get_case(db, case_id)
+    return await case_service.get_case(db, case_id)
 
 
 @router.post(
@@ -118,12 +120,12 @@ async def get_case(
 )
 async def create_case(
     body: CaseCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ) -> object:
     """
     Create a new forensic case.
     """
-    return case_service.create_case(
+    return await case_service.create_case(
         db,
         case_number=body.case_number,
         title=body.title,
@@ -136,12 +138,12 @@ async def create_case(
 async def update_case(
     case_id: uuid.UUID,
     body: CaseUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ) -> object:
     """
     Update an existing forensic case.
     """
-    return case_service.update_case(
+    return await case_service.update_case(
         db,
         case_id=case_id,
         title=body.title,
@@ -153,9 +155,9 @@ async def update_case(
 @router.delete("/{case_id}", status_code=204)
 async def delete_case(
     case_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ) -> None:
     """
     Delete a forensic case and all its associated evidence (CASCADE).
     """
-    case_service.delete_case(db, case_id)
+    await case_service.delete_case(db, case_id)

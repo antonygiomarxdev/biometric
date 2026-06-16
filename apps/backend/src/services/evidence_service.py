@@ -14,7 +14,7 @@ import uuid
 from typing import TypedDict
 
 from fastapi import UploadFile
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.errors import NotFoundError, ValidationError
 from src.db.models import Evidence
@@ -154,9 +154,9 @@ class EvidenceService:
     # Public API
     # ------------------------------------------------------------------
 
-    def list_evidence(
+    async def list_evidence(
         self,
-        db: Session,
+        db: AsyncSession,
         *,
         skip: int = 0,
         limit: int = 20,
@@ -173,10 +173,10 @@ class EvidenceService:
         Returns:
             A dict with ``items``, ``total``, ``skip``, and ``limit``.
         """
-        items = self._evidence_repo.list(
+        items = await self._evidence_repo.list(
             db, skip=skip, limit=limit, case_id=case_id
         )
-        total = self._evidence_repo.count(db, case_id=case_id)
+        total = await self._evidence_repo.count(db, case_id=case_id)
 
         return {
             "items": items,
@@ -185,9 +185,9 @@ class EvidenceService:
             "limit": limit,
         }
 
-    def get_evidence(
+    async def get_evidence(
         self,
-        db: Session,
+        db: AsyncSession,
         evidence_id: uuid.UUID,
     ) -> object:
         """Retrieve a single evidence item by UUID.
@@ -199,7 +199,7 @@ class EvidenceService:
         Raises:
             NotFoundError: If no evidence exists with *evidence_id*.
         """
-        ev = self._evidence_repo.get_by_id(db, evidence_id)
+        ev = await self._evidence_repo.get_by_id(db, evidence_id)
         if ev is None:
             raise NotFoundError(
                 message=f"Evidence not found: {evidence_id}",
@@ -209,7 +209,7 @@ class EvidenceService:
 
     async def create_evidence(
         self,
-        db: Session,
+        db: AsyncSession,
         *,
         case_id: uuid.UUID,
         fingerprint_id: str,
@@ -232,7 +232,7 @@ class EvidenceService:
             refreshed).
         """
         # Verify the parent case exists
-        case = self._case_repo.get_by_id(db, case_id)
+        case = await self._case_repo.get_by_id(db, case_id)
         if case is None:
             raise NotFoundError(
                 message=f"Case not found: {case_id}",
@@ -246,7 +246,7 @@ class EvidenceService:
                 file, case_id, fingerprint_id
             )
 
-        ev = self._evidence_repo.create(
+        ev = await self._evidence_repo.create(
             db,
             case_id=case_id,
             fingerprint_id=fingerprint_id,
@@ -262,9 +262,9 @@ class EvidenceService:
         )
         return ev
 
-    def get_evidence_image(
+    async def get_evidence_image(
         self,
-        db: Session,
+        db: AsyncSession,
         evidence_id: uuid.UUID,
     ) -> bytes:
         """Retrieve the raw image bytes for an evidence item from MinIO.
@@ -280,7 +280,7 @@ class EvidenceService:
         Returns:
             The raw image bytes.
         """
-        ev = self._evidence_repo.get_by_id(db, evidence_id)
+        ev = await self._evidence_repo.get_by_id(db, evidence_id)
         if not ev or not ev.image_path:
             raise NotFoundError("Image not found")
         image_data = storage.download_file(ev.image_path)
@@ -288,9 +288,9 @@ class EvidenceService:
             raise NotFoundError("Image not found in storage")
         return image_data
 
-    def delete_evidence(
+    async def delete_evidence(
         self,
-        db: Session,
+        db: AsyncSession,
         evidence_id: uuid.UUID,
     ) -> None:
         """Delete an evidence item.
@@ -302,14 +302,14 @@ class EvidenceService:
         Raises:
             NotFoundError: If no evidence exists with *evidence_id*.
         """
-        ev = self._evidence_repo.get_by_id(db, evidence_id)
+        ev = await self._evidence_repo.get_by_id(db, evidence_id)
         if ev is None:
             raise NotFoundError(
                 message=f"Evidence not found: {evidence_id}",
                 detail={"evidence_id": str(evidence_id)},
             )
 
-        self._evidence_repo.delete(db, ev)
+        await self._evidence_repo.delete(db, ev)
         logger.info("Evidence deleted: id=%s", evidence_id)
 
 

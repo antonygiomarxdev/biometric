@@ -1,4 +1,4 @@
-"""Repository for :class:`~src.db.models.Fingerprint`."""
+"""Async repository for :class:`~src.db.models.Fingerprint`."""
 
 from __future__ import annotations
 
@@ -6,17 +6,17 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import Fingerprint
 
 
 class FingerprintRepository:
-    """Persistence gateway for the ``fingerprints`` table."""
+    """Async persistence gateway for the ``fingerprints`` table."""
 
     @staticmethod
-    def create(
-        session: Session,
+    async def create(
+        session: AsyncSession,
         *,
         person_id: uuid.UUID,
         finger_position: int,
@@ -30,17 +30,17 @@ class FingerprintRepository:
             notes=notes,
         )
         session.add(f)
-        session.commit()
-        session.refresh(f)
+        await session.commit()
+        await session.refresh(f)
         return f
 
     @staticmethod
-    def get_by_id(session: Session, fingerprint_id: uuid.UUID) -> Fingerprint | None:
-        return session.get(Fingerprint, fingerprint_id)
+    async def get_by_id(session: AsyncSession, fingerprint_id: uuid.UUID) -> Fingerprint | None:
+        return await session.get(Fingerprint, fingerprint_id)
 
     @staticmethod
-    def list_by_person(
-        session: Session,
+    async def list_by_person(
+        session: AsyncSession,
         person_id: uuid.UUID,
     ) -> list[Fingerprint]:
         stmt = (
@@ -48,11 +48,12 @@ class FingerprintRepository:
             .where(Fingerprint.person_id == person_id)
             .order_by(Fingerprint.finger_position, Fingerprint.capture_type)
         )
-        return list(session.execute(stmt).scalars().all())
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
 
     @staticmethod
-    def find_slot(
-        session: Session,
+    async def find_slot(
+        session: AsyncSession,
         person_id: uuid.UUID,
         finger_position: int,
         capture_type: str,
@@ -62,29 +63,30 @@ class FingerprintRepository:
             Fingerprint.finger_position == finger_position,
             Fingerprint.capture_type == capture_type,
         )
-        return session.execute(stmt).scalar_one_or_none()
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
 
     @staticmethod
-    def increment_capture_count(
-        session: Session,
+    async def increment_capture_count(
+        session: AsyncSession,
         fingerprint_id: uuid.UUID,
     ) -> Fingerprint | None:
-        f = session.get(Fingerprint, fingerprint_id)
+        f = await session.get(Fingerprint, fingerprint_id)
         if f is None:
             return None
         f.capture_count = (f.capture_count or 0) + 1
         f.last_captured_at = datetime.now(timezone.utc)
         if f.first_captured_at is None:
             f.first_captured_at = f.last_captured_at
-        session.commit()
-        session.refresh(f)
+        await session.commit()
+        await session.refresh(f)
         return f
 
     @staticmethod
-    def delete(session: Session, fingerprint_id: uuid.UUID) -> bool:
-        f = session.get(Fingerprint, fingerprint_id)
+    async def delete(session: AsyncSession, fingerprint_id: uuid.UUID) -> bool:
+        f = await session.get(Fingerprint, fingerprint_id)
         if f is None:
             return False
-        session.delete(f)
-        session.commit()
+        await session.delete(f)
+        await session.commit()
         return True

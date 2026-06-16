@@ -7,10 +7,10 @@ Uses a mocked SQLAlchemy ``Session`` — no real database required.
 from __future__ import annotations
 
 import uuid
-from unittest.mock import MagicMock, create_autospec
+from unittest.mock import AsyncMock, MagicMock, create_autospec
 
 import pytest
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.repositories.evidence_repository import EvidenceRepository
 
@@ -24,7 +24,7 @@ def repo() -> EvidenceRepository:
 @pytest.fixture
 def session() -> MagicMock:
     """Return a mock SQLAlchemy session."""
-    return create_autospec(Session, instance=True)
+    return create_autospec(AsyncSession, instance=True)
 
 
 def _make_mock_evidence(**kwargs: object) -> MagicMock:
@@ -48,37 +48,40 @@ def _make_mock_evidence(**kwargs: object) -> MagicMock:
 class TestList:
     """Tests for :meth:`EvidenceRepository.list`."""
 
-    def test_returns_all_evidence(
+    @pytest.mark.asyncio
+    async def test_returns_all_evidence(
         self, repo: EvidenceRepository, session: MagicMock
     ) -> None:
         """Returns paginated list of evidence."""
         mock_ev = _make_mock_evidence()
-        session.scalars.return_value.all.return_value = [mock_ev]
+        session.execute = AsyncMock(return_value=MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[mock_ev])))))
 
-        result = repo.list(session, skip=0, limit=20)
+        result = await repo.list(session, skip=0, limit=20)
 
         assert result == [mock_ev]
-        session.scalars.assert_called_once()
+        session.execute.assert_called_once()
 
-    def test_filters_by_case_id(
+    @pytest.mark.asyncio
+    async def test_filters_by_case_id(
         self, repo: EvidenceRepository, session: MagicMock
     ) -> None:
         """Filters by case_id when provided."""
         case_id = uuid.uuid4()
         mock_ev = _make_mock_evidence(case_id=case_id)
-        session.scalars.return_value.all.return_value = [mock_ev]
+        session.execute = AsyncMock(return_value=MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[mock_ev])))))
 
-        result = repo.list(session, skip=0, limit=10, case_id=case_id)
+        result = await repo.list(session, skip=0, limit=10, case_id=case_id)
 
         assert result == [mock_ev]
 
-    def test_empty_result(
+    @pytest.mark.asyncio
+    async def test_empty_result(
         self, repo: EvidenceRepository, session: MagicMock
     ) -> None:
         """Returns empty list when no evidence matches."""
-        session.scalars.return_value.all.return_value = []
+        session.execute = AsyncMock(return_value=MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))))
 
-        result = repo.list(session, skip=0, limit=20)
+        result = await repo.list(session, skip=0, limit=20)
 
         assert result == []
 
@@ -91,34 +94,37 @@ class TestList:
 class TestCount:
     """Tests for :meth:`EvidenceRepository.count`."""
 
-    def test_returns_total_count(
+    @pytest.mark.asyncio
+    async def test_returns_total_count(
         self, repo: EvidenceRepository, session: MagicMock
     ) -> None:
         """Returns total count of evidence."""
-        session.scalar.return_value = 42
+        session.execute = AsyncMock(return_value=MagicMock(scalar=MagicMock(return_value=42)))
 
-        result = repo.count(session)
+        result = await repo.count(session)
 
         assert result == 42
 
-    def test_with_case_id_filter(
+    @pytest.mark.asyncio
+    async def test_with_case_id_filter(
         self, repo: EvidenceRepository, session: MagicMock
     ) -> None:
         """Counts only evidence matching the case_id."""
         case_id = uuid.uuid4()
-        session.scalar.return_value = 3
+        session.execute = AsyncMock(return_value=MagicMock(scalar=MagicMock(return_value=3)))
 
-        result = repo.count(session, case_id=case_id)
+        result = await repo.count(session, case_id=case_id)
 
         assert result == 3
 
-    def test_returns_zero_when_empty(
+    @pytest.mark.asyncio
+    async def test_returns_zero_when_empty(
         self, repo: EvidenceRepository, session: MagicMock
     ) -> None:
         """Returns 0 when no evidence matches."""
-        session.scalar.return_value = 0
+        session.execute = AsyncMock(return_value=MagicMock(scalar=MagicMock(return_value=0)))
 
-        result = repo.count(session)
+        result = await repo.count(session)
 
         assert result == 0
 
@@ -131,24 +137,26 @@ class TestCount:
 class TestGetById:
     """Tests for :meth:`EvidenceRepository.get_by_id`."""
 
-    def test_returns_evidence_when_found(
+    @pytest.mark.asyncio
+    async def test_returns_evidence_when_found(
         self, repo: EvidenceRepository, session: MagicMock
     ) -> None:
         """Returns the evidence when found by UUID."""
         mock_ev = _make_mock_evidence()
-        session.get.return_value = mock_ev
+        session.get = AsyncMock(return_value=mock_ev)
 
-        result = repo.get_by_id(session, mock_ev.id)
+        result = await repo.get_by_id(session, mock_ev.id)
 
         assert result is mock_ev
 
-    def test_returns_none_when_not_found(
+    @pytest.mark.asyncio
+    async def test_returns_none_when_not_found(
         self, repo: EvidenceRepository, session: MagicMock
     ) -> None:
         """Returns None when no evidence exists with the given UUID."""
-        session.get.return_value = None
+        session.get = AsyncMock(return_value=None)
 
-        result = repo.get_by_id(session, uuid.uuid4())
+        result = await repo.get_by_id(session, uuid.uuid4())
 
         assert result is None
 
@@ -161,25 +169,27 @@ class TestGetById:
 class TestGetByCaseId:
     """Tests for :meth:`EvidenceRepository.get_by_case_id`."""
 
-    def test_returns_evidence_for_case(
+    @pytest.mark.asyncio
+    async def test_returns_evidence_for_case(
         self, repo: EvidenceRepository, session: MagicMock
     ) -> None:
         """Returns all evidence items for a given case."""
         case_id = uuid.uuid4()
         mock_ev = _make_mock_evidence(case_id=case_id)
-        session.scalars.return_value.all.return_value = [mock_ev]
+        session.execute = AsyncMock(return_value=MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[mock_ev])))))
 
-        result = repo.get_by_case_id(session, case_id)
+        result = await repo.get_by_case_id(session, case_id)
 
         assert result == [mock_ev]
 
-    def test_returns_empty_list_when_no_evidence(
+    @pytest.mark.asyncio
+    async def test_returns_empty_list_when_no_evidence(
         self, repo: EvidenceRepository, session: MagicMock
     ) -> None:
         """Returns empty list when case has no evidence."""
-        session.scalars.return_value.all.return_value = []
+        session.execute = AsyncMock(return_value=MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))))
 
-        result = repo.get_by_case_id(session, uuid.uuid4())
+        result = await repo.get_by_case_id(session, uuid.uuid4())
 
         assert result == []
 
@@ -192,35 +202,38 @@ class TestGetByCaseId:
 class TestGetImagePath:
     """Tests for :meth:`EvidenceRepository.get_image_path`."""
 
-    def test_returns_image_path(
+    @pytest.mark.asyncio
+    async def test_returns_image_path(
         self, repo: EvidenceRepository, session: MagicMock
     ) -> None:
         """Returns the image_path for the given evidence."""
         mock_ev = _make_mock_evidence(image_path="evidences/test/img.png")
-        session.get.return_value = mock_ev
+        session.get = AsyncMock(return_value=mock_ev)
 
-        result = repo.get_image_path(session, mock_ev.id)
+        result = await repo.get_image_path(session, mock_ev.id)
 
         assert result == "evidences/test/img.png"
 
-    def test_returns_none_when_no_image(
+    @pytest.mark.asyncio
+    async def test_returns_none_when_no_image(
         self, repo: EvidenceRepository, session: MagicMock
     ) -> None:
         """Returns None when evidence has no image_path."""
         mock_ev = _make_mock_evidence(image_path=None)
-        session.get.return_value = mock_ev
+        session.get = AsyncMock(return_value=mock_ev)
 
-        result = repo.get_image_path(session, mock_ev.id)
+        result = await repo.get_image_path(session, mock_ev.id)
 
         assert result is None
 
-    def test_returns_none_when_not_found(
+    @pytest.mark.asyncio
+    async def test_returns_none_when_not_found(
         self, repo: EvidenceRepository, session: MagicMock
     ) -> None:
         """Returns None when evidence does not exist."""
-        session.get.return_value = None
+        session.get = AsyncMock(return_value=None)
 
-        result = repo.get_image_path(session, uuid.uuid4())
+        result = await repo.get_image_path(session, uuid.uuid4())
 
         assert result is None
 
@@ -233,7 +246,8 @@ class TestGetImagePath:
 class TestCreate:
     """Tests for :meth:`EvidenceRepository.create`."""
 
-    def test_creates_and_returns_evidence(
+    @pytest.mark.asyncio
+    async def test_creates_and_returns_evidence(
         self, repo: EvidenceRepository, session: MagicMock
     ) -> None:
         """Adds Evidence to the session, commits, refreshes, and returns it."""
@@ -243,9 +257,10 @@ class TestCreate:
         def _refresh(ev: MagicMock) -> None:
             ev.id = ev_id
 
-        session.refresh.side_effect = _refresh
+        session.refresh = AsyncMock(side_effect=_refresh)
+        session.commit = AsyncMock()
 
-        result = repo.create(
+        result = await repo.create(
             session,
             case_id=case_id,
             fingerprint_id="FP-001",
@@ -259,13 +274,15 @@ class TestCreate:
         session.commit.assert_called_once()
         session.refresh.assert_called_once()
 
-    def test_creates_without_image(
+    @pytest.mark.asyncio
+    async def test_creates_without_image(
         self, repo: EvidenceRepository, session: MagicMock
     ) -> None:
         """Creates evidence without an image path."""
-        session.refresh.side_effect = lambda c: None
+        session.refresh = AsyncMock(side_effect=lambda c: None)
+        session.commit = AsyncMock()
 
-        result = repo.create(
+        result = await repo.create(
             session,
             case_id=uuid.uuid4(),
             fingerprint_id="FP-002",
@@ -282,26 +299,32 @@ class TestCreate:
 class TestDelete:
     """Tests for :meth:`EvidenceRepository.delete`."""
 
-    def test_deletes_evidence(
+    @pytest.mark.asyncio
+    async def test_deletes_evidence(
         self, repo: EvidenceRepository, session: MagicMock
     ) -> None:
         """Deletes the evidence from the session and commits."""
         mock_ev = _make_mock_evidence()
+        session.delete = AsyncMock()
+        session.commit = AsyncMock()
 
-        repo.delete(session, mock_ev)
+        await repo.delete(session, mock_ev)
 
         session.delete.assert_called_once_with(mock_ev)
         session.commit.assert_called_once()
 
-    def test_deletes_by_id(
+    @pytest.mark.asyncio
+    async def test_deletes_by_id(
         self, repo: EvidenceRepository, session: MagicMock
     ) -> None:
         """Deletes evidence by UUID."""
         ev_id = uuid.uuid4()
         mock_ev = _make_mock_evidence(id=ev_id)
-        session.get.return_value = mock_ev
+        session.get = AsyncMock(return_value=mock_ev)
+        session.delete = AsyncMock()
+        session.commit = AsyncMock()
 
-        repo.delete(session, ev_id)
+        await repo.delete(session, ev_id)
 
         session.get.assert_called_once()
         session.delete.assert_called_once_with(mock_ev)

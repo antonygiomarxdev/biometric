@@ -16,10 +16,11 @@ from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.dependencies import get_db, get_current_user
-from src.services.auth_service import create_access_token, verify_password, get_password_hash
+from src.api.dependencies import get_async_db, get_current_user
+from src.services.auth_service import create_access_token, verify_password_async
 from src.core.config import config
 from src.db.models import User
 
@@ -34,36 +35,15 @@ router = APIRouter(
 @router.post("/login")
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ) -> dict:
     """
     Authenticate a user and return a JWT access token.
-
-    Accepts ``username`` and ``password`` form fields (per the
-    OAuth2 password flow).  On success returns a signed token with
-    the user's ``sub`` (username) and ``role`` claims.
-
-    **Example request (form-encoded):**
-
-        username=perito1&password=secreta
-
-    **Example response:**
-
-    .. code-block:: json
-
-        {
-            "access_token": "eyJhbGci...",
-            "token_type": "bearer",
-            "role": "Perito",
-            "username": "perito1"
-        }
     """
-    # Look up the user by username
-    user = (
-        db.query(User)
-        .filter(User.username == form_data.username)
-        .first()
+    result = await db.execute(
+        select(User).where(User.username == form_data.username)
     )
+    user = result.scalar_one_or_none()
 
     if user is None:
         logger.warning("Login failed: unknown user '%s'", form_data.username)
@@ -80,7 +60,7 @@ async def login(
             detail="User account is inactive",
         )
 
-    if not verify_password(form_data.password, user.hashed_password):
+    if not await verify_password_async(form_data.password, user.hashed_password):
         logger.warning("Login failed: wrong password for '%s'", form_data.username)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -88,7 +68,6 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Issue access token with username as subject and role claim
     access_token_expires = timedelta(
         minutes=config.jwt_access_token_expire_minutes
     )
