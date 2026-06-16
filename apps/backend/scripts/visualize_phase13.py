@@ -65,7 +65,16 @@ def _overlay_graph(image: np.ndarray, ctx: PipelineContext) -> np.ndarray:
     """Draw nodes (green) and edges (red) on a copy of the image."""
     if ctx.ridge_graph is None or ctx.ridge_graph.is_empty():
         return _to_uint8(image)
-    out = cv2.cvtColor(_to_uint8(image), cv2.COLOR_GRAY2BGR)
+        
+    # El lienzo debe estar en la misma escala que el grafo (resolución del enhanced_image)
+    if ctx.enhanced_image is not None:
+        h, w = ctx.enhanced_image.shape[:2]
+        canvas = cv2.resize(_to_uint8(image), (w, h))
+    else:
+        canvas = _to_uint8(image)
+        
+    out = cv2.cvtColor(canvas, cv2.COLOR_GRAY2BGR)
+    
     for edge in ctx.ridge_graph.edges:
         s = ctx.ridge_graph.nodes[edge.source]
         t = ctx.ridge_graph.nodes[edge.target]
@@ -85,7 +94,7 @@ def run_pipeline(image: np.ndarray) -> PipelineContext:
         source = cv2.cvtColor(source, cv2.COLOR_BGR2GRAY)
 
     # 1. Enhancement (Gabor + binarisation)
-    enhanced = enhancer.enhance(source, resize=False)
+    enhanced = enhancer.enhance(source, resize=True)
     ctx.enhanced_image = enhanced
     ctx.preprocessed_image = enhanced
 
