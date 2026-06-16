@@ -22,6 +22,7 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.core.config import config
+from src.services.fingerprint_service import FingerprintService
 
 logger = logging.getLogger(__name__)
 
@@ -170,6 +171,21 @@ from sqlalchemy.orm import Session
 
 from src.db.models import User
 from src.services.auth_service import decode_access_token
+
+
+# ---------------------------------------------------------------------------
+# FingerprintService provider (Phase 17)
+# ---------------------------------------------------------------------------
+
+
+_fingerprint_service: FingerprintService | None = None
+
+
+def get_fingerprint_service() -> FingerprintService:
+    global _fingerprint_service
+    if _fingerprint_service is None:
+        _fingerprint_service = FingerprintService()
+    return _fingerprint_service
 
 logger = logging.getLogger(__name__)
 

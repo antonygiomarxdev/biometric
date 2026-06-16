@@ -18,6 +18,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -114,11 +115,204 @@ class Evidence(Base):
         DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
     )
 
+    matched_fingerprint_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("fingerprints.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    matched_person_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("persons.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+
     case: Mapped["Case"] = relationship("Case", back_populates="evidences")
+    matched_fingerprint: Mapped["Fingerprint | None"] = relationship(
+        "Fingerprint", backref="matched_evidence"
+    )
+    matched_person: Mapped["Person | None"] = relationship(
+        "Person", backref="evidence_matched_to"
+    )
 
     def __repr__(self) -> str:
         return f"<Evidence(id={self.id}, fingerprint_id={self.fingerprint_id})>"
 
+
+class Person(Base):
+    __tablename__ = "persons"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid7,
+        server_default=text("gen_random_uuid()"),
+    )
+    external_id: Mapped[str | None] = mapped_column(
+        String(100), unique=True, nullable=True, index=True,
+    )
+    full_name: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    doc_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    doc_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    sex: Mapped[str | None] = mapped_column(String(1), nullable=True)
+    dob: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow,
+    )
+
+    fingerprints: Mapped[list["Fingerprint"]] = relationship(
+        "Fingerprint", back_populates="person", cascade="all, delete-orphan",
+    )
+
+    def __repr__(self) -> str:
+        return f"<Person(id={self.id}, external_id={self.external_id})>"
+
+
+class Fingerprint(Base):
+    __tablename__ = "fingerprints"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid7,
+        server_default=text("gen_random_uuid()"),
+    )
+    person_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("persons.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    finger_position: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0,
+    )
+    capture_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="rolled",
+    )
+    capture_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0,
+    )
+    first_captured_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    last_captured_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow,
+    )
+
+    person: Mapped["Person"] = relationship("Person", back_populates="fingerprints")
+    captures: Mapped[list["FingerprintCapture"]] = relationship(
+        "FingerprintCapture", back_populates="fingerprint", cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "person_id", "finger_position", "capture_type",
+            name="uq_fingerprint_slot",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<Fingerprint(id={self.id}, person_id={self.person_id}, "
+            f"position={self.finger_position}, type={self.capture_type})>"
+        )
+
+
+class FingerprintCapture(Base):
+    __tablename__ = "fingerprint_captures"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid7,
+        server_default=text("gen_random_uuid()"),
+    )
+    fingerprint_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("fingerprints.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    capture_index: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    image_uri: Mapped[str] = mapped_column(String(500), nullable=False)
+    image_hash_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    image_dpi: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    image_quality_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    algorithm_version: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="phase-13-v1",
+    )
+    processed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow,
+    )
+    num_minutiae: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    num_graphs: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    is_reference: Mapped[bool] = mapped_column(nullable=False, default=False)
+    is_exemplar: Mapped[bool] = mapped_column(nullable=False, default=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow,
+    )
+
+    fingerprint: Mapped["Fingerprint"] = relationship(
+        "Fingerprint", back_populates="captures",
+    )
+    graphs: Mapped[list["RidgeGraph"]] = relationship(
+        "RidgeGraph", back_populates="capture", cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "fingerprint_id", "capture_index", name="uq_capture_index",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<FingerprintCapture(id={self.id}, "
+            f"fingerprint_id={self.fingerprint_id}, idx={self.capture_index})>"
+        )
+
+
+class RidgeGraph(Base):
+    __tablename__ = "ridge_graphs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid7,
+        server_default=text("gen_random_uuid()"),
+    )
+    capture_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("fingerprint_captures.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    graph_index: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    region_x: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    region_y: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    region_w: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    region_h: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    num_nodes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    num_edges: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    graph_data: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    core_x: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    core_y: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    delta_x: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    delta_y: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    singularity_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow,
+    )
+
+    capture: Mapped["FingerprintCapture"] = relationship(
+        "FingerprintCapture", back_populates="graphs",
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<RidgeGraph(id={self.id}, capture_id={self.capture_id}, "
+            f"idx={self.graph_index}, nodes={self.num_nodes})>"
+        )
 
 
 class User(Base):

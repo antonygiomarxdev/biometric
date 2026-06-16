@@ -25,11 +25,14 @@ from src.api.routers import (
     audit_router,
     auth_router,
     cases_router,
+    captures_router,
     decisions_router,
     evidence_router,
+    fingerprints_router,
     genai_router,
     known_fingerprints_router,
     latent_search_router,
+    persons_router,
     reports_router,
 )
 
@@ -145,6 +148,9 @@ app.include_router(latent_search_router)
 app.include_router(decisions_router)
 app.include_router(reports_router)
 app.include_router(audit_router)
+app.include_router(persons_router)
+app.include_router(fingerprints_router)
+app.include_router(captures_router)
 
 # ---------------------------------------------------------------------------
 # Root health check

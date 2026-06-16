@@ -22,6 +22,9 @@ from .reports import router as reports_router
 from .evidence import router as evidence_router
 from .known_fingerprints import router as known_fingerprints_router
 from .latent_search import router as latent_search_router
+from .persons import router as persons_router
+from .fingerprints import router as fingerprints_router
+from .captures import router as captures_router
 
 __all__ = [
     "audit_router",
@@ -33,4 +36,7 @@ __all__ = [
     "evidence_router",
     "known_fingerprints_router",
     "latent_search_router",
+    "persons_router",
+    "fingerprints_router",
+    "captures_router",
 ]
