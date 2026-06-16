@@ -135,7 +135,7 @@ def test_rotation_invariance_query_returns_same_match(in_memory_session: Session
         out = []
         for i in range(5):
             for j in range(5):
-                out.append(_candidate(100.0 + (i - 2) * 20.5, 100.0 + (j - 2) * 20.3))
+                out.append(_candidate(int(100.0 + (i - 2) * 20.5), int(100.0 + (j - 2) * 20.3)))
         return out
     alice_minutiae = _grid_float()
     alice_chunks = _chunks_for_person(alice_minutiae, core=(100, 100))
@@ -181,7 +181,7 @@ def test_arbitrary_angle_rotation_invariance(in_memory_session: Session) -> None
         out = []
         for i in range(5):
             for j in range(5):
-                out.append(_candidate(100.0 + i * 20.3, 100.0 + j * 20.1))
+                out.append(_candidate(int(100.0 + i * 20.3), int(100.0 + j * 20.1)))
         return out
 
     alice_minutiae = _grid_float()
@@ -239,8 +239,8 @@ def test_search_finds_owner_under_rotation(in_memory_session: Session) -> None:
             for j in range(5):
                 out.append(
                     _candidate(
-                        100.0 + offset_x + i * 20.3,
-                        100.0 + offset_y + j * 20.1,
+                        int(100.0 + offset_x + (i - 2) * 20.3),
+                        int(100.0 + offset_y + (j - 2) * 20.1),
                     )
                 )
         return out
@@ -288,7 +288,7 @@ def test_search_finds_owner_under_rotation(in_memory_session: Session) -> None:
             )
 
     # For each query chunk, look up the best match
-    aggregate_scores: collections.Counter = collections.Counter()
+    aggregate_scores: dict[str, float] = collections.defaultdict(float)
     for chunk in query_chunks:
         sig = _signature(chunk.features)
         if sig in sig_to_person:

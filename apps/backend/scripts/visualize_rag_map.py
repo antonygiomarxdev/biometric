@@ -18,11 +18,12 @@ from src.core.interfaces import PipelineContext
 from src.services.fingerprint_service import FingerprintService
 from src.processing.vectorizer import RagTripletVectorizer
 from src.domain.forensic_rules import SearchValidationStrategy
+from tests.config import test_config
 
 
 def main():
     print("Loading image...")
-    img_path = Path("static/SOCOFing/Real/100__M_Left_index_finger.BMP")
+    img_path = test_config.socofing_real / "100__M_Left_index_finger.BMP"
     if not img_path.exists():
         print(f"Error: {img_path} not found")
         return

@@ -31,16 +31,16 @@ from src.db.qdrant_chunk_repository import QdrantChunkRepository
 from bulk_enroll_socofing import _SOCOFingFingerprintService
 from src.processing.vectorizer import RagTripletVectorizer
 from src.services.rag_matching_service import QdrantRagMatchingService
+from tests.config import test_config
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger("benchmark")
 
-SOCOFING = ROOT / "static" / "SOCOFing"
 OUT_DIR = ROOT / "tests" / "output_visual" / "phase13"
 
 
 def _load_images(subset: str, limit: int | None) -> list:
-    subset_path = SOCOFING / subset
+    subset_path = test_config.socofing_dir / subset
     if not subset_path.exists():
         return []
 
@@ -81,7 +81,7 @@ def main(limit: int, search_limit: int, qdrant_host: str, qdrant_port: int, coll
 
     images = _load_images("Real", limit)
     if not images:
-        print(f"No images found in {SOCOFING}/Real")
+        print(f"No images found in {test_config.socofing_real}")
         sys.exit(1)
 
     vectorizer = RagTripletVectorizer()

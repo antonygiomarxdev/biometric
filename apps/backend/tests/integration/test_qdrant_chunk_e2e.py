@@ -34,7 +34,7 @@ from src.core.types import (
 )
 from src.db.qdrant_chunk_repository import QdrantChunkRepository
 from src.processing.vectorizer import RagTripletVectorizer
-
+from tests.config import test_config
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -120,16 +120,23 @@ class TestQdrantChunkE2E:
         """The collection exists in the server, not just in-memory."""
         info = client.get_collection(repo._collection)
         assert info is not None
-        assert info.config.params.vectors.size == 9
-        assert info.config.params.vectors.distance.name == "COSINE"
+        vectors_config = info.config.params.vectors
+        if isinstance(vectors_config, dict):
+            v_params = vectors_config.get("")
+        else:
+            v_params = vectors_config
+            
+        assert v_params is not None
+        assert v_params.size == 9
+        assert v_params.distance.name == "COSINE"
 
     def test_enroll_5_persons_top1_is_self(self, repo: QdrantChunkRepository) -> None:
         """Enroll 5 persons, query with one's minutiae, expect self at top-1."""
         # 5 persons at distinct positions, each with 5x5 grid of minutiae
         person_centers = {
-            "alice": (100.0, 100.0),
-            "bob": (300.0, 100.0),
-            "carol": (500.0, 100.0),
+            test_config.test_person_1: (100.0, 100.0),
+            test_config.test_person_2: (300.0, 100.0),
+            test_config.test_person_3: (500.0, 100.0),
             "dave": (100.0, 300.0),
             "eve": (300.0, 300.0),
         }
@@ -148,7 +155,7 @@ class TestQdrantChunkE2E:
         # Query with alice's minutiae (rotated 33° to test rotation invariance)
         theta = np.deg2rad(33)
         cos_t, sin_t = np.cos(theta), np.sin(theta)
-        cx, cy = person_centers["alice"]
+        cx, cy = person_centers[test_config.test_person_1]
         query_minutiae = []
         for c in _grid_minutiae((cx, cy), 20.0, 5):
             dx, dy = c.x - cx, c.y - cy
@@ -162,16 +169,16 @@ class TestQdrantChunkE2E:
         persons = repo.aggregate_scores_by_person(hits)
 
         assert len(persons) >= 1
-        assert persons[0].person_id == "alice", (
+        assert persons[0].person_id == test_config.test_person_1, (
             f"Expected alice at top-1, got {persons[0].person_id} "
-            f"with score {persons[0].total_score:.3f}"
+            f"(scores: {[p.total_score for p in persons]})"
         )
 
     def test_translation_invariance_via_real_qdrant(self, repo: QdrantChunkRepository) -> None:
         """Translated minutiae produce the same top-1 via real HNSW."""
         minutiae = _grid_minutiae((100.0, 100.0), 20.0, 5)
         chunks = _chunks_for(minutiae, core=(100, 100))
-        repo.bulk_insert_chunks("alice", "alice_fp1", chunks)
+        repo.bulk_insert_chunks(test_config.test_person_1, f"{test_config.test_person_1}{test_config.test_fp_suffix}", chunks)
 
         # Translate by (50, 50)
         translated = [_candidate(c.x + 50, c.y + 50) for c in minutiae]
@@ -179,7 +186,8 @@ class TestQdrantChunkE2E:
 
         hits = repo.weighted_knn_search(translated_chunks, top_k_per_chunk=5)
         persons = repo.aggregate_scores_by_person(hits)
-        assert persons[0].person_id == "alice"
+        
+        assert persons[0].person_id == test_config.test_person_1
 
     def test_chunk_type_payload_filter(self, repo: QdrantChunkRepository) -> None:
         """Payload filter on chunk_type works server-side."""
@@ -212,23 +220,23 @@ class TestQdrantChunkE2E:
 
     def test_delete_by_person_real_index(self, repo: QdrantChunkRepository) -> None:
         """Server-side delete via payload filter, count matches."""
-        repo.bulk_insert_chunks("alice", "fp1", _chunks_for(
-            _grid_minutiae((100, 100), 20.0, 4), core=(100, 100),
+        repo.bulk_insert_chunks(test_config.test_person_1, "fp1", _chunks_for(
+            _grid_minutiae((100, 100), test_config.synthetic_minutia_spacing, 4), core=(100, 100),
         ))
-        repo.bulk_insert_chunks("bob", "fp1", _chunks_for(
-            _grid_minutiae((300, 300), 20.0, 4), core=(300, 300),
+        repo.bulk_insert_chunks(test_config.test_person_2, "fp1", _chunks_for(
+            _grid_minutiae((300, 300), test_config.synthetic_minutia_spacing, 4), core=(300, 300),
         ))
         assert repo.collection_size() == sum(
-            len(_chunks_for(_grid_minutiae(c, 20.0, 4), core=c))
+            len(_chunks_for(_grid_minutiae(c, test_config.synthetic_minutia_spacing, 4), core=c))
             for c in [(100, 100), (300, 300)]
         )
-        deleted = repo.delete_by_person("alice")
+        deleted = repo.delete_by_person(test_config.test_person_1)
         assert deleted > 0
         assert repo.collection_size() > 0  # bob's chunks remain
 
     def test_top_k_limit_respected(self, repo: QdrantChunkRepository) -> None:
         """top_k_per_chunk=2 returns at most 2 per probe chunk."""
-        chunks = _chunks_for(_grid_minutiae((100, 100), 20.0, 4), core=(100, 100))
+        chunks = _chunks_for(_grid_minutiae((100, 100), test_config.synthetic_minutia_spacing, 4), core=(100, 100))
         repo.bulk_insert_chunks("p1", "fp1", chunks)
 
         hits = repo.weighted_knn_search(

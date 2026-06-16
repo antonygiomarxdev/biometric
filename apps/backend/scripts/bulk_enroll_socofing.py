@@ -42,16 +42,10 @@ from src.processing.pre_hooks import OrientationFieldAnalyzer, SingularityDetect
 from src.processing.skeletonize_step import SkeletonizationStep
 from src.processing.spurious_filter import SkeletonCleanerStep
 from src.processing.vectorizer import RagTripletVectorizer
-from src.db.qdrant_chunk_repository import QdrantChunkRepository
+from tests.config import test_config
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
 logger = logging.getLogger("bulk_enroll")
-
-SOCOFING = ROOT / "static" / "SOCOFing"
-
-# Synthetic grid spacing for test minutiae generation (pixels)
-_SYNTHETIC_MINUTIA_SPACING: float = 20.0
-
 
 # ---------------------------------------------------------------------------
 # SOCOFing-tuned pipeline
@@ -123,7 +117,7 @@ def _load_images(subset: str, limit: int | None) -> list[tuple[np.ndarray, str, 
     Returns:
         List of (image_array, person_id, fingerprint_id, filename).
     """
-    subset_path = SOCOFING / subset
+    subset_path = test_config.socofing_dir / subset
     if not subset_path.exists():
         logger.error("Subset not found: %s", subset_path)
         return []

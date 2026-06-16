@@ -10,10 +10,9 @@ from pathlib import Path
 import cv2
 import numpy as np
 import pytest
+from tests.config import test_config
 
-SOCOFING_ROOT = (
-    Path(__file__).resolve().parents[2] / "static" / "SOCOFing" / "Real"
-)
+SOCOFING_ROOT = test_config.socofing_real
 
 
 def load_grayscale(path: Path) -> np.ndarray:

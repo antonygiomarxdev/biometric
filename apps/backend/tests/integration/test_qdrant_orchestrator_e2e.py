@@ -32,14 +32,12 @@ from src.processing.vectorizer import RagTripletVectorizer
 from src.services.fingerprint_service import FingerprintService
 from src.services.rag_matching_service import QdrantRagMatchingService, SearchHit
 from src.db.qdrant_chunk_repository import QdrantChunkRepository
+from tests.config import test_config
 
 
 # ---------------------------------------------------------------------------
 # Stub FingerprintService
 # ---------------------------------------------------------------------------
-
-# Spacing between synthetic minutiae in the 5x5 stub grid (pixels)
-_SYNTHETIC_MINUTIA_SPACING: float = 20.0
 
 
 class _StubFingerprintService(FingerprintService):
@@ -52,9 +50,9 @@ class _StubFingerprintService(FingerprintService):
     """
 
     _PERSON_OFFSETS: dict[str, tuple[int, int]] = {
-        "alice": (100, 100),
-        "bob": (300, 100),
-        "carol": (500, 100),
+        test_config.test_person_1: (100, 100),
+        test_config.test_person_2: (300, 100),
+        test_config.test_person_3: (500, 100),
     }
 
     def process_image(
@@ -68,12 +66,13 @@ class _StubFingerprintService(FingerprintService):
         offset = self._PERSON_OFFSETS.get(person, (200, 200))
 
         minutiae: list[MinutiaCandidate] = []
-        for i in range(5):
-            for j in range(5):
+        for i in range(test_config.synthetic_grid_size):
+            for j in range(test_config.synthetic_grid_size):
+                half_grid = test_config.synthetic_grid_size // 2
                 minutiae.append(
                     MinutiaCandidate(
-                        x=int(offset[0] + (i - 2) * _SYNTHETIC_MINUTIA_SPACING),
-                        y=int(offset[1] + (j - 2) * _SYNTHETIC_MINUTIA_SPACING),
+                        x=int(offset[0] + (i - half_grid) * test_config.synthetic_minutia_spacing),
+                        y=int(offset[1] + (j - half_grid) * test_config.synthetic_minutia_spacing),
                         angle=0.0,
                         type=(
                             MinutiaType.BIFURCATION
@@ -161,7 +160,11 @@ class TestOrchestratorEnroll:
     def test_enroll_returns_chunk_count(
         self, repo: QdrantChunkRepository,
     ) -> None:
-        result = _enroll(repo, _dummy_image("alice_fp1"), "alice", "alice_fp1")
+        result = _enroll(
+            repo, _dummy_image(f"{test_config.test_person_1}{test_config.test_fp_suffix}"), 
+            test_config.test_person_1, 
+            f"{test_config.test_person_1}{test_config.test_fp_suffix}"
+        )
         assert result > 0
         # Verify it's actually in Qdrant
         assert repo.collection_size() == result
@@ -169,7 +172,11 @@ class TestOrchestratorEnroll:
     def test_multiple_enrolls_accumulate(
         self, repo: QdrantChunkRepository,
     ) -> None:
-        for fp in ("alice_fp1", "alice_fp2", "bob_fp1"):
+        for fp in (
+            f"{test_config.test_person_1}{test_config.test_fp_suffix}", 
+            f"{test_config.test_person_1}_fp2", 
+            f"{test_config.test_person_2}{test_config.test_fp_suffix}"
+        ):
             _enroll(
                 repo, _dummy_image(fp),
                 person_id=fp.split("_")[0],
@@ -186,24 +193,24 @@ class TestOrchestratorSearch:
         self, search_svc: QdrantRagMatchingService, repo: QdrantChunkRepository,
     ) -> None:
         # Enroll all 3
-        for person in ("alice", "bob", "carol"):
+        for person in (test_config.test_person_1, test_config.test_person_2, test_config.test_person_3):
             _enroll(
-                repo, _dummy_image(f"{person}_fp1"),
+                repo, _dummy_image(f"{person}{test_config.test_fp_suffix}"),
                 person_id=person,
-                fingerprint_id=f"{person}_fp1",
+                fingerprint_id=f"{person}{test_config.test_fp_suffix}",
             )
 
         # Search with alice's pattern
-        hits = search_svc.search(_dummy_image("alice_probe"), top_k_persons=3)
+        hits = search_svc.search(_dummy_image(f"{test_config.test_person_1}{test_config.test_probe_suffix}"), top_k_persons=3)
         assert len(hits) > 0
         assert isinstance(hits[0], SearchHit)
-        assert hits[0].person_id == "alice"
+        assert hits[0].person_id == test_config.test_person_1
         # Score must be positive
         assert hits[0].total_score > 0.0
         # Alice should outrank bob and carol
         ranked = {h.person_id: h.total_score for h in hits}
-        assert ranked["alice"] >= ranked.get("bob", 0.0)
-        assert ranked["alice"] >= ranked.get("carol", 0.0)
+        assert ranked[test_config.test_person_1] >= ranked.get(test_config.test_person_2, 0.0)
+        assert ranked[test_config.test_person_1] >= ranked.get(test_config.test_person_3, 0.0)
 
     def test_search_empty_collection_returns_empty(
         self, search_svc: QdrantRagMatchingService, repo: QdrantChunkRepository,
@@ -215,13 +222,13 @@ class TestOrchestratorSearch:
     def test_search_respects_top_k_persons(
         self, search_svc: QdrantRagMatchingService, repo: QdrantChunkRepository,
     ) -> None:
-        for person in ("alice", "bob", "carol"):
+        for person in (test_config.test_person_1, test_config.test_person_2, test_config.test_person_3):
             _enroll(
-                repo, _dummy_image(f"{person}_fp1"),
+                repo, _dummy_image(f"{person}{test_config.test_fp_suffix}"),
                 person_id=person,
-                fingerprint_id=f"{person}_fp1",
+                fingerprint_id=f"{person}{test_config.test_fp_suffix}",
             )
-        hits = search_svc.search(_dummy_image("alice_probe"), top_k_persons=2)
+        hits = search_svc.search(_dummy_image(f"{test_config.test_person_1}{test_config.test_probe_suffix}"), top_k_persons=2)
         assert len(hits) <= 2
 
 
@@ -231,10 +238,10 @@ class TestOrchestratorDelete:
     def test_delete_by_person_removes_chunks(
         self, repo: QdrantChunkRepository,
     ) -> None:
-        _enroll(repo, _dummy_image("alice_fp1"), "alice", "alice_fp1")
-        _enroll(repo, _dummy_image("bob_fp1"), "bob", "bob_fp1")
+        _enroll(repo, _dummy_image(f"{test_config.test_person_1}{test_config.test_fp_suffix}"), test_config.test_person_1, f"{test_config.test_person_1}{test_config.test_fp_suffix}")
+        _enroll(repo, _dummy_image(f"{test_config.test_person_2}{test_config.test_fp_suffix}"), test_config.test_person_2, f"{test_config.test_person_2}{test_config.test_fp_suffix}")
         size_before = repo.collection_size()
         assert size_before > 0
-        deleted = repo.delete_by_person("alice")
+        deleted = repo.delete_by_person(test_config.test_person_1)
         assert deleted > 0
         assert repo.collection_size() < size_before
