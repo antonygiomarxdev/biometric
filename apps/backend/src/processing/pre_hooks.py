@@ -171,7 +171,7 @@ class SingularityDetector(IPipelineStep):
         poi_delta_high: float = -0.25,
         doric_radius: int = 4,
         doric_samples: int = 16,
-        doric_rms_threshold: float = 0.15,
+        doric_rms_threshold: float = 0.30,
         roi_radius: int = 130,
     ) -> None:
         self.gaussian_sigma = gaussian_sigma
@@ -213,29 +213,28 @@ class SingularityDetector(IPipelineStep):
         rows, cols = theta_smooth.shape
 
         # 3. Poincaré Index over 8-connected neighborhood
+        # PI = (1 / 2π) * Σ Δθᵢ
+        # Core → Σ Δθ = +π → PI = +0.5
+        # Delta → Σ Δθ = -π → PI = -0.5
         poi_map = np.zeros((rows, cols), dtype=np.float32)
-        # 8 neighbors in clockwise order starting from top-left
-        # (dx, dy) offsets
         for by in range(1, rows - 1):
             for bx in range(1, cols - 1):
-                # Sample the 3x3 neighborhood in clockwise order
                 neighbors = [
-                    theta_smooth[by - 1, bx - 1],  # top-left
-                    theta_smooth[by - 1, bx],      # top
-                    theta_smooth[by - 1, bx + 1],  # top-right
-                    theta_smooth[by, bx + 1],      # right
-                    theta_smooth[by + 1, bx + 1],  # bottom-right
-                    theta_smooth[by + 1, bx],      # bottom
-                    theta_smooth[by + 1, bx - 1],  # bottom-left
-                    theta_smooth[by, bx - 1],      # left
+                    theta_smooth[by - 1, bx - 1],
+                    theta_smooth[by - 1, bx],
+                    theta_smooth[by - 1, bx + 1],
+                    theta_smooth[by, bx + 1],
+                    theta_smooth[by + 1, bx + 1],
+                    theta_smooth[by + 1, bx],
+                    theta_smooth[by + 1, bx - 1],
+                    theta_smooth[by, bx - 1],
                 ]
                 diff_sum = 0.0
                 for k in range(len(neighbors)):
                     d = neighbors[(k + 1) % len(neighbors)] - neighbors[k]
-                    # Wrap to [-π/2, π/2] (orientation modulo π)
                     d = ((d + np.pi / 2) % np.pi) - np.pi / 2
                     diff_sum += d
-                poi_map[by, bx] = diff_sum / np.pi
+                poi_map[by, bx] = diff_sum / (2.0 * np.pi)
 
         self.poi_map = poi_map
 
