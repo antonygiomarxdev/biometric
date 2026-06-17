@@ -35,3 +35,37 @@ def test_mcc_person_hit_score_sums() -> None:
     hit = MccPersonHit(person_id="p1", total_score=2.5, hits=5)
     assert hit.total_score == 2.5
     assert hit.hits == 5
+
+
+def test_match_trace_entry_pydantic() -> None:
+    """MatchTraceEntry and MinutiaSummary are constructible + frozen (Phase 23)."""
+    from src.core.types import MatchTraceEntry, MinutiaSummary
+
+    # MinutiaSummary construction
+    m = MinutiaSummary(x=10, y=20, angle=0.5, type=1)
+    assert m.x == 10
+    assert m.y == 20
+    assert m.angle == 0.5
+    assert m.type == 1
+
+    # MatchTraceEntry construction with all 10 fields
+    entry = MatchTraceEntry(
+        probe_cylinder_index=2,
+        probe_x=10,
+        probe_y=20,
+        probe_angle=0.5,
+        candidate_capture_id="cap-1",
+        candidate_fingerprint_id="fp-1",
+        candidate_x=100,
+        candidate_y=200,
+        candidate_angle=1.2,
+        similarity=0.85,
+    )
+    assert entry.probe_cylinder_index == 2
+    assert entry.similarity == 0.85
+
+    # Frozen: mutation must raise
+    with pytest.raises(Exception):
+        entry.probe_x = 999  # type: ignore[misc]
+    with pytest.raises(Exception):
+        m.x = 999  # type: ignore[misc]
