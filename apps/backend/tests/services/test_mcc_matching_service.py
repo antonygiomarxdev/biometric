@@ -108,8 +108,6 @@ def test_search_returns_match_trace(
     repo: QdrantMccRepository,
 ) -> None:
     """MccMatchingService.search returns (probe_minutiae, candidates_with_match_trace)."""
-    from unittest.mock import MagicMock
-
     svc = MccMatchingService(mcc_repo=repo)
     with patch.object(svc, "_run_mcc_pipeline", return_value=_make_pipeline_result(3)):
         svc.enroll("c1", "f1", "p1", b"fake")
