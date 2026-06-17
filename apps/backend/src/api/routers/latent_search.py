@@ -1,23 +1,31 @@
 """
-Polyglot latent fingerprint search router.
+Fingerprint latent search router — Phase 18.
 
-Phase 11 (Ridge Graph Topology): the search endpoint accepts a latent
-image and returns a ranked list of candidate persons whose enrolled
-ridge graphs most closely match the query topology.
+Accepts a latent/probe fingerprint image, processes it through the
+extraction pipeline, chunk-vectorises it via Delaunay triangulation,
+and searches the Qdrant chunk store for matching enrolled persons.
 
-The PolyglotMatchingService orchestrates:
-1. FingerprintService pipeline (enhance → skeletonize → extract graph)
-2. Coarse matcher (Qdrant graph-level embedding, filters to Top N)
-3. Fine matcher (NebulaGraph structural verification on candidates)
+Uses the same QdrantChunkRepository collection that
+FingerprintEnrollmentService writes to, ensuring searches find
+previously enrolled prints.
 """
+
 from __future__ import annotations
 
 import logging
 from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.polyglot_matching_service import PolyglotMatchingService
+from src.api.dependencies import get_async_db, get_rag_matching_service
+from src.db.models import Person
+from src.services.rag_matching_service import (
+    QdrantRagMatchingService,
+    SearchHit,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,116 +35,63 @@ router = APIRouter(
 )
 
 
-def _get_polyglot_service() -> PolyglotMatchingService:
-    """Build a PolyglotMatchingService with available infrastructure."""
-    coarse = _build_coarse_matcher()
-    fine = _build_fine_matcher()
-    return PolyglotMatchingService(
-        coarse_matcher=coarse,
-        fine_matcher=fine,
-        coarse_top_k=100,
-        fine_threshold=0.65,
-    )
-
-
-def _build_coarse_matcher():
-    """Create a QdrantRepository using in-memory mode.
-
-    Production deployments should override via dependency injection.
-    """
-    from qdrant_client import QdrantClient
-    from src.db.qdrant_repository import QdrantRepository
-
-    try:
-        return QdrantRepository.from_host(host="localhost", port=6333)
-    except Exception:
-        logger.warning("Qdrant not available, using in-memory fallback")
-        return QdrantRepository(client=QdrantClient(location=":memory:"))
-
-
-def _build_fine_matcher():
-    """Create a NebulaRepository from config.
-
-    Falls back to a no-op fine matcher if NebulaGraph is unavailable
-    (degraded mode — still performs coarse matching).
-    """
-    from src.core.config import config
-    from src.core.interfaces import IFineMatcher
-    from src.core.types import CoarseMatch, RidgeGraph
-
-    class NoOpFineMatcher(IFineMatcher):
-        def insert_graph(self, fingerprint_id: str, graph: RidgeGraph,
-                         person_id: str | None = None) -> None:
-            pass
-
-        def match_subgraph(
-            self,
-            latent_graph: RidgeGraph,
-            candidate_ids: list[str],
-            top_k: int = 10,
-        ) -> list[CoarseMatch]:
-            logger.warning("NebulaGraph not available — fine matching disabled")
-            return []
-
-    try:
-        import nebula3  # noqa: F401
-        from nebula3.Config import Config as NebulaConfig
-        from nebula3.gclient.net import ConnectionPool
-        from src.db.nebula_repository import NebulaRepository
-
-        nebula_config = NebulaConfig()
-        nebula_config.max_connection_pool_size = 5
-        pool = ConnectionPool()
-        if pool.init(
-            [(config.nebula_host, config.nebula_port)],
-            nebula_config,
-        ):
-            return NebulaRepository(
-                pool=pool,
-                space=config.nebula_space,
-                user=config.nebula_user,
-                password=config.nebula_password,
-            )
-    except Exception:
-        logger.warning(
-            "NebulaGraph at %s:%s not available — fine matching disabled",
-            config.nebula_host, config.nebula_port,
-        )
-
-    return NoOpFineMatcher()
-
-
 @router.post("/search")
 async def search_latent(
-    file: UploadFile = File(..., description="Latent fingerprint image"),
+    file: UploadFile = File(..., description="Latent/probe fingerprint image"),
     top_k: int = 10,
-    matching: PolyglotMatchingService = Depends(_get_polyglot_service),
+    matching: QdrantRagMatchingService = Depends(get_rag_matching_service),
+    db: AsyncSession = Depends(get_async_db),
 ) -> dict[str, Any]:
-    """Search the enrolled ridge graph gallery for a latent fingerprint.
+    """Search enrolled fingerprints for matches to a probe image.
 
-    Uses the polyglot matching engine:
-    1. Pipeline: enhance → skeletonize → extract RidgeGraph
-    2. Coarse: embed graph → Qdrant vector search (Top 100)
-    3. Fine: NebulaGraph structural verification (Top N)
+    1. Decode image bytes
+    2. Run extraction pipeline (enhance → skeletonize → minutiae → triangles)
+    3. Search Qdrant for matching chunk signatures
+    4. Aggregate hits by person
+    5. Enrich with person names from the database
 
-    Returns the ranked candidates ordered by combined score descending.
+    Returns ranked candidates ordered by total_score descending.
     """
     image_bytes = await file.read()
     if not image_bytes:
         raise HTTPException(status_code=400, detail="Empty file uploaded")
 
-    results = matching.search_image(image_bytes, top_k=top_k)
+    hits: list[SearchHit] = await matching.search_async(
+        image_bytes,
+        top_k_persons=top_k,
+    )
+
+    candidates: list[dict[str, Any]] = []
+    for hit in hits:
+        person_info: dict[str, Any] = {"person_id": hit.person_id}
+        try:
+            person_uuid = UUID(hit.person_id)
+        except ValueError:
+            person_uuid = None
+
+        if person_uuid is not None:
+            person = await db.get(Person, person_uuid)
+        else:
+            result = await db.execute(
+                select(Person).where(Person.external_id == hit.person_id)
+            )
+            person = result.scalar_one_or_none()
+
+        if person is not None:
+            person_info["full_name"] = person.full_name
+            person_info["external_id"] = person.external_id
+
+        candidates.append({
+            "person_id": hit.person_id,
+            "total_score": round(hit.total_score, 4),
+            "hits": hit.hits,
+            "full_name": person_info.get("full_name"),
+            "external_id": person_info.get("external_id"),
+        })
 
     return {
         "success": True,
-        "candidates": [
-            {
-                "person_id": r.person_id,
-                "score": r.score,
-                "confidence": r.confidence,
-                "combined_score": r.combined_score,
-                "metadata": r.metadata,
-            }
-            for r in results
-        ],
+        "query_time_ms": 0,
+        "total_candidates": len(candidates),
+        "candidates": candidates,
     }

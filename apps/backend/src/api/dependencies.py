@@ -207,6 +207,24 @@ def get_fingerprint_service() -> FingerprintService:
         _fingerprint_service = FingerprintService()
     return _fingerprint_service
 
+
+# ---------------------------------------------------------------------------
+# QdrantRagMatchingService provider (Phase 18)
+# ---------------------------------------------------------------------------
+
+
+_rag_matching_service: "QdrantRagMatchingService | None" = None
+
+
+def get_rag_matching_service() -> "QdrantRagMatchingService":
+    global _rag_matching_service
+    if _rag_matching_service is None:
+        from src.services.rag_matching_service import (
+            QdrantRagMatchingService,
+        )
+        _rag_matching_service = QdrantRagMatchingService()
+    return _rag_matching_service
+
 logger = logging.getLogger(__name__)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
