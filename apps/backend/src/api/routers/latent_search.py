@@ -1,15 +1,10 @@
 """
-Fingerprint latent search router — Phase 18.
+Fingerprint latent search router — Phase 21 (MCC backend).
 
 Accepts a latent/probe fingerprint image, processes it through the
-extraction pipeline, chunk-vectorises it via Delaunay triangulation,
-and searches the Qdrant chunk store for matching enrolled persons.
-
-Uses the same QdrantChunkRepository collection that
-FingerprintEnrollmentService writes to, ensuring searches find
-previously enrolled prints.
+extraction pipeline, builds MCC cylinder descriptors, and searches the
+Qdrant MCC store for matching enrolled persons.
 """
-
 from __future__ import annotations
 
 import logging
@@ -20,13 +15,10 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.dependencies import get_async_db, get_rag_matching_service
+from src.api.dependencies import get_async_db, get_mcc_matching_service
 from src.api.prefix import API_PREFIX
 from src.db.models import Person
-from src.services.rag_matching_service import (
-    QdrantRagMatchingService,
-    SearchHit,
-)
+from src.services.mcc_matching_service import MccMatchingService, MccSearchHit
 
 logger = logging.getLogger(__name__)
 
@@ -40,27 +32,15 @@ router = APIRouter(
 async def search_latent(
     file: UploadFile = File(..., description="Latent/probe fingerprint image"),
     top_k: int = 10,
-    matching: QdrantRagMatchingService = Depends(get_rag_matching_service),
+    matching: MccMatchingService = Depends(get_mcc_matching_service),
     session: AsyncSession = Depends(get_async_db),
 ) -> dict[str, Any]:
-    """Search enrolled fingerprints for matches to a probe image.
-
-    1. Decode image bytes
-    2. Run extraction pipeline (enhance → skeletonize → minutiae → triangles)
-    3. Search Qdrant for matching chunk signatures
-    4. Aggregate hits by person
-    5. Enrich with person names from the database
-
-    Returns ranked candidates ordered by total_score descending.
-    """
+    """Search enrolled fingerprints for matches to a probe image."""
     image_bytes = await file.read()
     if not image_bytes:
         raise HTTPException(status_code=400, detail="Empty file uploaded")
 
-    hits: list[SearchHit] = await matching.search_async(
-        image_bytes,
-        top_k_persons=top_k,
-    )
+    hits: list[MccSearchHit] = matching.search(image_bytes, top_k=top_k)
 
     candidates: list[dict[str, Any]] = []
     for hit in hits:

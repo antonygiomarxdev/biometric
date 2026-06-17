@@ -1,5 +1,4 @@
-"""Tests for latent search router (Phase 18)."""
-
+"""Tests for latent search router (Phase 21: MCC backend)."""
 from __future__ import annotations
 
 import io
@@ -10,13 +9,18 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from src.api.dependencies import get_async_db, get_rag_matching_service
+from src.api.dependencies import get_async_db, get_mcc_matching_service
 from src.api.routers.latent_search import router
-from src.services.rag_matching_service import SearchHit
+from src.services.mcc_matching_service import MccSearchHit
 
 
-def _make_hit(person_id: str = "uuid-1", score: float = 0.95, hits: int = 5) -> SearchHit:
-    return SearchHit(person_id=person_id, total_score=score, hits=hits)
+def _make_hit(person_id: str = "uuid-1", score: float = 0.95, hits: int = 5) -> MccSearchHit:
+    return MccSearchHit(
+        person_id=person_id,
+        total_score=score,
+        hits=hits,
+        contributing_fingerprints=["fp-1"],
+    )
 
 
 @pytest.mark.asyncio
@@ -24,7 +28,7 @@ class TestSearchLatent:
 
     async def test_returns_empty_when_no_matches(self) -> None:
         mock_matching = MagicMock()
-        mock_matching.search_async = AsyncMock(return_value=[])
+        mock_matching.search = MagicMock(return_value=[])
 
         mock_db = MagicMock()
         async def _execute(*args: object, **kwargs: object) -> MagicMock:
@@ -32,7 +36,7 @@ class TestSearchLatent:
         mock_db.execute = _execute
 
         app = FastAPI()
-        app.dependency_overrides[get_rag_matching_service] = lambda: mock_matching
+        app.dependency_overrides[get_mcc_matching_service] = lambda: mock_matching
         app.dependency_overrides[get_async_db] = lambda: mock_db
         app.include_router(router)
 
@@ -55,7 +59,7 @@ class TestSearchLatent:
             _make_hit(person_id="550e8400-e29b-41d4-a716-446655440002", score=0.82, hits=3),
         ]
         mock_matching = MagicMock()
-        mock_matching.search_async = AsyncMock(return_value=hits)
+        mock_matching.search = MagicMock(return_value=hits)
 
         mock_person1 = MagicMock()
         mock_person1.full_name = "Juan Pérez"
@@ -74,7 +78,7 @@ class TestSearchLatent:
         mock_db.get = _get
 
         app = FastAPI()
-        app.dependency_overrides[get_rag_matching_service] = lambda: mock_matching
+        app.dependency_overrides[get_mcc_matching_service] = lambda: mock_matching
         app.dependency_overrides[get_async_db] = lambda: mock_db
         app.include_router(router)
 
@@ -106,7 +110,7 @@ class TestSearchLatent:
 
         app = FastAPI()
         app.dependency_overrides[get_async_db] = lambda: mock_db
-        app.dependency_overrides[get_rag_matching_service] = lambda: mock_matching
+        app.dependency_overrides[get_mcc_matching_service] = lambda: mock_matching
         app.include_router(router)
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
