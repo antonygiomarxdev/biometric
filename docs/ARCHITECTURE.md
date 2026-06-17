@@ -52,7 +52,7 @@ Para manejar altos volúmenes de usuarios y algoritmos de IA pesados (especialme
     *   La API responde inmediatamente con un `task_id` (polling o webhook).
 
 2.  **Base de Datos Vectorial:**
-    *   Uso de `pgvector` para búsquedas de similitud eficientes a gran escala.
+    *   Uso de `Qdrant` para búsquedas de similitud eficientes a gran escala.
     *   Índices HNSW para tiempos de búsqueda sub-lineales.
 
 ## API Estandarizada
