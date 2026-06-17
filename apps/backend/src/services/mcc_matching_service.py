@@ -167,6 +167,23 @@ class MccMatchingService:
         query_cylinders = self._build_cylinders(normalized)
         if not query_cylinders:
             return []
+        return self._search_cylinders(query_cylinders, top_k=top_k)
+
+    def _search_cylinders(
+        self,
+        query_cylinders: list[np.ndarray],
+        top_k: int = 10,
+    ) -> list[MccSearchHit]:
+        """Search with pre-built query cylinders (benchmark / testing hook).
+
+        Runs KNN against the enrolled collection and aggregates scores by
+        person using the same per-fingerprint normalization as :meth:`search`.
+        Underscore-prefixed: intended for same-module callers (e.g. the
+        Phase 21 SOCOFing benchmark) that need to feed synthetic or
+        perturbed cylinders without re-running the full image pipeline.
+        """
+        if not query_cylinders:
+            return []
 
         cylinder_hits = self._mcc_repo.knn_search(
             query_cylinders,
