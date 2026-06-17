@@ -193,7 +193,7 @@ class MccMatchingService:
     def _count_enrolled_by_person(self) -> dict[str, int]:
         """Return {person_id: cylinder_count} for all enrollees."""
         counts: dict[str, int] = {}
-        offset: int | None = None
+        offset: object = None
         seen_persons: set[str] = set()
         while True:
             records, offset = self._mcc_repo._client.scroll(
