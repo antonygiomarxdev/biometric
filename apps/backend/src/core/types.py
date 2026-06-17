@@ -268,3 +268,30 @@ class PersonHit:
     total_score: float
     hits: int
     contributing_fingerprints: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class MccCylinderHit:
+    """A single cylinder-level hit from Qdrant KNN search.
+
+    Returned per matched cylinder; aggregated into ``MccPersonHit``.
+    """
+    person_id: str
+    fingerprint_id: str
+    capture_id: str
+    similarity: float  # cosine similarity in [0, 1]
+
+
+@dataclass(frozen=True, slots=True)
+class MccPersonHit:
+    """Aggregated per-fingerprint match result.
+
+    ``total_score`` is the sum of cosine similarities across all matching
+    cylinders. When ``score_normalization == "fingerprint"`` (default), the
+    caller divides by the number of enrolled cylinders to remove population
+    bias.
+    """
+    person_id: str
+    total_score: float
+    hits: int
+    contributing_fingerprints: list[str] = field(default_factory=list)
