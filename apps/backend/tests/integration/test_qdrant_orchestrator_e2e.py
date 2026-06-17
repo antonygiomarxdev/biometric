@@ -138,7 +138,7 @@ def _enroll(
     """Direct enrollment: process_image → vectorize → bulk_insert."""
     fp_service = _StubFingerprintService()
     vectorizer = RagTripletVectorizer()
-    normalized = fp_service.process_image(image, fingerprint_id=fingerprint_id)
+    normalized = fp_service._process_image(image, fingerprint_id=fingerprint_id)
     chunks = vectorizer._chunks_from_normalized(normalized)
     return repo.bulk_insert_chunks(person_id, fingerprint_id, chunks)
 

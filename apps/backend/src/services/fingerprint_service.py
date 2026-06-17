@@ -281,7 +281,7 @@ class FingerprintService:
     # Main pipeline
     # ------------------------------------------------------------------
 
-    def process_image(
+    def _process_image(
         self, image: np.ndarray, fingerprint_id: str = "unknown", resize: bool = True
     ) -> NormalizedFingerprint:
         if image is None:
@@ -291,7 +291,6 @@ class FingerprintService:
 
         ctx = PipelineContext(raw_image=image, fingerprint_id=fingerprint_id)
 
-        # Update the resize flag on the EnhancerStep if requested
         for step in self.steps:
             if isinstance(step, EnhancerStep):
                 step.resize = resize
@@ -322,12 +321,11 @@ class FingerprintService:
         # halts the pipeline before database/vector overhead.
         self.validation_strategy.validate(ctx.candidates)
 
-    async def process_image_async(
+    async def process_image(
         self, image: np.ndarray, fingerprint_id: str = "unknown", resize: bool = True
     ) -> NormalizedFingerprint:
-        """Async version of :meth:`process_image`.
+        """Process a fingerprint image without blocking the event loop.
 
-        Processes a fingerprint image without blocking the event loop.
         CPU-bound steps run in a thread-pool executor; steps that
         implement :class:`AsyncPipelineStep` run their native async path.
         """
@@ -371,7 +369,7 @@ class FingerprintService:
         if not self.use_parallel:
             for i, (img, fid) in enumerate(zip(images, fingerprint_ids)):
                 try:
-                    results[i] = self.process_image(img, fingerprint_id=fid)
+                    results[i] = self._process_image(img, fingerprint_id=fid)
                 except Exception as e:
                     logger.error("Error procesando imagen %s: %s", fid, e)
             return results
@@ -392,13 +390,13 @@ class FingerprintService:
 
     @staticmethod
     def _process_wrapper(img: np.ndarray, fid: str) -> NormalizedFingerprint:
-        return FingerprintService().process_image(img, fingerprint_id=fid)
+        return FingerprintService()._process_image(img, fingerprint_id=fid)
 
     def process_image_from_path(self, image_path: str) -> NormalizedFingerprint:
         image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
         if image is None:
             raise ValueError(f"No se pudo cargar la imagen: {image_path}")
-        return self.process_image(image, fingerprint_id=image_path)
+        return self._process_image(image, fingerprint_id=image_path)
 
     def process_image_from_bytes(
         self, image_bytes: bytes, fingerprint_id: str = "unknown"
@@ -414,7 +412,7 @@ class FingerprintService:
             raise ValueError("La imagen decodificada está vacía")
         if image.shape[0] < 50 or image.shape[1] < 50:
             logger.warning("Imagen muy pequeña: %s - podría no tener suficiente detalle", image.shape)
-        return self.process_image(image, fingerprint_id=fingerprint_id, resize=True)
+        return self._process_image(image, fingerprint_id=fingerprint_id, resize=True)
 
 
 # ---------------------------------------------------------------------------

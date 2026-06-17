@@ -80,30 +80,17 @@ class QdrantRagMatchingService:
         fingerprint_id: str,
     ) -> NormalizedFingerprint:
         service = self._ensure_service()
-        normalized = service.process_image(image, fingerprint_id=fingerprint_id)
+        normalized = service._process_image(image, fingerprint_id=fingerprint_id)
         if hasattr(normalized, "minutiae"):
             strategy.validate(normalized.minutiae)
         return normalized
 
-    # ------------------------------------------------------------------
-    # Public API — sync
-    # ------------------------------------------------------------------
-    def search(
+    def _search(
         self,
         image: np.ndarray,
         top_k_per_chunk: int = 5,
         top_k_persons: int = 10,
     ) -> list[SearchHit]:
-        """Search the Qdrant chunk store for matches to a latent image.
-
-        Args:
-            image: Grayscale fingerprint image (probe).
-            top_k_per_chunk: Nearest neighbors per chunk.
-            top_k_persons: Maximum persons to return.
-
-        Returns:
-            List of SearchHit sorted by total_score descending.
-        """
         normalized = self._run_pipeline(
             image, SearchValidationStrategy(), "latent",
         )
@@ -124,22 +111,18 @@ class QdrantRagMatchingService:
             for h in person_hits[:top_k_persons]
         ]
 
-    # ------------------------------------------------------------------
-    # Public API — async (for FastAPI routers)
-    # ------------------------------------------------------------------
-
-    async def search_async(
+    async def search(
         self,
         image_bytes: bytes,
         top_k_per_chunk: int = 5,
         top_k_persons: int = 10,
     ) -> list[SearchHit]:
-        image = await self._decode_async(image_bytes)
+        image = await self._decode(image_bytes)
         return await asyncio.get_running_loop().run_in_executor(
-            self._pool, self.search, image, top_k_per_chunk, top_k_persons,
+            self._pool, self._search, image, top_k_per_chunk, top_k_persons,
         )
 
-    async def _decode_async(self, image_bytes: bytes) -> np.ndarray:
+    async def _decode(self, image_bytes: bytes) -> np.ndarray:
         loop = asyncio.get_running_loop()
 
         def _decode(payload: bytes) -> np.ndarray:

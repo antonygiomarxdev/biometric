@@ -121,7 +121,7 @@ class PolyglotMatchingService(IMatcher):
         if probe.ndim == 3:
             probe = cv2.cvtColor(probe, cv2.COLOR_BGR2GRAY)
 
-        normalized = self._fp_service.process_image(probe, fingerprint_id="probe")
+        normalized = self._fp_service._process_image(probe, fingerprint_id="probe")
         graph = self.extract_ridge_graph(normalized)
 
         results = self.match_graph(graph, top_k=top_k)
@@ -178,7 +178,7 @@ class PolyglotMatchingService(IMatcher):
             log.warning("Failed to decode image bytes")
             return []
 
-        normalized = self._fp_service.process_image(img, fingerprint_id="search")
+        normalized = self._fp_service._process_image(img, fingerprint_id="search")
         graph = self.extract_ridge_graph(normalized)
         if graph.is_empty():
             log.warning("No ridge graph extracted from image")

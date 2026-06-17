@@ -35,7 +35,7 @@ def _make_mock_user(
     full_name: str = "Perito Uno",
     hashed_password: str | None = None,
 ) -> MagicMock:
-    from src.services.auth_service import get_password_hash
+    from src.services.auth_service import _hash_password
 
     user = MagicMock(spec=User)
     user.id = "550e8400-e29b-41d4-a716-446655440000"
@@ -44,7 +44,7 @@ def _make_mock_user(
     user.full_name = full_name
     user.role = role
     user.is_active = is_active
-    user.hashed_password = hashed_password or get_password_hash("password123")
+    user.hashed_password = hashed_password or _hash_password("password123")
     return user
 
 
@@ -66,9 +66,9 @@ class TestLogin:
     """``POST /api/v1/auth/login`` — authenticate and receive JWT."""
 
     async def test_returns_token_on_valid_credentials(self) -> None:
-        from src.services.auth_service import get_password_hash
+        from src.services.auth_service import _hash_password
 
-        user = _make_mock_user(hashed_password=get_password_hash("password123"))
+        user = _make_mock_user(hashed_password=_hash_password("password123"))
         mock_db = _make_mock_session(user=user)
         app = _make_app(mock_db)
         transport = ASGITransport(app=app)

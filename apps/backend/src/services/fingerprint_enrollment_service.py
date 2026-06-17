@@ -59,7 +59,7 @@ class FingerprintEnrollmentService:
 
         loop = asyncio.get_running_loop()
         normalized: NormalizedFingerprint = await loop.run_in_executor(
-            None, self._fp_service.process_image, img, str(fingerprint_id),
+            None, self._fp_service._process_image, img, str(fingerprint_id),
         )
 
         capture = await FingerprintCaptureRepository.create(

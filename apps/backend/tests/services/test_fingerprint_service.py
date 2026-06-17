@@ -117,7 +117,7 @@ class TestProcessImage:
         grayscale_image: np.ndarray,
     ) -> None:
         """A grayscale image flows through enhance → extract → normalize."""
-        result = service.process_image(grayscale_image, fingerprint_id="fp001")
+        result = service._process_image(grayscale_image, fingerprint_id="fp001")
 
         # Don't compare ndarray with == (numpy's element-wise compare returns array).
         # Just verify the resize kwarg and that *some* array was passed.
@@ -135,7 +135,7 @@ class TestProcessImage:
     def test_raises_on_none_image(self, service: FingerprintService) -> None:
         """Passing None as image raises ValueError."""
         with pytest.raises(ValueError, match="no puede ser None"):
-            service.process_image(None)  # type: ignore[arg-type]
+            service._process_image(None)  # type: ignore[arg-type]
 
     def test_converts_color_to_grayscale(
         self,
@@ -146,7 +146,7 @@ class TestProcessImage:
         with patch("src.services.fingerprint_service.cv2.cvtColor") as mock_cvt:
             mock_cvt.return_value = color_image[:, :, 0]
 
-            service.process_image(color_image, fingerprint_id="fp002")
+            service._process_image(color_image, fingerprint_id="fp002")
 
             mock_cvt.assert_called_once()
 
@@ -171,7 +171,7 @@ class TestProcessImage:
             extractor=mock_extractor,
             normalizer=mock_normalizer,
         )
-        result = svc.process_image(grayscale_image, fingerprint_id="fp003")
+        result = svc._process_image(grayscale_image, fingerprint_id="fp003")
 
         assert len(result.minutiae) == 0
 
@@ -182,7 +182,7 @@ class TestProcessImage:
         grayscale_image: np.ndarray,
     ) -> None:
         """The resize parameter is forwarded to the enhancer."""
-        service.process_image(grayscale_image, fingerprint_id="fp004", resize=False)
+        service._process_image(grayscale_image, fingerprint_id="fp004", resize=False)
         assert mock_enhancer.enhance.call_count == 1
         enhance_args, enhance_kwargs = mock_enhancer.enhance.call_args
         assert enhance_kwargs.get("resize") is False
@@ -512,7 +512,7 @@ class TestPipelineChain:
             normalizer=mock_normalizer,
             pre_processors=[pre1, pre2],
         )
-        svc.process_image(grayscale_image, fingerprint_id="chain")
+        svc._process_image(grayscale_image, fingerprint_id="chain")
         pre1.process.assert_called_once()
         pre2.process.assert_called_once()
 
@@ -536,7 +536,7 @@ class TestPipelineChain:
             normalizer=mock_normalizer,
             extractors=[ext1, ext2],
         )
-        svc.process_image(grayscale_image, fingerprint_id="multi_ext")
+        svc._process_image(grayscale_image, fingerprint_id="multi_ext")
         ext1.extract.assert_called_once()
         ext2.extract.assert_called_once()
 
@@ -552,7 +552,7 @@ class TestPipelineChain:
             normalizer=mock_normalizer,
             post_processors=[post],
         )
-        svc.process_image(grayscale_image, fingerprint_id="post")
+        svc._process_image(grayscale_image, fingerprint_id="post")
         post.process.assert_called_once()
 
     def test_empty_minutiae_list_does_not_crash(
@@ -572,7 +572,7 @@ class TestPipelineChain:
             normalizer=normalizer,
             extractors=[ext],
         )
-        result = svc.process_image(grayscale_image, fingerprint_id="empty")
+        result = svc._process_image(grayscale_image, fingerprint_id="empty")
         assert len(result.minutiae) == 0
 
     def test_no_pre_post_processors_by_default(
@@ -581,7 +581,7 @@ class TestPipelineChain:
         grayscale_image: np.ndarray,
     ) -> None:
         """Default service has empty pre/post lists, still works."""
-        result = service.process_image(grayscale_image, fingerprint_id="default")
+        result = service._process_image(grayscale_image, fingerprint_id="default")
         assert result is not None
 
     def test_single_extractor_backward_compat(
@@ -597,7 +597,7 @@ class TestPipelineChain:
             extractor=mock_extractor,
             normalizer=mock_normalizer,
         )
-        result = svc.process_image(grayscale_image, fingerprint_id="compat")
+        result = svc._process_image(grayscale_image, fingerprint_id="compat")
         assert len(result.minutiae) == 1
 
     def test_extractors_takes_precedence_over_extractor(
@@ -617,7 +617,7 @@ class TestPipelineChain:
             normalizer=mock_normalizer,
             extractors=[ext_list],
         )
-        svc.process_image(grayscale_image, fingerprint_id="precedence")
+        svc._process_image(grayscale_image, fingerprint_id="precedence")
         ext_list.extract.assert_called_once()
 
 

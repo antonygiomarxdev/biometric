@@ -1,8 +1,7 @@
 """
 Authentication service: password hashing and JWT token management.
 
-Pure business logic — no FastAPI imports. FastAPI security dependencies
-(``get_current_user``, ``RequireRole``) live in ``src.api.dependencies.auth``.
+Pure business logic — no FastAPI imports.
 """
 
 import asyncio
@@ -21,27 +20,31 @@ logger = logging.getLogger(__name__)
 _hasher = PasswordHasher()
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
+def _verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify a password against its hash (CPU-bound, use via verify_password)."""
     try:
         return _hasher.verify(hashed_password, plain_password)
     except (Argon2Error, InvalidHashError):
         return False
 
 
-async def verify_password_async(plain_password: str, hashed_password: str) -> bool:
-    """Non-blocking password verification (Argon2 is CPU-bound and blocks the event loop)."""
+async def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Non-blocking password verification (Argon2 runs in executor)."""
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, verify_password, plain_password, hashed_password)
+    return await loop.run_in_executor(
+        None, _verify_password, plain_password, hashed_password,
+    )
 
 
-def get_password_hash(password: str) -> str:
+def _hash_password(password: str) -> str:
+    """Hash a password (CPU-bound, use via get_password_hash)."""
     return _hasher.hash(password)
 
 
-async def get_password_hash_async(password: str) -> str:
+async def get_password_hash(password: str) -> str:
     """Non-blocking password hashing."""
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, get_password_hash, password)
+    return await loop.run_in_executor(None, _hash_password, password)
 
 
 def create_access_token(

@@ -60,7 +60,7 @@ def make_normalized(minutiae_count: int = 5) -> NormalizedFingerprint:
 
 def make_fingerprint_service():
     fp = MagicMock()
-    fp.process_image.return_value = make_normalized(5)
+    fp._process_image.return_value = make_normalized(5)
     return fp
 
 

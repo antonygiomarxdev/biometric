@@ -20,7 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_async_db, get_current_user
-from src.services.auth_service import create_access_token, verify_password_async
+from src.services.auth_service import create_access_token, verify_password
 from src.core.config import config
 from src.db.models import User
 
@@ -60,7 +60,7 @@ async def login(
             detail="User account is inactive",
         )
 
-    if not await verify_password_async(form_data.password, user.hashed_password):
+    if not await verify_password(form_data.password, user.hashed_password):
         logger.warning("Login failed: wrong password for '%s'", form_data.username)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
