@@ -65,10 +65,10 @@
 
 - [ ] **UI-01**: Autenticación y login en frontend
 - [ ] **UI-02**: Dashboard con métricas del sistema
-- [ ] **UI-03**: Panel de resultados de identificación con detalle forense
+- [~] **UI-03**: Panel de resultados de identificación con detalle forense (API client: MatchSearchResponse with match_trace + probe_minutiae)
 - [ ] **UI-04**: Carga batch de imágenes
 - [ ] **UI-05**: Reportes exportables (PDF/CSV)
-- [ ] **UI-06**: Visualización de minucias superpuestas mejorada
+- [~] **UI-06**: Visualización de minucias superpuestas mejorada (API client: MatchTraceEntry + MinutiaSummary types)
 
 ### Refactor Técnico — Clean Architecture
 
@@ -132,10 +132,10 @@
 | TEST-04 | Phase 3 | Pending |
 | UI-01 | Phase 4 | Pending |
 | UI-02 | Phase 4 | Pending |
-| UI-03 | Phase 4 | Pending |
+| UI-03 | Phase 23 | In Progress (API types + match_trace) |
 | UI-04 | Phase 4 | Pending |
 | UI-05 | Phase 4 | Pending |
-| UI-06 | Phase 4 | Pending |
+| UI-06 | Phase 23 | In Progress (MinutiaSummary + MatchTraceEntry) |
 | CA-01 | Phase 5 | ✅ Complete |
 | CA-02 | Phase 5 | ✅ Complete |
 | CA-03 | Phase 5 | ✅ Complete |
