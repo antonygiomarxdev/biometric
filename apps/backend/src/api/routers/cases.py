@@ -9,16 +9,20 @@ All business logic and database operations are delegated to
 from __future__ import annotations
 
 import logging
-import uuid
-from datetime import datetime
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
+
+if TYPE_CHECKING:
+    import uuid
+    from datetime import datetime
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_async_db
-from src.services.case_service import case_service
 from src.api.prefix import API_PREFIX
+from src.services.case_service import case_service
 
 logger = logging.getLogger(__name__)
 
@@ -32,12 +36,8 @@ router = APIRouter(prefix=f"{API_PREFIX}/cases", tags=["cases"])
 class CaseCreate(BaseModel):
     """Request body for creating a new forensic case."""
 
-    case_number: str = Field(
-        ..., min_length=1, max_length=50, description="Unique case number"
-    )
-    title: str = Field(
-        ..., min_length=1, max_length=300, description="Case title"
-    )
+    case_number: str = Field(..., min_length=1, max_length=50, description="Unique case number")
+    title: str = Field(..., min_length=1, max_length=300, description="Case title")
     description: str | None = Field(None, description="Optional description")
     status: str = Field(
         "open",
@@ -51,9 +51,7 @@ class CaseUpdate(BaseModel):
 
     title: str | None = Field(None, max_length=300)
     description: str | None = Field(None)
-    status: str | None = Field(
-        None, pattern=r"^(open|closed|archived)$"
-    )
+    status: str | None = Field(None, pattern=r"^(open|closed|archived)$")
 
 
 class CaseResponse(BaseModel):
@@ -94,7 +92,7 @@ async def list_cases(
     """
     List all forensic cases with optional status filter and pagination.
     """
-    result = await case_service.list_cases(db, skip=skip, limit=limit, status=status)
+    result = await case_service.list_cases(session, skip=skip, limit=limit, status=status)
     return {
         "items": [CaseResponse.model_validate(c) for c in result["items"]],
         "total": result["total"],
@@ -111,7 +109,7 @@ async def get_case(
     """
     Retrieve a single case by its UUID.
     """
-    return await case_service.get_case(db, case_id)
+    return await case_service.get_case(session, case_id)
 
 
 @router.post(
@@ -127,7 +125,7 @@ async def create_case(
     Create a new forensic case.
     """
     return await case_service.create_case(
-        db,
+        session,
         case_number=body.case_number,
         title=body.title,
         description=body.description,
@@ -145,7 +143,7 @@ async def update_case(
     Update an existing forensic case.
     """
     return await case_service.update_case(
-        db,
+        session,
         case_id=case_id,
         title=body.title,
         description=body.description,
@@ -161,4 +159,4 @@ async def delete_case(
     """
     Delete a forensic case and all its associated evidence (CASCADE).
     """
-    await case_service.delete_case(db, case_id)
+    await case_service.delete_case(session, case_id)
