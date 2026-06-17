@@ -1,4 +1,10 @@
-"""Async FingerprintEnrollmentService — image → capture → graphs pipeline."""
+"""Async FingerprintEnrollmentService — image → capture → graphs pipeline.
+
+Phase 23 amendment: runs the MCC pipeline (RidgeGraphExtractor
+directly) and persists the Gabor-enhanced PNG. The previous
+FingerprintService call is gone — its SkeletonMinutiaeExtractor
+path was the root cause of the 0-minutiae-on-SOCOFing bug.
+"""
 
 from __future__ import annotations
 
@@ -20,9 +26,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from src.core.types import NormalizedFingerprint
     from src.db.models import Fingerprint, FingerprintCapture, RidgeGraph
-    from src.services.fingerprint_service import FingerprintService
     from src.services.mcc_matching_service import MccMatchingService
 
 from src.db.models import Person
@@ -35,11 +39,9 @@ class FingerprintEnrollmentService:
     def __init__(
         self,
         session: AsyncSession,
-        fingerprint_service: FingerprintService,
         mcc_matching_service: MccMatchingService | None = None,
     ) -> None:
         self._session = session
-        self._fp_service = fingerprint_service
         self._mcc_service = mcc_matching_service
 
     async def create_capture(

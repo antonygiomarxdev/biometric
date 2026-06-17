@@ -9,10 +9,9 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 import cv2
-import numpy as np
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
-from src.api.dependencies import get_async_db, get_fingerprint_service
+from src.api.dependencies import get_async_db, get_mcc_matching_service
 from src.api.prefix import API_PREFIX
 from src.db.models import Person
 from src.db.repositories.fingerprint_repository import FingerprintRepository
@@ -29,7 +28,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from src.services.fingerprint_service import FingerprintService
+    from src.services.mcc_matching_service import MccMatchingService
 
 log = logging.getLogger(__name__)
 
@@ -48,10 +47,10 @@ router = APIRouter(tags=["fingerprints"])
     }
 )
 async def create_fingerprint(
-    response: Response,
     person_id: uuid.UUID,
     data: FingerprintCreate,
     session: AsyncSession = Depends(get_async_db),
+    response: Response | None = None,
 ) -> Any:
     """Idempotent fingerprint slot creation.
 
@@ -67,9 +66,11 @@ async def create_fingerprint(
         session, person_id, data.finger_position, data.capture_type,
     )
     if existing is not None:
-        response.status_code = 200
+        if response is not None:
+            response.status_code = 200
         return existing
-    response.status_code = 201
+    if response is not None:
+        response.status_code = 201
     return await FingerprintRepository.create(
         session,
         person_id=person_id,
@@ -111,26 +112,19 @@ async def list_fingerprints(
 )
 async def preview_fingerprint(
     file: UploadFile = File(..., description="Fingerprint image (BMP, PNG, JPEG)"),
-    fp_service: FingerprintService = Depends(get_fingerprint_service),
+    mcc_svc: MccMatchingService = Depends(get_mcc_matching_service),
 ) -> Any:
     """Preview minutiae for a fingerprint image without persisting.
 
-    The perito uploads a fingerprint image from the enrollment wizard.
-    The backend runs the MCC-specific mini-pipeline (Gabor enhancement
-    + skeletonization + RidgeGraphExtractor) and returns the enhanced
-    image (base64 PNG) plus the detected minutiae. The perito reviews
-    the extraction before committing via the captures endpoint.
-
-    This endpoint is the backend for ``getMinutiaeForImage`` in
-    ``apps/frontend/src/lib/api.ts`` (Phase 23, D-29).
+    Runs the MCC mini-pipeline (Gabor + RidgeGraphExtractor) and
+    returns the enhanced image (base64 PNG) plus detected minutiae.
+    Does not touch the DB or Qdrant. Backend for ``getMinutiaeForImage``
+    in ``apps/frontend/src/lib/api.ts`` (Phase 23, D-29).
     """
     image_bytes = await file.read()
     if not image_bytes:
         raise HTTPException(status_code=400, detail="Empty file")
 
-    from src.api.dependencies import get_mcc_matching_service
-
-    mcc_svc = get_mcc_matching_service()
     loop = asyncio.get_running_loop()
     try:
         result = await loop.run_in_executor(

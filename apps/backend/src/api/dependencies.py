@@ -11,19 +11,32 @@ Provides:
   then disposes both on shutdown (per D-12).
 """
 
-import asyncio
+from __future__ import annotations
+
 import logging
-from collections.abc import AsyncGenerator, AsyncIterator
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING
 
-from fastapi import FastAPI
-from sqlalchemy import Engine, create_engine
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy import Engine, create_engine, select
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.core.config import config
-from src.services.fingerprint_service import FingerprintService
+from src.db.models import User
+from src.services.auth_service import decode_access_token
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator, AsyncIterator
+
+    from src.services.mcc_matching_service import MccMatchingService
 
 logger = logging.getLogger(__name__)
 
@@ -115,10 +128,11 @@ resources = AppResources()
 async def get_db() -> AsyncGenerator[Session, None]:
     """Legacy sync session (deprecated — new code should use ``get_async_db``)."""
     if resources.session_factory is None:
-        raise RuntimeError(
+        msg = (
             "Database not initialised. Ensure the lifespan "
             "context manager has been installed on the FastAPI app."
         )
+        raise RuntimeError(msg)
 
     session = resources.session_factory()
     try:
@@ -130,10 +144,11 @@ async def get_db() -> AsyncGenerator[Session, None]:
 async def get_async_db() -> AsyncGenerator[AsyncSession, None]:
     """Async session dependency — use for all new code."""
     if resources.async_session_factory is None:
-        raise RuntimeError(
+        msg = (
             "Async database not initialised. Ensure the lifespan "
             "context manager has been installed on the FastAPI app."
         )
+        raise RuntimeError(msg)
 
     async with resources.async_session_factory() as session:
         yield session
@@ -175,51 +190,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await resources.dispose()
         logger.info("Shutdown complete")
 
-"""
-FastAPI security dependencies: authentication and role-based access control.
-
-Separated from auth_service.py to maintain Clean Architecture (services
-must not depend on the API layer).
-"""
-
-import logging
-
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from src.db.models import User
-from src.services.auth_service import decode_access_token
-
-
-# ---------------------------------------------------------------------------
-# FingerprintService provider (Phase 17)
-# ---------------------------------------------------------------------------
-
-
-_fingerprint_service: FingerprintService | None = None
-
-
-def get_fingerprint_service() -> FingerprintService:
-    global _fingerprint_service
-    if _fingerprint_service is None:
-        _fingerprint_service = FingerprintService()
-    return _fingerprint_service
-
-
 # ---------------------------------------------------------------------------
 # MccMatchingService provider (Phase 21)
 # ---------------------------------------------------------------------------
 
 
-_mcc_matching_service: "MccMatchingService | None" = None
+_mcc_matching_service: MccMatchingService | None = None
 
 
-def get_mcc_matching_service() -> "MccMatchingService":
+def get_mcc_matching_service() -> MccMatchingService:
+    from src.services.mcc_matching_service import MccMatchingService
+
     global _mcc_matching_service
     if _mcc_matching_service is None:
-        from src.services.mcc_matching_service import MccMatchingService
         _mcc_matching_service = MccMatchingService()
     return _mcc_matching_service
 

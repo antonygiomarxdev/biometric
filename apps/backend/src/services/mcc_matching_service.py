@@ -44,30 +44,21 @@ from src.core.types import (
 from src.db.qdrant_mcc_repository import QdrantMccRepository
 from src.dev.logger import dev_log
 
-if TYPE_CHECKING:
-    from src.services.fingerprint_service import FingerprintService
-
 logger = logging.getLogger(__name__)
 
 
 class MccMatchingService:
     """MCC production matching service.
 
-    Single service handles both enrollment and search. Constructor DI:
-    pass ``mcc_repo`` in tests; defaults are constructed on first use.
-
-    The ``fingerprint_service`` parameter is preserved for DI compatibility
-    with the legacy production DI graph but is no longer used — the MCC
-    pipeline runs its own mini-pipeline (see :meth:`_run_mcc_pipeline`).
+    Handles both enrollment and search. Constructor DI: pass ``mcc_repo``
+    in tests; defaults are constructed on first use.
     """
 
     def __init__(
         self,
-        fingerprint_service: FingerprintService | None = None,
         mcc_repo: QdrantMccRepository | None = None,
         pool: Executor | None = None,
     ) -> None:
-        self._fp_service = fingerprint_service
         self._mcc_repo = mcc_repo or QdrantMccRepository.from_host()
         self._pool = pool
         self._mcc_repo.ensure_collection()

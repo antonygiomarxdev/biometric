@@ -16,7 +16,7 @@ from fastapi import (
     UploadFile,
 )
 
-from src.api.dependencies import get_async_db, get_fingerprint_service, get_mcc_matching_service
+from src.api.dependencies import get_async_db, get_mcc_matching_service
 from src.api.prefix import API_PREFIX
 from src.db.repositories.fingerprint_capture_repository import (
     FingerprintCaptureRepository,
@@ -37,7 +37,6 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from src.services.fingerprint_service import FingerprintService
     from src.services.mcc_matching_service import MccMatchingService
 
 log = logging.getLogger(__name__)
@@ -63,7 +62,6 @@ async def upload_capture(
     is_exemplar: bool = Form(default=True),  # noqa: FBT001
     notes: str | None = Form(None),
     session: AsyncSession = Depends(get_async_db),
-    fp_service: FingerprintService = Depends(get_fingerprint_service),
     mcc_service: MccMatchingService = Depends(get_mcc_matching_service),
 ) -> Any:
     image_bytes = await file.read()
@@ -71,7 +69,7 @@ async def upload_capture(
         raise HTTPException(status_code=400, detail="Empty file")
     try:
         svc = FingerprintEnrollmentService(
-            session, fp_service, mcc_matching_service=mcc_service,
+            session, mcc_matching_service=mcc_service,
         )
         capture, _ = await svc.create_capture(
             fingerprint_id=fingerprint_id,
