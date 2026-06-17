@@ -382,12 +382,14 @@ export function searchMatching(
 export async function fetchCaptureImage(captureId: string): Promise<string> {
   const res = await fetch(`${API_BASE}/api/v1/captures/${captureId}/image`);
   if (!res.ok) {
-    throw new Error(`Failed to fetch capture image: ${res.status}`);
+    const err = new Error(
+      `Failed to fetch capture image: ${res.status}`,
+    ) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
   }
   const blob = await res.blob();
   return URL.createObjectURL(blob);
-}
-  );
 }
 
 // Decisions

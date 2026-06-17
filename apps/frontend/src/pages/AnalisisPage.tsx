@@ -236,17 +236,28 @@ export default function AnalisisPage() {
           setCandidateLoading(false);
         }
       })
-      .catch((err) => {
-        if (!cancelled) {
-          setCandidateLoading(false);
-          // 503 is expected for legacy captures; degrade gracefully
-          if (!String(err.message).includes("503")) {
-            addToast({
-              type: "warning",
-              title: "No se pudo cargar la imagen del candidato",
-              description: "Re-enrolá la captura para tener la imagen enhanced.",
-            });
-          }
+      .catch((err: Error & { status?: number }) => {
+        if (cancelled) return;
+        setCandidateLoading(false);
+        setCandidateDataUrl(null);
+        // 503 = capture predates the enhanced_image column. Surface a
+        // clear toast so the perito re-enrolls. There is no in-place
+        // fallback — legacy data is treated as missing, not as something
+        // to silently paper over.
+        if (err.status === 503) {
+          addToast({
+            type: "warning",
+            title: "Captura legacy sin imagen enhanced",
+            description:
+              "Esta captura se enroló antes de la migración. Re-enrolá para ver la comparación visual.",
+            duration: 8000,
+          });
+        } else {
+          addToast({
+            type: "warning",
+            title: "No se pudo cargar la imagen del candidato",
+            description: err.message,
+          });
         }
       });
     return () => {
