@@ -31,7 +31,7 @@ Identificar personas por sus huellas dactilares con precisión forense, rapidez 
 │                    ON-PREMISE SERVER                            │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌───────────────┐  │
 │  │  Nginx    │  │  FastAPI  │  │ Celery   │  │  PostgreSQL   │  │
-│  │  (TLS)    │──│  (API)    │──│ (Worker) │  │  + pgvector   │  │
+│  │  (TLS)    │──│  (API)    │──│ (Worker) │  │  + Qdrant   │  │
 │  │  :443     │  │  :8000    │  │          │  │  :5432        │  │
 │  └──────────┘  └──────────┘  └────┬─────┘  └───────────────┘  │
 │                                    │                            │
@@ -166,7 +166,7 @@ Identificar personas por sus huellas dactilares con precisión forense, rapidez 
 │  │  Storage Layer                                                │   │
 │  │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐         │   │
 │  │  │ Repository   │ │ VectorIndex  │ │ ObjectStorage│         │   │
-│  │  │ (Hybrid      │ │ (pgvector    │ │ (MinIO -    │         │   │
+│  │  │ (Hybrid      │ │ (Qdrant    │ │ (MinIO -    │         │   │
 │  │  │  Matching)   │ │  IVFFlat)    │ │  Imágenes)  │         │   │
 │  │  └──────────────┘ └──────────────┘ └──────────────┘         │   │
 │  └──────────────────────────────────────────────────────────────┘   │
@@ -180,7 +180,7 @@ Identificar personas por sus huellas dactilares con precisión forense, rapidez 
 | **API Layer** | HTTP handling, validación, auth, rate limiting | FastAPI routers |
 | **Service Layer** | Orquestación de negocio, auth, auditoría | Python services |
 | **Processing Layer** | Algoritmos biométricos puros (Strategy) | NumPy/CuPy/OpenCV |
-| **Storage Layer** | Persistencia, búsqueda vectorial, object storage | SQLAlchemy/pgvector/MinIO |
+| **Storage Layer** | Persistencia, búsqueda vectorial, object storage | SQLAlchemy/Qdrant/MinIO |
 
 ### 4.2 Key Interfaces
 
@@ -246,7 +246,7 @@ class BiometricProvider(ABC):
 | Data | Storage | Retention | Backup |
 |------|---------|-----------|--------|
 | Fingerprint images | MinIO (S3) | Indefinido | Replication + cold archive |
-| Vector embeddings | pgvector (PostgreSQL) | Indefinido | WAL archiving |
+| Vector embeddings | Qdrant (PostgreSQL) | Indefinido | WAL archiving |
 | Person records | PostgreSQL | Indefinido | WAL archiving |
 | Audit logs | PostgreSQL (partitioned) | 10 años + archive | WAL archiving |
 | Match events | PostgreSQL | 5 años | WAL archiving |
@@ -412,7 +412,7 @@ SYNC (forensic equipment):
 - **Registros:** 10K - 100K personas
 - **Servidor único:** Sin clustering
 - **Procesamiento:** Síncrono en thread pool
-- **DB:** PostgreSQL single instance con pgvector
+- **DB:** PostgreSQL single instance con Qdrant
 
 ### 8.2 Target Scale (v2)
 - **Registros:** 1M - 10M personas
@@ -451,7 +451,7 @@ SYNC (forensic equipment):
 |-----------|----------|--------------------------|-------|
 | **Python 3.12+** | ✅ Mantener | Go, Rust, Java | Ecosistema científico (NumPy, CuPy, OpenCV), equipo con experiencia Python |
 | **FastAPI** | ✅ Mantener | Django, Flask, Starlette | Async nativo, validación Pydantic, rendimiento, OpenAPI automático |
-| **PostgreSQL + pgvector** | ✅ Mantener | Pinecone, Weaviate, Milvus | Datos biométricos no salen del gobierno; pgvector es extensión de PG, no servicio externo |
+| **PostgreSQL + Qdrant** | ✅ Mantener | Pinecone, Weaviate, Milvus | Datos biométricos no salen del gobierno; Qdrant es extensión de PG, no servicio externo |
 | **MinIO** | ✅ Mantener | AWS S3, Ceph | S3-compatible, on-premise, simple |
 | **React + Vite** | ✅ Mantener | Next.js, Svelte, Vue | Ecosistema grande, PWA capabilities, shadcn/ui components |
 | **CuPy** | ⚠️ Evaluar | PyTorch, TensorFlow, ONNX | Ya implementado, acelera Gabor filters en GPU. Considerar migrar a PyTorch si se usan modelos ML |
@@ -475,8 +475,8 @@ SYNC (forensic equipment):
 
 | Periodo | Matching | Razón |
 |---------|----------|-------|
-| **v1 (ahora)** | pgvector L2 + Cosine | Ya implementado, funcional para desarrollo/PoC |
-| **v1.5** | Híbrido: pgvector candidatos + reranking NBIS | Precisión forense sin perder velocidad |
+| **v1 (ahora)** | Qdrant L2 + Cosine | Ya implementado, funcional para desarrollo/PoC |
+| **v1.5** | Híbrido: Qdrant candidatos + reranking NBIS | Precisión forense sin perder velocidad |
 | **v2** | NBIS BOZORTH3 nativo (o SourceAFIS) | Estándar gubernamental, interoperabilidad |
 
 ---
@@ -557,7 +557,7 @@ Push/PR → GitHub Actions →
 Fase 1 (AHORA): Investigación Matching
   ├─ RESEARCH.md ✓
   ├─ Benchmark SOCOFing
-  └─ Decisión: pgvector vs NBIS vs híbrido
+  └─ Decisión: Qdrant vs NBIS vs híbrido
 
 Fase 2: Seguridad y Auditoría
   ├─ JWT auth + RBAC
@@ -603,7 +603,7 @@ Fase 6+: AFIS Definitivo + Multimodal
 
 | Decisión | Impacto | Depende de | Propuesta |
 |----------|---------|------------|-----------|
-| **Algoritmo de matching** | Arquitectura núcleo | Phase 1 benchmark | Híbrido: pgvector + NBIS reranking |
+| **Algoritmo de matching** | Arquitectura núcleo | Phase 1 benchmark | Híbrido: Qdrant + NBIS reranking |
 | **Formato de imagen forense** | Almacenamiento, ancho de banda | Requisitos NIST | WSQ (estándar FBI) vs JPEG2000 |
 | **WSQ support** | Pipeline de procesamiento | Librería WSQ disponible | NBIS incluye compresor WSQ |
 | **Firmado digital de auditoría** | Compliance | Requisitos legales | SHA-256 chain + RSA signature |
@@ -621,7 +621,7 @@ Fase 6+: AFIS Definitivo + Multimodal
 | **NBIS** | NIST Biometric Image Software (estándar US) |
 | **BOZORTH3** | Matcher de NBIS, basado en minutiae |
 | **MINDTCT** | Minutiae detector de NBIS |
-| **pgvector** | Extensión de PostgreSQL para búsqueda vectorial |
+| **Qdrant** | Extensión de PostgreSQL para búsqueda vectorial |
 | **IVFFlat** | Algoritmo de indexación vectorial (Inverted File with Flat centroids) |
 | **HNSW** | Hierarchical Navigable Small World (índice vectorial de alto rendimiento) |
 | **WSQ** | Wavelet Scalar Quantization (formato de imagen de huella estándar FBI) |

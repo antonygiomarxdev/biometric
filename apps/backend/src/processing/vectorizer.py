@@ -16,7 +16,7 @@ RAG Dactilar (Phase 10):
 En lugar de producir un solo vector global, el `RagTripletVectorizer`
 devuelve una lista de "chunks" (TripletVector), cada uno con un peso
 basado en su distancia al Core de la huella. Esto permite que
-`pgvector` recupere los mejores K triángulos y luego agregamos los
+`Qdrant` recupere los mejores K triángulos y luego agregamos los
 puntajes ponderados por huella.
 """
 
@@ -43,7 +43,7 @@ class TripletVectorizer:
 
     El vector resultante contiene los lados y ángulos de los triángulos
     de Delaunay ordenados canónicamente, hasta ``max_triangles``
-    triángulos (9 valores cada uno). Ideal para pgvector.
+    triángulos (9 valores cada uno). Ideal para Qdrant.
     """
 
     def __init__(self, max_triangles: int = 50) -> None:

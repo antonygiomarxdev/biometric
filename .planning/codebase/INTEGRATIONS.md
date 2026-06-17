@@ -4,14 +4,14 @@
 
 ## External Services
 
-### PostgreSQL + pgvector
+### PostgreSQL + Qdrant
 - **Purpose:** Primary database for fingerprint records and vector embeddings
-- **Type:** Self-hosted (Docker container `pgvector/pgvector:pg15`)
+- **Type:** Self-hosted (Docker container `Qdrant/Qdrant:pg15`)
 - **Connection:** `postgresql://postgres:postgres@localhost:5434/fingerprint`
 - **Tables:**
   - `fingerprints` — person records, minutiae data, image paths
   - `fingerprint_vectors` — vector embeddings for similarity search
-- **Extensions:** `vector` (pgvector), `ivfflat` index on embedding column
+- **Extensions:** `vector` (Qdrant), `ivfflat` index on embedding column
 - **Access pattern:** Direct SQLAlchemy ORM, no connection pooling abstraction beyond SQLAlchemy pool
 - **Ports:** 5434 (host) → 5432 (container)
 
@@ -50,7 +50,7 @@
 - `fingerprint_service` — Orchestrates enhancement → extraction → normalization pipeline
 - `comparison_service` — Registration and identification logic
 - `repository` — Database CRUD operations
-- `vector_index` — pgvector similarity search
+- `vector_index` — Qdrant similarity search
 - `storage` — MinIO file operations
 - `metrics` — Performance metrics collection
 - `db_manager` — Database connection lifecycle

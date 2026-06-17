@@ -30,7 +30,7 @@
 - **Fallback:** CPU multiprocessing via `ProcessPoolExecutor`
 
 ### Database
-- **PostgreSQL 15** with **pgvector** 0.2.5+ extension
+- **PostgreSQL 15** with **Qdrant** 0.2.5+ extension
 - **SQLAlchemy** 2.0+ ORM
 - **psycopg2-binary** 2.9+ driver
 - **Port:** 5434 (host) → 5432 (container)

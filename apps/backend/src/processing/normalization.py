@@ -5,7 +5,7 @@ Clean Architecture: Los normalizadores solo ordenan y deduplican. NO aplican
 centrado global ni rotación PCA — ambas transformaciones son inválidas para
 huellas parciales (escena del crimen) donde no existe un "centro del dedo" real.
 
-Los downstream vectores en pgvector se encargarán de la invarianza rotacional
+Los downstream vectores en Qdrant se encargarán de la invarianza rotacional
 y traslacional mediante triplets geométricos (Delaunay). Este módulo solo
 garantiza que los puntos de entrada estén limpios, ordenados y sin duplicados.
 """

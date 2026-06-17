@@ -13,7 +13,7 @@
 
 - Backend: Python 3.12+ / FastAPI
 - Frontend: React + TypeScript + Vite
-- Database: PostgreSQL + pgvector
+- Database: PostgreSQL + Qdrant
 - Storage: MinIO
 - Auth: JWT + bcrypt
 

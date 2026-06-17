@@ -5,7 +5,7 @@
 **Confidence:** HIGH
 
 ## Summary
-La Fase 1 implementa el flujo forense "end-to-end" refactorizando la arquitectura actual hacia enrutadores modulares de FastAPI y estructurando la persistencia usando Alembic con UUIDv7. Se abandona la creación de tablas por `create_all` y se integra la búsqueda vectorial con el índice HNSW de `pgvector` en lugar de IVFFlat. Adicionalmente se incluye la generación de dictámenes en PDF con WeasyPrint y el registro inmutable de cadena de custodia mediante `SELECT FOR UPDATE`.
+La Fase 1 implementa el flujo forense "end-to-end" refactorizando la arquitectura actual hacia enrutadores modulares de FastAPI y estructurando la persistencia usando Alembic con UUIDv7. Se abandona la creación de tablas por `create_all` y se integra la búsqueda vectorial con el índice HNSW de `Qdrant` en lugar de IVFFlat. Adicionalmente se incluye la generación de dictámenes en PDF con WeasyPrint y el registro inmutable de cadena de custodia mediante `SELECT FOR UPDATE`.
 
 **Primary recommendation:** Modularizar `rest.py` primero, luego establecer Alembic, migrar modelos a UUIDv7 + HNSW, e integrar el `FingerprintService` con la nueva capa de orquestación transaccional.
 
@@ -20,7 +20,7 @@ La Fase 1 implementa el flujo forense "end-to-end" refactorizando la arquitectur
 - **D-05:** **Manejo de Errores:** Implementar manejadores de excepciones globales (`ForensicError`, `ValidationError`, `IntegrityError`) para devolver JSON estructurado.
 - **D-06:** **Migraciones:** Uso estricto de **Alembic** (nunca `create_all`).
 - **D-07:** **Primary Keys:** **UUIDv7** (time-ordered) para evitar fragmentación de índices y facilitar particionado futuro. Utilizar `uuid6` backport o equivalente.
-- **D-08:** **Índice Vectorial:** Usar **HNSW** de `pgvector` desde el día 1, abandonando IVFFlat para evitar degradación de recall con nuevas inserciones.
+- **D-08:** **Índice Vectorial:** Usar **HNSW** de `Qdrant` desde el día 1, abandonando IVFFlat para evitar degradación de recall con nuevas inserciones.
 - **D-09:** **Auditoría:** Cadena de hashes para inmutabilidad (`hash_actual = sha256(hash_anterior + payload)`). Implementada a nivel aplicación en una transacción serializable con `SELECT FOR UPDATE`.
 - **D-10:** **Seed Data:** Roles, tipos de delitos, y usuarios base inyectados mediante una migración de Alembic inicial (ej. `002_seed_data.py`).
 - **D-11:** **MatchingService Independiente:** Crear un nuevo servicio que conecte la tabla `Evidencia` con `FingerprintService`.
@@ -56,7 +56,7 @@ La Fase 1 implementa el flujo forense "end-to-end" refactorizando la arquitectur
 |------------|-------------|----------------|-----------|
 | Visor de Comparación | Browser / Client | — | UX interactiva lado-a-lado sin recargas (React). |
 | Orquestación de Pipeline | API / Backend | — | FastAPI gestionando `ProcessPoolExecutor` asíncrono para CPU-bound jobs sin bloquear I/O. |
-| Búsqueda de Similitud | Database | API / Backend | PostgreSQL + pgvector (HNSW) permite escalado sin degradar recall. |
+| Búsqueda de Similitud | Database | API / Backend | PostgreSQL + Qdrant (HNSW) permite escalado sin degradar recall. |
 | Cadena de Custodia | API / Backend | Database | Cálculo SHA-256 en memoria y guardado en DB transaccional (`SELECT FOR UPDATE`). |
 | Dictamen Legal (PDF) | API / Backend | — | WeasyPrint requiere renderizado HTML a PDF; idealmente corre en backend para certificar integridad. |
 
@@ -68,13 +68,13 @@ La Fase 1 implementa el flujo forense "end-to-end" refactorizando la arquitectur
 | alembic | 1.18.4 | Migraciones de Base de Datos | Estándar de la industria en Python; requerido por D-06. |
 | uuid6 | 2025.0.1 | Generación de UUIDv7 | Genera UUIDs time-ordered; evita index fragmentation. |
 | weasyprint | 69.0 | Generador de PDF/A | Excelente soporte de estándares para documentos legales/forenses. |
-| pgvector | 0.2.5+ | Soporte vector PostgreSQL | Nativo para Postgres, provee índices HNSW. |
+| Qdrant | 0.2.5+ | Soporte vector PostgreSQL | Nativo para Postgres, provee índices HNSW. |
 
 ### Supporting
 | Library | Version | Purpose | When to Use |
 |---------|---------|---------|-------------|
 | fastapi | 0.104.0+ | Framework web | Restricción del proyecto, excelente para endpoints asíncronos. |
-| sqlalchemy | 2.0.0+ | ORM | Interfaz recomendada con pgvector (tipo `Vector`). |
+| sqlalchemy | 2.0.0+ | ORM | Interfaz recomendada con Qdrant (tipo `Vector`). |
 
 ### Alternatives Considered
 | Instead of | Could Use | Tradeoff |
@@ -117,7 +117,7 @@ FastAPI Routers (cases.py, evidencias.py, matching.py)
        │       │
        │       ├──► FingerprintService (ProcessPoolExecutor) ──► Image Processing (CPU)
        │       │
-       │       └──► Vector Search ──► PostgreSQL (pgvector HNSW)
+       │       └──► Vector Search ──► PostgreSQL (Qdrant HNSW)
        │
        └─► AuditService ──► Transaction (SELECT FOR UPDATE) ──► Hash Chain
 ```
@@ -144,15 +144,15 @@ apps/backend/src/
     └── pdf_generator.py
 ```
 
-### Pattern 1: Alembic pgvector HNSW Index
+### Pattern 1: Alembic Qdrant HNSW Index
 **What:** Definición del índice HNSW en la migración de Alembic.
 **When to use:** Al crear la tabla vectorial para garantizar un recall alto en inserciones continuas.
 **Example:**
 ```python
-# Source: [VERIFIED: pgvector-python official docs]
+# Source: [VERIFIED: Qdrant-python official docs]
 from alembic import op
 import sqlalchemy as sa
-from pgvector.sqlalchemy import Vector
+from Qdrant.sqlalchemy import Vector
 
 def upgrade():
     op.create_table('fingerprint_vectors',
@@ -256,7 +256,7 @@ def get_db():
 
 | Old Approach | Current Approach | When Changed | Impact |
 |--------------|------------------|--------------|--------|
-| IVFFlat Index | HNSW Index | pgvector 0.5.0 | HNSW soporta alta tasa de actualización sin pérdida sustancial de recall comparado con IVFFlat. |
+| IVFFlat Index | HNSW Index | Qdrant 0.5.0 | HNSW soporta alta tasa de actualización sin pérdida sustancial de recall comparado con IVFFlat. |
 | `metadata.create_all()` | Alembic Migrations | Siempre (Best practice) | Permite control de versiones en las estructuras DB y migraciones de datos como Seed Roles. |
 | Global Singletons | FastAPI `Depends` (DI) | Siempre | Testeo simplificado, ciclo de vida atado a la request. |
 
@@ -271,7 +271,7 @@ def get_db():
 
 | Dependency | Required By | Available | Version | Fallback |
 |------------|------------|-----------|---------|----------|
-| PostgreSQL + pgvector | Base de datos principal | ✓ | (Docker pg15) | — |
+| PostgreSQL + Qdrant | Base de datos principal | ✓ | (Docker pg15) | — |
 | MinIO | Almacenamiento de imágenes | ✓ | (Docker) | Directorios locales |
 | Docker | Contenedores de desarrollo | ✓ | 24.0.x | — |
 
@@ -331,7 +331,7 @@ def get_db():
 
 ### Primary (HIGH confidence)
 - Official docs URL (FastAPI) - Dependency injection patterns
-- Official docs pgvector-python - HNSW index integration with Alembic
+- Official docs Qdrant-python - HNSW index integration with Alembic
 
 ### Secondary (MEDIUM confidence)
 - PyPI manual verification - Confirmed packages `uuid6`, `alembic`, `weasyprint` versions

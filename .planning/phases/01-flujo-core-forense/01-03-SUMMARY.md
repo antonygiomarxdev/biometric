@@ -2,11 +2,11 @@
 phase: 01-flujo-core-forense
 plan: 03
 subsystem: api
-tags: ["pgvector", "hnsw", "fastapi", "fingerprint", "matching", "benchmark"]
+tags: ["Qdrant", "hnsw", "fastapi", "fingerprint", "matching", "benchmark"]
 
 requires:
   - phase: 01-01
-    provides: "FingerprintService, DB models with pgvector HNSW index, FastAPI lifespan + AppResources"
+    provides: "FingerprintService, DB models with Qdrant HNSW index, FastAPI lifespan + AppResources"
 provides:
   - "MatchingService — bridges CPU-bound processing and vector HNSW L2 search"
   - "matching router — POST /api/v1/matching/search endpoint"
@@ -21,7 +21,7 @@ tech-stack:
   added: []
   patterns:
     - "CPU offload via asyncio.run_in_executor with ProcessPoolExecutor (per D-12)"
-    - "pgvector HNSW L2 distance queries using raw SQL <-> operator (per D-08)"
+    - "Qdrant HNSW L2 distance queries using raw SQL <-> operator (per D-08)"
     - "Router-per-resource with FastAPI Depends() and lifespan-scoped resources (per D-02, D-04)"
 
 key-files:
@@ -36,7 +36,7 @@ key-files:
 
 key-decisions:
   - "MatchingService receives ProcessPoolExecutor via constructor (not creating its own) — follows D-04 lifespan pattern"
-  - "Vector search uses raw SQL with pgvector <-> operator against the fingerprint_vectors HNSW index, not the legacy VectorIndex wrapper"
+  - "Vector search uses raw SQL with Qdrant <-> operator against the fingerprint_vectors HNSW index, not the legacy VectorIndex wrapper"
   - "Huellas_conocidas router stores embeddings directly via the new FingerprintVector ORM model (db/models.py), not the old FingerprintRecord + vector_index flow"
   - "Benchmark defaults to in-memory SQLite for isolated runs without polluting the main DB"
 
@@ -52,7 +52,7 @@ completed: 2026-06-13
 
 # Phase 01 Plan 03: MatchingService + Routers + Benchmark Summary
 
-**MatchingService bridges CPU-bound fingerprint processing via ProcessPoolExecutor with pgvector HNSW L2 distance queries; matching and huellas_conocidas routers expose the search and registration endpoints; SOCOFing benchmark script measures Rank-1 / Rank-10 hit rates.**
+**MatchingService bridges CPU-bound fingerprint processing via ProcessPoolExecutor with Qdrant HNSW L2 distance queries; matching and huellas_conocidas routers expose the search and registration endpoints; SOCOFing benchmark script measures Rank-1 / Rank-10 hit rates.**
 
 ## Performance
 
@@ -64,7 +64,7 @@ completed: 2026-06-13
 
 ## Accomplishments
 
-- **MatchingService** (`src/services/matching_service.py`): Implements `search_latent()` and `register_known()` that delegate CPU-bound image decode + fingerprint processing to the application-scoped `ProcessPoolExecutor` via `asyncio.get_running_loop().run_in_executor()`. Vector search executes pgvector HNSW L2 queries (`<->` operator) against `fingerprint_vectors` table returning `CandidateMatch` with L2 distance and normalised (0–1) score.
+- **MatchingService** (`src/services/matching_service.py`): Implements `search_latent()` and `register_known()` that delegate CPU-bound image decode + fingerprint processing to the application-scoped `ProcessPoolExecutor` via `asyncio.get_running_loop().run_in_executor()`. Vector search executes Qdrant HNSW L2 queries (`<->` operator) against `fingerprint_vectors` table returning `CandidateMatch` with L2 distance and normalised (0–1) score.
 - **Huellas_conocidas router** (`POST /api/v1/huellas_conocidas/`): Accepts person metadata + fingerprint image, processes via `MatchingService`, persists vector embedding + minutiae data to the `fingerprint_vectors` table using the new ORM model.
 - **Matching router** (`POST /api/v1/matching/search`): Accepts latent fingerprint image + configurable `top_k` (1–100), searches via HNSW L2, returns ranked candidates with distance, score, and metadata.
 - **SOCOFing benchmark** (`scripts/benchmark_soco.py`): Standalone CLI script that discovers SOCOFing subjects, builds a gallery from `Real/` images, probes from `Altered/` images, and reports Hit Rate at Rank-1 and Rank-10. Defaults to in-memory SQLite for isolation.
@@ -90,7 +90,7 @@ Each task was committed atomically:
 ## Decisions Made
 
 - **MatchingService receives ProcessPoolExecutor via constructor** — follows D-04 lifespan pattern; the service does not manage its own pool.
-- **Vector search uses raw SQL with pgvector `<->` operator** against the `fingerprint_vectors` HNSW index (created in migration 0001), not the legacy `VectorIndex` wrapper from `storage/vector_index.py`.
+- **Vector search uses raw SQL with Qdrant `<->` operator** against the `fingerprint_vectors` HNSW index (created in migration 0001), not the legacy `VectorIndex` wrapper from `storage/vector_index.py`.
 - **Huellas_conocidas uses the new ORM model** (`db/models.py` `FingerprintVector`) for persistence, consistent with the Alembic-managed schema.
 - **Benchmark defaults to in-memory SQLite** for isolated runs without polluting the main PostgreSQL database.
 - **`CandidateMatch` is a frozen dataclass** — continues the immutable-domain-pattern established by `MinutiaCandidate` and `NormalizedFingerprint`.
@@ -106,7 +106,7 @@ None - plan executed exactly as written.
 ## Verification Results
 
 - MatchingService uses `run_in_executor` with `ProcessPoolExecutor` (DoS mitigation per T-01-03)
-- `_vector_search()` uses pgvector HNSW L2 distance operator (`<->`) via raw SQL
+- `_vector_search()` uses Qdrant HNSW L2 distance operator (`<->`) via raw SQL
 - All 3 `.py` files pass syntax validation (`py_compile` / `ast.parse`)
 - `CandidateMatch` score normalisation uses `config.match_threshold` as reference distance
 
@@ -136,5 +136,5 @@ None - plan executed exactly as written.
 | Commit `5786a7a` (Task 2) | ✅ |
 | Commit `7348d78` (Task 3) | ✅ |
 | `run_in_executor` used in MatchingService | ✅ (2 occurrences) |
-| pgvector `<->` L2 operator used | ✅ (5 occurrences) |
+| Qdrant `<->` L2 operator used | ✅ (5 occurrences) |
 | `benchmark_soco.py` compiles | ✅ |

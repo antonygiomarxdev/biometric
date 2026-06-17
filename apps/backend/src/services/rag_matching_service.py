@@ -11,7 +11,7 @@ Wires together:
 Search-only service. Enrollment is handled by
 :class:`~src.services.fingerprint_enrollment_service.FingerprintEnrollmentService`.
 
-Replaces the deprecated ``RagMatchingService`` (pgvector). No SQLAlchemy
+Replaces the deprecated ``RagMatchingService`` (Qdrant). No SQLAlchemy
 dependency. Preferred path for production.
 """
 from __future__ import annotations

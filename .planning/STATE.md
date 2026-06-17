@@ -27,7 +27,7 @@ See: `.planning/PROJECT.md`
 | Componente | Tecnología | Reemplazó a |
 |-----------|-----------|-------------|
 | DB | PostgreSQL 17 + AsyncSession (psycopg3) | Sync Session + psycopg2 |
-| Vectores | Qdrant (Docker) | pgvector |
+| Vectores | Qdrant (Docker) | Qdrant |
 | Almacenamiento | MinIO | — |
 | Auth | Argon2id + PyJWT | passlib + python-jose |
 | Matching | MCC Cylinders (144D) + Cosine Similarity | Delaunay Triplets |

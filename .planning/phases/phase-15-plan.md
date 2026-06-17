@@ -1,7 +1,7 @@
 # Phase 15: Qdrant-based Chunked Indexing (Delaunay-BoW)
 
 ## Goal
-Replace the PostgreSQL+pgvector chunk store (`RagVectorRepository`) with a
+Replace the PostgreSQL+Qdrant chunk store (`RagVectorRepository`) with a
 **Qdrant-based** chunk store, so the polyglot AFIS can scale to millions
 of latent chunks with sub-100ms search latency. Each enrolled fingerprint
 produces N local-invariant chunks (Delaunay triangles + MCC cylinders).

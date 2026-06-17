@@ -14,7 +14,7 @@
 **Discussion:** Debated UUID generation, Alembic vs SQLAlchemy auto-migrations, vector indexing, and audit logging.
 **Selection:** 
 - **UUIDv7** for DB IDs.
-- **HNSW** pgvector index for 10M+ scale without degradation.
+- **HNSW** Qdrant index for 10M+ scale without degradation.
 - **Alembic** migrations exclusively.
 - **Audit Hash Chain:** Decided against a PL/pgSQL DB trigger in favor of an Application Layer Transaction with `SELECT FOR UPDATE`. The reasoning: at 10-50 logs/second peak, row-locking in Python guarantees safety with easier testability, avoiding SQL complexity without sacrificing real-world security.
 

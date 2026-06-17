@@ -38,7 +38,7 @@ from src.processing.vectorizer import RagTripletVectorizer
 def in_memory_session() -> Iterator[Session]:
     """SQLite in-memory DB session with the schema created.
 
-    SQLite doesn't support pgvector, so we work around it by creating
+    SQLite doesn't support Qdrant, so we work around it by creating
     a minimal subset of the RagVectorChunk table for testing the
     repository's Python logic (weight aggregation, KNN simulation).
     """
@@ -227,7 +227,7 @@ def test_search_finds_owner_under_rotation(in_memory_session: Session) -> None:
 
     We simulate the RAG matching at the algorithm level (without
     using the real DB insert) because the test SQLite in-memory
-    doesn't support pgvector. The repository's logic is verified
+    doesn't support Qdrant. The repository's logic is verified
     separately by other tests.
     """
     import collections

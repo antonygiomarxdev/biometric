@@ -2,16 +2,16 @@
 phase: 05-test-coverage-quality
 plan: 01
 subsystem: testing
-tags: pytest, coverage, mock, gpu, onnx, llamaindex, pgvector
+tags: pytest, coverage, mock, gpu, onnx, llamaindex, Qdrant
 
 requires:
   - phase: 04-foundation-hardening
     provides: FastAPI app with DI, services, storage layer
 provides:
   - Coverage configuration enforcing 90% minimum
-  - Global autouse mocks for GPU/ModelManager/LLM/pgvector
+  - Global autouse mocks for GPU/ModelManager/LLM/Qdrant
   - Fast test execution (non-performance) in under 5 seconds
-  - SQLite-compatible test database setup for pgvector types
+  - SQLite-compatible test database setup for Qdrant types
   - Missing gpu_utils module restored for GPU detection utilities
   - jurisdiction field in Config dataclass for report generation
   - @runtime_checkable decorator on IFeatureExtractor Protocol
@@ -47,7 +47,7 @@ key-decisions:
   - "Session-scoped autouse mocks applied before first test to prevent any GPU/AI/DB calls during test execution"
   - "LLM mocking at the OpenAILike HTTP client layer (not LLMFactory) to preserve factory behavior for per-test assertions"
   - "Performance tests marked with @pytest.mark.performance and excluded from default run to stay under 5s"
-  - "SQLite JSONB type compilation registered in conftest.py to allow pgvector model tests with in-memory DB"
+  - "SQLite JSONB type compilation registered in conftest.py to allow Qdrant model tests with in-memory DB"
   - "Enhancer and extractor mocked via patch on usage sites (fingerprint_service) to match module-level import pattern"
 
 patterns-established:
@@ -63,7 +63,7 @@ completed: 2026-06-14
 
 # Phase 05: Coverage Configuration and Global Test Mocks Summary
 
-**pytest-cov with 90% threshold, session-scoped autouse mocks for GPU/ONNX/LLM/pgvector, and pre-existing test infrastructure fixes for fast isolated test execution**
+**pytest-cov with 90% threshold, session-scoped autouse mocks for GPU/ONNX/LLM/Qdrant, and pre-existing test infrastructure fixes for fast isolated test execution**
 
 ## Performance
 
@@ -81,7 +81,7 @@ completed: 2026-06-14
   - **ONNX Runtime**: `InferenceSession` mocked — no `.onnx` file loading
   - **ModelManager**: `load_model`/`get_session` return MagicMock — no disk access
   - **LLM API**: `OpenAILike` mocked — no HTTP calls to Ollama/OpenAI
-  - **pgvector**: `_ensure_extension`/`_ensure_index` made no-ops — no DB setup needed
+  - **Qdrant**: `_ensure_extension`/`_ensure_index` made no-ops — no DB setup needed
   - **Processing pipeline**: enhancer and extractor mocked — skeletonization bypassed for speed
 - Added mock database session fixture (`mock_db_session`) for FastAPI `get_db` overrides
 - Registered SQLite type compilation for PostgreSQL `JSONB` type for in-memory test DB

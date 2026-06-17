@@ -12,7 +12,7 @@
 - Ubicar en `data/socofing/`
 - **Output:** dataset listo para benchmark
 
-### T2: Construir benchmark de accuracy (pgvector actual)
+### T2: Construir benchmark de accuracy (Qdrant actual)
 - Leer benchmark existente en `apps/backend/scripts/benchmark.py`
 - Crear script `scripts/benchmark_socofing.py` que:
   - Carga imágenes SOCOFing
@@ -34,7 +34,7 @@
 - Compilar mindtct + bozorth3
 - Extraer minutiae con mindtct en mismo dataset
 - Correr matching con bozorth3
-- Comparar accuracy vs pgvector actual
+- Comparar accuracy vs Qdrant actual
 - **Output:** tabla comparativa
 
 ### T5: Documentar recomendación final
@@ -43,12 +43,12 @@
   - FNMR @ FMR=1e-3, 1e-4
   - Tiempo de procesamiento
   - Tiempo de búsqueda (1k, 10k, 100k records)
-- Decidir: mantener pgvector, migrar a NBIS, o híbrido
+- Decidir: mantener Qdrant, migrar a NBIS, o híbrido
 - Escribir en SPEC.md o ADR la decisión
 - **Output:** Decisión documentada con evidencia
 
 ## Success Criteria Check
-1. ✅ Documento RESEARCH.md con comparación de enfoques (pgvector vs NIST vs otros)
+1. ✅ Documento RESEARCH.md con comparación de enfoques (Qdrant vs NIST vs otros)
 2. ❌ Benchmark cuantitativo ejecutado contra SOCOFing
 3. ❌ Decisión documentada sobre qué algoritmo implementar
 4. ❌ Reproducibilidad del benchmark (scripts + datos de prueba)

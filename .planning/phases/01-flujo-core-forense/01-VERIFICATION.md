@@ -26,7 +26,7 @@ deferred:
 
 # Phase 01: flujo-core-forense Verification Report — RE-VERIFICATION
 
-**Phase Goal:** Establish core forensic workflow backend — persistence layer with Alembic/pgvector/HNSW, modular REST API routers replacing the monolithic rest.py, CPU-bound biometric processing offloaded via ProcessPoolExecutor, immutable audit log with SHA-256 hash chain, JWT auth with bcrypt + RBAC, PDF/A report generation with HMAC signing, and React frontend with dashboard + side-by-side comparison view.
+**Phase Goal:** Establish core forensic workflow backend — persistence layer with Alembic/Qdrant/HNSW, modular REST API routers replacing the monolithic rest.py, CPU-bound biometric processing offloaded via ProcessPoolExecutor, immutable audit log with SHA-256 hash chain, JWT auth with bcrypt + RBAC, PDF/A report generation with HMAC signing, and React frontend with dashboard + side-by-side comparison view.
 
 **Verified:** 2026-06-13T14:00:00Z
 **Status:** passed
@@ -113,12 +113,12 @@ All previously verified truths remain intact. The 4 failed truths are now resolv
 |---|-------|--------|----------|
 | 1 | Alembic is configured as the sole migration tool | ✓ VERIFIED | `alembic.ini`, `env.py` with `target_metadata`, migrations `0001`→`0002`→`0003` exist |
 | 2 | Database models use UUIDv7 for primary keys | ✓ VERIFIED | `models.py` uses `uuid6.uuid7()` as `default` on all PKs, documented in code comments (D-07) |
-| 3 | Vector table defines HNSW index via pgvector | ✓ VERIFIED | `FingerprintVector.embedding` uses `Vector(256)`, HNSW index with `vector_cosine_ops`, `m=16`, `ef_construction=200` |
+| 3 | Vector table defines HNSW index via Qdrant | ✓ VERIFIED | `FingerprintVector.embedding` uses `Vector(256)`, HNSW index with `vector_cosine_ops`, `m=16`, `ef_construction=200` |
 | 4 | Base DB schema is generated via Alembic (no create_all) | ✓ VERIFIED | `0001_initial_models.py` creates cases, evidences, fingerprint_vectors, audit_log tables. No `create_all` in production code. |
 | 5 | Seed data (roles, default users) is automatically inserted | ✓ VERIFIED | `0003_seed_data.py` creates roles, users, crime_types with seed inserts for Admin/Perito roles and default users |
 | 6 | Audit records form a cryptographically unbroken hash chain | ✓ VERIFIED | `audit_service.py` computes `SHA-256(previous_hash \|\| canonical_json)`, uses `LOCK TABLE` + `with_for_update()` for serialization |
 | 7 | Fingerprint extraction runs on a background CPU thread | ✓ VERIFIED | `matching_service.py` uses `asyncio.get_running_loop().run_in_executor(pool, _work, image_bytes)` — 2 occurrences |
-| 8 | Vector similarity search uses HNSW to return Top-K candidates | ✓ VERIFIED | `_vector_search()` uses pgvector `<->` L2 distance operator with raw SQL against the HNSW index |
+| 8 | Vector similarity search uses HNSW to return Top-K candidates | ✓ VERIFIED | `_vector_search()` uses Qdrant `<->` L2 distance operator with raw SQL against the HNSW index |
 | 9 | Benchmark script can evaluate AFIS precision on SOCOFing | ✓ VERIFIED | `benchmark_soco.py` exists (460 lines), compiles, measures Rank-1/Rank-10 hit rates |
 | 10 | Cases can be created and retrieved | ✓ VERIFIED | `cases.py` defines CRUD endpoints (GET/POST/PUT/DELETE) with pagination, status filtering |
 | 11 | Latent evidence images can be uploaded and attached to cases | ✓ VERIFIED | `evidence.py` uses `UploadFile`, validates MIME types (JPEG/PNG/BMP/TIFF), stores in MinIO |
@@ -191,7 +191,7 @@ All previously verified truths remain intact. The 4 failed truths are now resolv
 | Artifact | Data Variable | Source | Produces Real Data | Status |
 | -------- | ------------- | ------ | ------------------ | ------ |
 | `matching_service.py` | `query_vector` | `FingerprintService.process` via `run_in_executor` | ✓ FLOWING | Real CPU processing, returns `NormalizedFingerprint` |
-| `matching_service.py` | `candidates` | `_vector_search()` → pgvector HNSW L2 query | ✓ FLOWING | Real SQL query against `fingerprint_vectors` table |
+| `matching_service.py` | `candidates` | `_vector_search()` → Qdrant HNSW L2 query | ✓ FLOWING | Real SQL query against `fingerprint_vectors` table |
 | `auth.py` | `user` | `db.query(User).filter(User.username == ...)` | ✓ FLOWING | Real DB query matching ORM model schema |
 | `evidence.py` | `image_data` | `storage.download_file()` → MinIO | ✓ FLOWING | Real MinIO download via `minio` library |
 | `evidence.py` | `image_path` | `storage.upload_file()` → MinIO | ✓ FLOWING | Real MinIO upload via `minio` library, MIME validated |

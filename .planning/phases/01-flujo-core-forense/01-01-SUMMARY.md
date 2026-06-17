@@ -2,7 +2,7 @@
 phase: 01-flujo-core-forense
 plan: 01
 subsystem: database, api
-tags: alembic, sqlalchemy, pgvector, hnsw, uuid7, fastapi, di
+tags: alembic, sqlalchemy, Qdrant, hnsw, uuid7, fastapi, di
 
 requires: []
 provides:
@@ -16,7 +16,7 @@ tech-stack:
   added:
     - uuid6 (UUIDv7 generation, D-07)
     - alembic (migration management, D-06)
-    - pgvector.sqlalchemy.Vector (vector embedding column)
+    - Qdrant.sqlalchemy.Vector (vector embedding column)
   patterns:
     - ORM models with UUIDv7 primary keys and server defaults
     - HNSW index via __table_args__ for ANN search (D-08)
@@ -51,7 +51,7 @@ completed: 2026-06-13
 
 # Phase 01: flujo-core-forense — Plan 01 Summary
 
-**Alembic migration setup with UUIDv7 ORM models (Case, Evidence, FingerprintVector, AuditLog), pgvector HNSW index, DI lifespan with ProcessPoolExecutor, and structured error hierarchy**
+**Alembic migration setup with UUIDv7 ORM models (Case, Evidence, FingerprintVector, AuditLog), Qdrant HNSW index, DI lifespan with ProcessPoolExecutor, and structured error hierarchy**
 
 ## Performance
 
@@ -118,7 +118,7 @@ No auto-fixes were needed. All implementations matched the specification.
 
 ## Issues Encountered
 
-- System PEP 668 protection required `--break-system-packages` flag for pip installs. Installed uuid6, alembic, pgvector, psycopg2-binary, and fastapi without issues.
+- System PEP 668 protection required `--break-system-packages` flag for pip installs. Installed uuid6, alembic, Qdrant, psycopg2-binary, and fastapi without issues.
 - Initial `alembic revision --autogenerate` failed because no database was running. Created migration `0001_initial_models.py` manually with full table definitions matching the ORM models.
 
 ## Next Phase Readiness
