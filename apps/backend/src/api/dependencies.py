@@ -209,23 +209,6 @@ def get_fingerprint_service() -> FingerprintService:
 
 
 # ---------------------------------------------------------------------------
-# QdrantRagMatchingService provider (Phase 18)
-# ---------------------------------------------------------------------------
-
-
-_rag_matching_service: "QdrantRagMatchingService | None" = None
-
-
-def get_rag_matching_service() -> "QdrantRagMatchingService":
-    global _rag_matching_service
-    if _rag_matching_service is None:
-        from src.services.rag_matching_service import (
-            QdrantRagMatchingService,
-        )
-        _rag_matching_service = QdrantRagMatchingService()
-    return _rag_matching_service
-
-# ---------------------------------------------------------------------------
 # MccMatchingService provider (Phase 21)
 # ---------------------------------------------------------------------------
 

@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from typing import Protocol, List, runtime_checkable
+from typing import Protocol, runtime_checkable
 import numpy as np
 
-from src.core.types import CoarseMatch, MinutiaCandidate, NormalizedFingerprint, MatchResult, RidgeGraph, TripletVector, ChunkHit, PersonHit, MccCylinderHit, MccPersonHit
+from src.core.types import CoarseMatch, MinutiaCandidate, NormalizedFingerprint, MatchResult, RidgeGraph, MccCylinderHit, MccPersonHit
 
 
 # ---------------------------------------------------------------------------
@@ -111,12 +111,12 @@ class IEnhancer(Protocol):
 @runtime_checkable
 class IFeatureExtractor(Protocol):
     """Feature extraction interface (used by SkeletonMinutiaeExtractor, etc.)."""
-    def extract(self, image: np.ndarray) -> List[MinutiaCandidate]: ...
+    def extract(self, image: np.ndarray) -> list[MinutiaCandidate]: ...
 
 
 class INormalizer(Protocol):
     """Normalisation interface (used by MinutiaNormalizer, etc.)."""
-    def normalize(self, minutiae: List[MinutiaCandidate], img_shape: tuple[int, int]) -> NormalizedFingerprint: ...
+    def normalize(self, minutiae: list[MinutiaCandidate], img_shape: tuple[int, int]) -> NormalizedFingerprint: ...
 
 
 # ---------------------------------------------------------------------------
@@ -138,7 +138,7 @@ class IMatcher(Protocol):
         """
         ...
 
-    async def match_batch(self, probes: np.ndarray, top_k: int = 5) -> List[MatchResult]:
+    async def match_batch(self, probes: np.ndarray, top_k: int = 5) -> list[MatchResult]:
         """
         Busca coincidencias para múltiples vectores en lote.
         Args:
@@ -148,15 +148,6 @@ class IMatcher(Protocol):
             Lista de resultados correspondientes.
         """
         ...
-
-
-class IVectorizer(Protocol):
-    """Protocol for fingerprint vectorization (RAG chunking).
-
-    Returns a list of `TripletVector` chunks, not a single global vector.
-    Each chunk represents a local invariant structure.
-    """
-    def vectorize(self, ctx: PipelineContext) -> List[TripletVector]: ...
 
 
 class ICoarseMatcher(Protocol):
@@ -180,7 +171,7 @@ class ICoarseMatcher(Protocol):
         """Insert or update one fingerprint embedding."""
         ...
 
-    def search(self, embedding: np.ndarray, top_k: int = 100) -> List[CoarseMatch]:
+    def search(self, embedding: np.ndarray, top_k: int = 100) -> list[CoarseMatch]:
         """Return the *top_k* candidates ranked by similarity."""
         ...
 
@@ -207,57 +198,15 @@ class IFineMatcher(Protocol):
         latent_graph: RidgeGraph,
         candidate_ids: list[str],
         top_k: int = 10,
-    ) -> List[CoarseMatch]:
+    ) -> list[CoarseMatch]:
         """Return the *top_k* candidates ranked by spatial/topological fit."""
-        ...
-
-
-class IChunkMatcher(Protocol):
-    """Port for chunked coarse matchers (Phase 15).
-
-    Unlike :class:`ICoarseMatcher` (single global vector per query),
-    this port accepts N query chunks and returns aggregated person-level
-    hits via weighted score fusion. Concrete adapters include
-    :class:`~src.db.qdrant_chunk_repository.QdrantChunkRepository`.
-    """
-
-    def ensure_collection(self) -> None:
-        """Create the backing collection if it does not already exist."""
-        ...
-
-    def bulk_insert_chunks(
-        self,
-        person_id: str,
-        fingerprint_id: str,
-        chunks: list[TripletVector],
-    ) -> int:
-        """Insert N chunks for one fingerprint enrollment."""
-        ...
-
-    def weighted_knn_search(
-        self,
-        query_chunks: list[TripletVector],
-        top_k_per_chunk: int = 5,
-    ) -> list[ChunkHit]:
-        """Search by chunk, return per-fingerprint hits (deduplicated)."""
-        ...
-
-    def aggregate_scores_by_person(
-        self,
-        hits: list[ChunkHit],
-    ) -> list[PersonHit]:
-        """Group chunk hits by person and sum weighted scores."""
-        ...
-
-    def delete_by_person(self, person_id: str) -> int:
-        """Remove all chunks for a person. Returns count."""
         ...
 
 
 class IMccMatcher(Protocol):
     """Port for MCC cylinder matchers (Phase 21).
 
-    Unlike :class:`IChunkMatcher` (Delaunay triplets), this port stores
+    Unlike the legacy Delaunay-triplet chunk matcher, this port stores
     and searches L2-normalized cylinder descriptors (default 144-D) directly via
     cosine KNN. Aggregation is normalized per-fingerprint (not per-person)
     to remove bias from enrollees with more minutiae.

@@ -16,14 +16,13 @@ from fastapi import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.dependencies import get_async_db, get_fingerprint_service
+from src.api.dependencies import get_async_db, get_fingerprint_service, get_mcc_matching_service
 from src.api.prefix import API_PREFIX
 from src.db.repositories.fingerprint_capture_repository import (
     FingerprintCaptureRepository,
 )
 from src.db.repositories.fingerprint_repository import FingerprintRepository
 from src.db.repositories.ridge_graph_repository import RidgeGraphRepository
-from src.db.qdrant_chunk_repository import QdrantChunkRepository
 from src.schemas.capture_schema import (
     CaptureResponse,
     CaptureUpdate,
@@ -34,14 +33,11 @@ from src.services.fingerprint_enrollment_service import (
     FingerprintEnrollmentService,
 )
 from src.services.fingerprint_service import FingerprintService
+from src.services.mcc_matching_service import MccMatchingService
 
 log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["captures"])
-
-
-def _get_qdrant_repo() -> QdrantChunkRepository:
-    return QdrantChunkRepository.from_host()
 
 
 @router.post(
@@ -63,14 +59,14 @@ async def upload_capture(
     notes: str | None = Form(None),
     session: AsyncSession = Depends(get_async_db),
     fp_service: FingerprintService = Depends(get_fingerprint_service),
-    qdrant_repo: QdrantChunkRepository = Depends(_get_qdrant_repo),
+    mcc_service: MccMatchingService = Depends(get_mcc_matching_service),
 ) -> Any:
     image_bytes = await file.read()
     if not image_bytes:
         raise HTTPException(status_code=400, detail="Empty file")
     try:
         svc = FingerprintEnrollmentService(
-            session, fp_service, qdrant_repo=qdrant_repo, nebula_repo=None,
+            session, fp_service, mcc_matching_service=mcc_service,
         )
         capture, graphs = await svc.create_capture(
             fingerprint_id=fingerprint_id,
@@ -96,11 +92,11 @@ async def upload_capture(
         is_reference=capture.is_reference,
         is_exemplar=capture.is_exemplar,
         notes=capture.notes,
-        graphs=[RidgeGraphResponse.model_validate(g) for g in graphs],
+        graphs=[],
     )
     return CaptureUploadResponse(
         capture=capture_dto,
-        graphs_created=len(graphs),
+        graphs_created=0,
     )
 
 

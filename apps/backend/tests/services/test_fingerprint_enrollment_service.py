@@ -69,13 +69,14 @@ class TestCreateCapture:
     async def test_creates_capture_with_graphs(self, session) -> None:
         p = await PersonRepository.create(session, external_id="X")
         fp = await FingerprintRepository.create(session, person_id=p.id, finger_position=2)
-        svc = FingerprintEnrollmentService(session, make_fingerprint_service(), qdrant_repo=None)
+        svc = FingerprintEnrollmentService(session, make_fingerprint_service())
         image_bytes = b"FAKE_IMAGE_BYTES"
         capture, graphs = await svc.create_capture(fp.id, image_bytes)
         assert capture.id is not None
         assert capture.fingerprint_id == fp.id
-        assert len(graphs) >= 1
-        assert capture.num_graphs == len(graphs)
+        # RidgeGraph extraction removed per "No Legacy" mandate
+        assert len(graphs) == 0
+        assert capture.num_graphs == 0
 
     @pytest.mark.asyncio
     async def test_updates_capture_count_on_parent(self, session) -> None:
@@ -135,8 +136,6 @@ def test_init_accepts_mcc_service() -> None:
     svc = FingerprintEnrollmentService.__new__(FingerprintEnrollmentService)
     svc._session = MagicMock()
     svc._fp_service = MagicMock()
-    svc._qdrant = None
-    svc._nebula = None
     svc._mcc_service = MagicMock()
     assert svc._mcc_service is not None
 
@@ -164,8 +163,6 @@ async def test_index_mcc_invokes_enroll_with_image_bytes() -> None:
     svc._session = AsyncMock()
     svc._session.get.return_value = person
     svc._fp_service = MagicMock()
-    svc._qdrant = None
-    svc._nebula = None
     svc._mcc_service = _FakeSvc()
 
     capture = MagicMock()

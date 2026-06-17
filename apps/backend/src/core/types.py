@@ -146,19 +146,6 @@ class RidgeGraph:
 
 
 @dataclass(frozen=True, slots=True)
-class TripletVector:
-    """
-    A local invariant structure (RAG chunk) representing a Delaunay triangle
-    of three minutiae points.
-
-    - `features`: Invariant vector (side lengths + angles + types) for KNN search.
-    - `weight`: Forensic importance weight (0.0 to 1.0). Higher = closer to Core.
-    """
-    features: List[float]
-    weight: float
-
-
-@dataclass(frozen=True, slots=True)
 class GraphEmbedding:
     """
     Macro-topology features of a RidgeGraph, used as a dense vector
@@ -246,28 +233,6 @@ class CoarseMatch:
     fingerprint_id: str
     score: float
     metadata: dict = field(default_factory=dict)
-
-
-@dataclass(frozen=True, slots=True)
-class ChunkHit:
-    """A single chunk-level hit from Qdrant chunk search."""
-    person_id: str
-    fingerprint_id: str
-    capture_id: str
-    graph_id: str
-    chunk_type: str
-    weight: float
-    similarity: float
-    weighted_score: float
-
-
-@dataclass(frozen=True, slots=True)
-class PersonHit:
-    """Aggregated person-level result from chunk search."""
-    person_id: str
-    total_score: float
-    hits: int
-    contributing_fingerprints: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
