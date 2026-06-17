@@ -9,7 +9,7 @@ import {
   CardFooter,
 } from "@/components/ui/card";
 import { useCanvasDrawer, type EditingMode } from "@/hooks/useCanvasDrawer";
-import type { MinutiaPoint } from "@/client";
+import type { MinutiaPoint } from "@/lib/api";
 
 interface MinutiaeEditorProps {
   imageUrl: string;

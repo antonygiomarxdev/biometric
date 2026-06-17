@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from "react";
-import type { MinutiaPoint } from "../client";
+import type { MinutiaPoint } from "@/lib/api";
 
 export type EditingMode = "view" | "add" | "delete" | "move";
 
