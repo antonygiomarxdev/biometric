@@ -5,19 +5,28 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
-import uuid
+from typing import TYPE_CHECKING
 
 import cv2
 import numpy as np
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.types import NormalizedFingerprint
-from src.db.models import Fingerprint, FingerprintCapture, Person, RidgeGraph
 from src.db.repositories.fingerprint_capture_repository import (
     FingerprintCaptureRepository,
 )
 from src.db.repositories.fingerprint_repository import FingerprintRepository
-from src.services.fingerprint_service import FingerprintService
+
+if TYPE_CHECKING:
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from src.core.types import NormalizedFingerprint
+    from src.db.models import Fingerprint, FingerprintCapture, RidgeGraph
+    from src.services.fingerprint_service import FingerprintService
+    from src.services.mcc_matching_service import MccMatchingService
+
+from src.db.models import Person
+from src.dev.logger import dev_log
 
 log = logging.getLogger(__name__)
 
@@ -27,7 +36,7 @@ class FingerprintEnrollmentService:
         self,
         session: AsyncSession,
         fingerprint_service: FingerprintService,
-        mcc_matching_service=None,
+        mcc_matching_service: MccMatchingService | None = None,
     ) -> None:
         self._session = session
         self._fp_service = fingerprint_service
@@ -38,24 +47,55 @@ class FingerprintEnrollmentService:
         fingerprint_id: uuid.UUID,
         image_bytes: bytes,
         image_dpi: int | None = None,
+        *,
         is_reference: bool = False,
         is_exemplar: bool = True,
         notes: str | None = None,
     ) -> tuple[FingerprintCapture, list[RidgeGraph]]:
+        import time as _time
+        t0 = _time.monotonic()
         fp = await FingerprintRepository.get_by_id(self._session, fingerprint_id)
         if fp is None:
-            raise ValueError(f"Fingerprint {fingerprint_id} not found")
+            msg = f"Fingerprint {fingerprint_id} not found"
+            raise ValueError(msg)
 
         image_hash = hashlib.sha256(image_bytes).hexdigest()
+        dev_log(
+            "enroll.start",
+            fingerprint_id=str(fingerprint_id),
+            person_id=str(fp.person_id),
+            image_bytes=len(image_bytes),
+            image_dpi=image_dpi,
+            is_reference=is_reference,
+        )
 
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_GRAYSCALE)
-        if img is None:
-            raise ValueError("Failed to decode image bytes")
-
+        # Run the MCC pipeline once to get the enhanced image and the
+        # real minutiae count. The previous FingerprintService pipeline
+        # re-binarized the skeleton and produced 0 minutiae (the
+        # original root cause of empty previews on SOCOFing).
         loop = asyncio.get_running_loop()
-        normalized: NormalizedFingerprint = await loop.run_in_executor(
-            None, self._fp_service._process_image, img, str(fingerprint_id),
+        enhanced_png: bytes | None = None
+        minutiae_count = 0
+        if self._mcc_service is not None:
+            try:
+                preview_result = await loop.run_in_executor(
+                    None, self._mcc_service.preview, image_bytes,
+                )
+                enhanced = preview_result["enhanced_image"]
+                minutiae_count = len(preview_result["minutiae"])
+                ok, buf = cv2.imencode(".png", enhanced)
+                if ok:
+                    enhanced_png = buf.tobytes()
+            except Exception as exc:
+                log.warning("MCC preview failed during enroll: %s", exc)
+
+        t_pipeline = _time.monotonic()
+        dev_log(
+            "enroll.pipeline",
+            fingerprint_id=str(fingerprint_id),
+            minutiae=minutiae_count,
+            has_enhanced=enhanced_png is not None,
+            pipeline_ms=round((t_pipeline - t0) * 1000, 1),
         )
 
         capture = await FingerprintCaptureRepository.create(
@@ -68,15 +108,16 @@ class FingerprintEnrollmentService:
             is_reference=is_reference,
             is_exemplar=is_exemplar,
             notes=notes,
+            enhanced_image=enhanced_png,
         )
 
-        # MCC cylinders indexed in _index_mcc (Phase 21)
-        # RidgeGraph storage removed per "No Legacy" mandate
         graphs: list[RidgeGraph] = []
 
+        # Backfill num_minutiae with the real MCC count (the previous
+        # fingerprint-service pipeline returned 0).
         await FingerprintCaptureRepository.update(
             self._session, capture.id,
-            num_minutiae=len(normalized.minutiae) if normalized.minutiae else 0,
+            num_minutiae=minutiae_count,
             num_graphs=0,
         )
 
@@ -87,6 +128,13 @@ class FingerprintEnrollmentService:
         )
 
         await self._session.refresh(capture)
+        dev_log(
+            "enroll.done",
+            capture_id=str(capture.id),
+            fingerprint_id=str(fingerprint_id),
+            num_minutiae=capture.num_minutiae,
+            total_ms=round((_time.monotonic() - t0) * 1000, 1),
+        )
         return capture, graphs
 
     async def _index_mcc(

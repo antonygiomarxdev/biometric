@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import (
     APIRouter,
@@ -12,16 +12,15 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Response,
     UploadFile,
 )
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_async_db, get_fingerprint_service, get_mcc_matching_service
 from src.api.prefix import API_PREFIX
 from src.db.repositories.fingerprint_capture_repository import (
     FingerprintCaptureRepository,
 )
-from src.db.repositories.fingerprint_repository import FingerprintRepository
 from src.db.repositories.ridge_graph_repository import RidgeGraphRepository
 from src.schemas.capture_schema import (
     CaptureResponse,
@@ -32,8 +31,14 @@ from src.schemas.capture_schema import (
 from src.services.fingerprint_enrollment_service import (
     FingerprintEnrollmentService,
 )
-from src.services.fingerprint_service import FingerprintService
-from src.services.mcc_matching_service import MccMatchingService
+
+if TYPE_CHECKING:
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from src.services.fingerprint_service import FingerprintService
+    from src.services.mcc_matching_service import MccMatchingService
 
 log = logging.getLogger(__name__)
 
@@ -54,8 +59,8 @@ async def upload_capture(
     fingerprint_id: uuid.UUID,
     file: UploadFile = File(..., description="Fingerprint image (BMP, PNG, JPEG)"),
     image_dpi: int | None = Form(None),
-    is_reference: bool = Form(False),
-    is_exemplar: bool = Form(True),
+    is_reference: bool = Form(default=False),  # noqa: FBT001
+    is_exemplar: bool = Form(default=True),  # noqa: FBT001
     notes: str | None = Form(None),
     session: AsyncSession = Depends(get_async_db),
     fp_service: FingerprintService = Depends(get_fingerprint_service),
@@ -68,7 +73,7 @@ async def upload_capture(
         svc = FingerprintEnrollmentService(
             session, fp_service, mcc_matching_service=mcc_service,
         )
-        capture, graphs = await svc.create_capture(
+        capture, _ = await svc.create_capture(
             fingerprint_id=fingerprint_id,
             image_bytes=image_bytes,
             image_dpi=image_dpi,
@@ -77,7 +82,7 @@ async def upload_capture(
             notes=notes,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     capture_dto = CaptureResponse(
         id=capture.id,
         fingerprint_id=capture.fingerprint_id,
@@ -101,7 +106,46 @@ async def upload_capture(
 
 
 @router.get(
-    API_PREFIX + "/captures/{capture_id}", 
+    API_PREFIX + "/captures/{capture_id}/image",
+    summary="Get the Gabor-enhanced PNG bytes for a capture (Phase 23)",
+    description=(
+        "Returns the persisted Gabor-enhanced image as image/png. "
+        "Used by the comparison view in /analisis to display the candidate's "
+        "enrolled image side-by-side with the probe."
+    ),
+    responses={
+        200: {"content": {"image/png": {}}, "description": "Enhanced PNG bytes"},
+        404: {"description": "Capture not found"},
+        503: {"description": "Capture has no persisted enhanced image"},
+    },
+)
+async def get_capture_image(
+    capture_id: uuid.UUID,
+    session: AsyncSession = Depends(get_async_db),
+) -> Response:
+    """Serve the Gabor-enhanced PNG bytes for visual comparison.
+
+    The enhanced image is persisted during enrollment (Phase 23
+    amendment, migration 0006). If the capture was created before the
+    amendment ran, the column is NULL and we return 503.
+    """
+    c = await FingerprintCaptureRepository.get_by_id(session, capture_id)
+    if c is None:
+        raise HTTPException(status_code=404, detail="Capture not found")
+    if c.enhanced_image is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Capture has no persisted enhanced image; re-enroll required",
+        )
+    return Response(
+        content=c.enhanced_image,
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+@router.get(
+    API_PREFIX + "/captures/{capture_id}",
     response_model=CaptureResponse,
     summary="Get capture details",
     responses={404: {"description": "Capture not found"}}
@@ -139,7 +183,7 @@ async def get_capture_graphs(
 
 
 @router.patch(
-    API_PREFIX + "/captures/{capture_id}", 
+    API_PREFIX + "/captures/{capture_id}",
     response_model=CaptureResponse,
     summary="Update capture",
     responses={404: {"description": "Capture not found"}}
