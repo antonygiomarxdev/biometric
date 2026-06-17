@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
-import { Fingerprint, FileSearch, AlertCircle } from "lucide-react";
+import { Fingerprint, FileSearch, AlertCircle, Search } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -139,6 +139,15 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={() => navigate("/search")}
+              className="gap-2"
+            >
+              <Search className="w-4 h-4" />
+              Buscar Huella
+            </Button>
             <Button
               size="lg"
               onClick={() => navigate("/enroll")}

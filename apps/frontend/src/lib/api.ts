@@ -385,3 +385,17 @@ export function createDecision(
     body: decision,
   });
 }
+
+// Cases (used by /search "Crear caso desde match" flow)
+export interface CaseCreateInput {
+  case_number: string;
+  title: string;
+  description?: string | null;
+  status?: "open" | "closed" | "archived";
+}
+
+export function createCase(
+  body: CaseCreateInput,
+): Promise<CaseResponse> {
+  return request<CaseResponse>("POST", "/api/v1/cases", { body });
+}
