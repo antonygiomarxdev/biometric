@@ -27,11 +27,11 @@ Aplicación cliente para analistas y peritos forenses. Desarrollada con **React,
 
 ```bash
 # Instalar dependencias
-npm install
+pnpm install
 
 # Correr servidor de desarrollo
-npm run dev
+pnpm run dev
 
 # Compilar para producción
-npm run build
+pnpm run build
 ```

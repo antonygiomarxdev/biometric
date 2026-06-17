@@ -1,4 +1,4 @@
-# Development infrastructure — PostgreSQL + pgvector, Qdrant, MinIO
+# Development infrastructure — PostgreSQL + PostgreSQL 17, Qdrant, MinIO
 # Usage: docker compose -f docker-compose.dev.yml up -d
 
 services:
