@@ -1,8 +1,7 @@
 """Pytest configuration and global autouse mocks.
 
-All expensive resources (GPU, ONNX models, LLM API calls, pgvector) are
-mocked at the session level so tests run in under 5 seconds without real
-infrastructure.
+All expensive resources (GPU, LLM API calls) are mocked at the session
+level so unit tests run under 5 seconds without real infrastructure.
 """
 
 from __future__ import annotations
@@ -40,9 +39,6 @@ def _compile_jsonb_sqlite(type_: Any, compiler: Any, **kw: Any) -> str:  # noqa:
 os.environ.setdefault("FORCE_CPU", "1")
 os.environ.setdefault("AI_USE_GPU", "false")
 os.environ.setdefault("ENABLE_AI_TRACING", "false")
-os.environ.setdefault(
-    "DATABASE_URL", "sqlite:///:memory:"
-)
 
 # ---------------------------------------------------------------------------
 # Pytest hooks
@@ -131,65 +127,6 @@ def _mock_processing_pipeline() -> Generator[None, None, None]:
 # ---------------------------------------------------------------------------
 # Shared fixtures — preserved from the original conftest
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture(scope="session")
-def test_config() -> Any:
-    """Test configuration with SQLite in-memory database."""
-    # Local import to avoid dependency cycle at module level
-    from src.core.config import Config
-
-    return Config(
-        database_url="sqlite:///:memory:",
-        db_pool_size=1,
-        db_max_overflow=0,
-        vector_dimension=256,
-        vector_index_lists=100,
-        image_resize_width=350,
-        enhancement_enabled=True,
-        batch_size=4,
-        num_workers=1,
-        match_threshold=0.8,
-        top_k_matches=5,
-        log_level="DEBUG",
-        enable_metrics=True,
-    )
-
-
-@pytest.fixture
-def db_manager(test_config: Any) -> Any:
-    """Database manager for tests using SQLite in-memory."""
-    
-
-    manager = DatabaseManager(database_url=test_config.database_url)
-    manager.create_tables()
-    yield manager
-    manager.drop_tables()
-    manager.close()
-
-
-@pytest.fixture
-def vector_index(db_manager: Any, test_config: Any) -> Any:
-    """Vector index for tests, backed by SQLite in-memory."""
-    
-
-    index = VectorIndex(
-        dimension=test_config.vector_dimension,
-        db_manager=db_manager,
-    )
-    yield index
-    index.reset()
-
-
-@pytest.fixture
-def repository(db_manager: Any, vector_index: Any) -> Any:
-    """Repository for tests."""
-    
-
-    repo = FingerprintRepository()
-    repo.db_manager = db_manager
-    repo.vector_index = vector_index
-    return repo
 
 
 @pytest.fixture

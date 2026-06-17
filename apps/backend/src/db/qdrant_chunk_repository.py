@@ -70,8 +70,17 @@ class QdrantChunkRepository(IChunkMatcher):
         port: int = _DEFAULT_PORT,
         collection: str = COLLECTION_NAME,
     ) -> "QdrantChunkRepository":
-        """Construct from a host/port pair (production convenience)."""
-        return cls(QdrantClient(host=host, port=port), collection=collection)
+        """Construct from a host/port pair, falling back to in-memory on failure."""
+        try:
+            client = QdrantClient(host=host, port=port)
+            client.get_collections()
+            return cls(client, collection=collection)
+        except Exception as exc:
+            logger.warning(
+                "Qdrant at %s:%s unreachable (%s). Falling back to in-memory storage.",
+                host, port, exc,
+            )
+            return cls(QdrantClient(location=":memory:"), collection=collection)
 
     # ------------------------------------------------------------------
     # Collection management

@@ -3,7 +3,6 @@ SQLAlchemy ORM models for the forensic fingerprint system.
 
 Per D-06: Alembic is the sole migration tool — never use create_all.
 Per D-07: All primary keys use UUIDv7 (time-ordered) via uuid6.uuid7().
-Per D-08: pgvector HNSW index defined from day 1.
 """
 
 import uuid

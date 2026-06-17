@@ -14,7 +14,6 @@ dependencies = [
     "scikit-image>=0.21.0",
     "opencv-python-headless>=4.8.0",
     "cupy-cuda13x>=13.0.0",
-    "pgvector>=0.2.5",
     "fastapi>=0.104.0",
     "uvicorn[standard]>=0.24.0",
     "sqlalchemy>=2.0.0",
@@ -54,6 +53,7 @@ tracing = [
 [project.scripts]
 biometric = "src.api.cli:cli"
 biometric-api = "src.main:app"
+dev = "src.api.dev:main"
 
 [build-system]
 requires = ["hatchling"]

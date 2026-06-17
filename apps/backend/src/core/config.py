@@ -328,17 +328,13 @@ class Config:
 
     @property
     def async_database_url(self) -> str:
-        """Async variant of ``database_url`` using psycopg (v3) driver."""
+        """Async variant of ``database_url``."""
         url = self.database_url
         if url.startswith("postgresql://"):
             return url.replace("postgresql://", "postgresql+psycopg://", 1)
         if url.startswith("postgresql+psycopg2://"):
             return url.replace("postgresql+psycopg2://", "postgresql+psycopg://", 1)
         return url
-
-    # Vector Index (pgvector)
-    vector_dimension: int = field(default_factory=lambda: int(os.getenv("VECTOR_DIMENSION", "256")))
-    vector_index_lists: int = field(default_factory=lambda: int(os.getenv("VECTOR_INDEX_LISTS", "100")))
 
     # Processing
     image_resize_width: int = field(default_factory=lambda: int(os.getenv("IMAGE_RESIZE_WIDTH", "350")))
