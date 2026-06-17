@@ -15,6 +15,7 @@ from src.core.config import (
     ExtractionConfig,
     FusionConfig,
     GaborConfig,
+    MccMatchingConfig,
     OrientationFieldConfig,
     PipelineConfig,
     QdrantIndexConfig,
@@ -344,3 +345,52 @@ class TestEnhancerDefaultsConfig:
             EnhancerConfig.from_env().gradient_sigma
             == EnhancerConfig().gradient_sigma
         )
+
+
+# ---------------------------------------------------------------------------
+# Phase 21: MCC cylinder matching config
+# ---------------------------------------------------------------------------
+
+
+class TestMccMatchingConfigDefaults:
+    """MccMatchingConfig defaults match the spike results."""
+
+    def test_defaults(self) -> None:
+        cfg = MccMatchingConfig()
+        assert cfg.collection == "mcc_cylinders"
+        assert cfg.vector_size == 144
+        assert cfg.top_k_per_cylinder == 5
+        assert cfg.score_normalization == "fingerprint"
+
+    def test_top_level_config_exposes_mcc(self) -> None:
+        cfg = Config()
+        assert isinstance(cfg.matching, MccMatchingConfig)
+        assert cfg.matching.collection == "mcc_cylinders"
+        assert cfg.matching.vector_size == 144
+        assert cfg.matching.top_k_per_cylinder == 5
+        assert cfg.matching.score_normalization == "fingerprint"
+
+
+class TestMccMatchingConfigFromEnv:
+    """Environment variables should override MccMatchingConfig defaults."""
+
+    @pytest.fixture(autouse=True)
+    def _set_env(self) -> Any:
+        env_vars = {
+            "MCC_COLLECTION": "test_mcc",
+            "MCC_VECTOR_SIZE": "256",
+            "MCC_TOP_K_PER_CYLINDER": "10",
+            "MCC_SCORE_NORMALIZATION": "global",
+        }
+        for k, v in env_vars.items():
+            os.environ[k] = v
+        yield
+        for k in env_vars:
+            os.environ.pop(k, None)
+
+    def test_overrides(self) -> None:
+        cfg = MccMatchingConfig()
+        assert cfg.collection == "test_mcc"
+        assert cfg.vector_size == 256
+        assert cfg.top_k_per_cylinder == 10
+        assert cfg.score_normalization == "global"
