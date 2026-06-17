@@ -19,7 +19,8 @@ Eliminate naming inconsistencies across the backend so every developer
    `__init__`, never creates them internally.
 7. **Private attrs `_`**: All instance attributes of a service are `self._x`.
 8. **Test mocks**: Always `mock_session` for the fake `AsyncSession`.
-9. **Error messages**: Face the user in Spanish, everything else in English.
+9. **Language (per AGENTS.md)**: Code, comments, docstrings, identifiers,
+   log messages → English. Only user-facing error responses → Spanish.
 
 ## Tasks
 
@@ -50,9 +51,10 @@ Eliminate naming inconsistencies across the backend so every developer
 - [ ] Rename `mock_sync` → `mock_sync_session`
 - [ ] Standardize test helper names
 
-### Wave 6: Error message audit
-- [ ] Ensure all user-facing error messages are in Spanish
-- [ ] Keep internal log messages in English
+### Wave 6: Language audit (per AGENTS.md)
+- [ ] User-facing error messages (`detail="..."`) → Spanish
+- [ ] Code, comments, docstrings, identifiers → English (audit for stray Spanish)
+- [ ] Log messages → English
 
 ## Acceptance Criteria
 
@@ -61,5 +63,6 @@ Eliminate naming inconsistencies across the backend so every developer
 - [ ] `db: AsyncSession` has zero occurrences (only `session`)
 - [ ] All route decorators use relative paths
 - [ ] All test files use `mock_session`
-- [ ] `grep -r "not found" src/api/` returns zero matches (everything uses Spanish)
+- [ ] User-facing error messages are in Spanish
+- [ ] Code, comments, and docstrings are in English
 - [ ] All 707+ tests pass
