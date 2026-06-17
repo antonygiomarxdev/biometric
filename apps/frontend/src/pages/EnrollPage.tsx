@@ -381,8 +381,11 @@ export default function EnrollPage(): React.JSX.Element {
                   Huella enrolada exitosamente
                 </h2>
                 <p className="text-sm text-muted-foreground mt-2 max-w-md">
-                  Captura registrada con {enrolledCapture.num_minutiae ?? 0} minucias. Los
-                  cilindros MCC se han indexado en la base de datos AFIS.
+                  Captura registrada con {enrolledCapture.num_minutiae ?? 0} minucias
+                  {editedMinutiae.length > 0
+                    ? ` (${editedMinutiae.length} editadas)`
+                    : ""}. Los cilindros MCC se han indexado en la base de datos
+                  AFIS.
                 </p>
                 <div className="flex items-center gap-2 mt-6">
                   <Button variant="outline" onClick={handleEnrollAnother}>
