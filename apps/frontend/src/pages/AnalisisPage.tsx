@@ -1,30 +1,29 @@
-import { useState, useRef, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
-  Search,
   Upload,
   Fingerprint,
   Loader2,
   XCircle,
   CheckCircle2,
   ArrowLeft,
-  FilePlus,
   UserPlus,
+  FilePlus,
+  Search,
 } from "lucide-react";
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
-import { CandidateCard } from "@/components/fingerprint/CandidateCard";
-import { CandidateDetailPanel } from "@/components/fingerprint/CandidateDetailPanel";
 import {
-  searchMatching,
   getMinutiaeForImage,
+  searchMatching,
   listPersons,
   createFingerprintSlot,
   enrollFingerprint,
   createCase,
+  fetchCaptureImage,
   type MatchCandidate,
   type MatchSearchResponse,
   type MinutiaPoint,
@@ -35,36 +34,42 @@ import {
 const VALID_TYPES = ["image/bmp", "image/png", "image/jpeg", "image/jpg"];
 const MAX_BYTES = 10 * 1024 * 1024;
 
-type Step = "upload" | "analyze" | "result" | "decide";
+const PALETTE_HIT = "#ffffff";
+const PALETTE_HIT_RING = "#22c55e";
 
 export default function AnalisisPage() {
   const navigate = useNavigate();
   const { addToast } = useToast();
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const probeCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const candidateCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const probeImgRef = useRef<HTMLImageElement | null>(null);
+  const candidateImgRef = useRef<HTMLImageElement | null>(null);
 
   const [latentFile, setLatentFile] = useState<File | null>(null);
-  const [latentPreview, setLatentPreview] = useState<string | null>(null);
-  const [step, setStep] = useState<Step>("upload");
+  const [probeDataUrl, setProbeDataUrl] = useState<string | null>(null);
   const [preview, setPreview] = useState<FingerprintPreviewResponse | null>(null);
   const [searchResult, setSearchResult] = useState<MatchSearchResponse | null>(null);
-  const [selectedCandidate, setSelectedCandidate] = useState<MatchCandidate | null>(null);
+  const [selectedIdx, setSelectedIdx] = useState(0);
 
-  // Enrollment mode: pick a person + their slot
-  const [enrollPersonId, setEnrollPersonId] = useState<string>("");
+  const [candidateDataUrl, setCandidateDataUrl] = useState<string | null>(null);
+  const [candidateLoading, setCandidateLoading] = useState(false);
+
   const [showEnrollPicker, setShowEnrollPicker] = useState(false);
+  const [enrollPersonId, setEnrollPersonId] = useState("");
   const [enrolling, setEnrolling] = useState(false);
-
-  // Create-case mode
   const [showCreateCase, setShowCreateCase] = useState(false);
   const [caseNumber, setCaseNumber] = useState("");
   const [caseTitle, setCaseTitle] = useState("");
+
+  // ============================================================
+  // Mutations / queries
+  // ============================================================
 
   const previewMutation = useMutation({
     mutationFn: (file: File) => getMinutiaeForImage(file),
     onSuccess: (result) => {
       setPreview(result);
-      setStep("analyze");
     },
     onError: (err: Error) => {
       addToast({ type: "error", title: "Error al procesar", description: err.message });
@@ -75,18 +80,22 @@ export default function AnalisisPage() {
     mutationFn: (file: File) => searchMatching(file, 10),
     onSuccess: (result) => {
       setSearchResult(result);
-      setSelectedCandidate(result.candidates[0] ?? null);
-      setStep("result");
-      addToast({
-        type: result.candidates.length > 0 ? "success" : "info",
-        title: result.candidates.length > 0
-          ? `${result.candidates.length} candidato${result.candidates.length !== 1 ? "s" : ""}`
-          : "Sin coincidencias",
-        description: result.candidates.length > 0
-          ? "Revisa los candidatos abajo"
-          : "Puedes enrolar esta huella si pertenece a alguien nuevo",
-        duration: 4000,
-      });
+      setSelectedIdx(0);
+      if (result.candidates.length === 0) {
+        addToast({
+          type: "info",
+          title: "Sin coincidencias",
+          description: "Podés enrolar esta huella si pertenece a alguien nuevo.",
+          duration: 5000,
+        });
+      } else {
+        addToast({
+          type: "success",
+          title: `${result.candidates.length} candidato${result.candidates.length !== 1 ? "s" : ""} encontrado${result.candidates.length !== 1 ? "s" : ""}`,
+          description: "Hacé click en uno para ver la comparación",
+          duration: 4000,
+        });
+      }
     },
     onError: (err: Error) => {
       addToast({ type: "error", title: "Error en búsqueda", description: err.message });
@@ -102,12 +111,11 @@ export default function AnalisisPage() {
       addToast({
         type: "success",
         title: "Huella enrolada",
-        description: "Ahora puedes buscar coincidencias",
+        description: "Ahora podés buscar coincidencias.",
         duration: 4000,
       });
       setShowEnrollPicker(false);
       setEnrollPersonId("");
-      setStep("analyze");
     },
     onError: (err: Error) => {
       addToast({ type: "error", title: "Error al enrolar", description: err.message });
@@ -120,12 +128,10 @@ export default function AnalisisPage() {
       addToast({
         type: "success",
         title: "Caso creado",
-        description: `${newCase.case_number} — ${newCase.title}`,
+        description: `${newCase.case_number}`,
         duration: 4000,
       });
       setShowCreateCase(false);
-      setCaseNumber("");
-      setCaseTitle("");
       navigate(`/cases/${newCase.id}/compare`);
     },
     onError: (err: Error) => {
@@ -133,44 +139,39 @@ export default function AnalisisPage() {
     },
   });
 
-  const handleFileChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
+  const { data: persons } = useQuery({
+    queryKey: ["persons"],
+    queryFn: () => listPersons(0, 100),
+  });
+
+  // ============================================================
+  // Handlers
+  // ============================================================
+
+  const handleFile = useCallback(
+    (file: File) => {
       if (!VALID_TYPES.includes(file.type as (typeof VALID_TYPES)[number])) {
-        addToast({
-          type: "error",
-          title: "Tipo inválido",
-          description: "BMP, PNG o JPEG",
-        });
+        addToast({ type: "error", title: "Tipo inválido", description: "BMP, PNG o JPEG" });
         return;
       }
       if (file.size > MAX_BYTES) {
-        addToast({
-          type: "error",
-          title: "Archivo demasiado grande",
-          description: "Máx 10MB",
-        });
+        addToast({ type: "error", title: "Archivo grande", description: "Máx 10MB" });
         return;
       }
       const reader = new FileReader();
       reader.onload = (ev) => {
-        setLatentPreview(ev.target?.result as string);
+        setProbeDataUrl(ev.target?.result as string);
         setLatentFile(file);
-        setStep("upload");
         setPreview(null);
         setSearchResult(null);
-        setSelectedCandidate(null);
+        setSelectedIdx(0);
+        setCandidateDataUrl(null);
+        previewMutation.mutate(file);
       };
       reader.readAsDataURL(file);
     },
-    [addToast],
+    [addToast, previewMutation],
   );
-
-  const handleAnalyze = useCallback(() => {
-    if (!latentFile) return;
-    previewMutation.mutate(latentFile);
-  }, [latentFile, previewMutation]);
 
   const handleSearch = useCallback(() => {
     if (!latentFile) return;
@@ -186,66 +187,154 @@ export default function AnalisisPage() {
     );
   }, [latentFile, enrollPersonId, enrollMutation]);
 
-  const handleOpenCreateCase = useCallback((candidate: MatchCandidate) => {
-    const label = candidate.full_name ?? candidate.external_id ?? candidate.person_id.slice(0, 8);
+  const handleOpenCreateCase = useCallback((c: MatchCandidate) => {
+    const label = c.full_name ?? c.external_id ?? c.person_id.slice(0, 8);
     const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-    setCaseNumber(`LATENT-${stamp}-${candidate.person_id.slice(0, 4).toUpperCase()}`);
+    setCaseNumber(`LATENT-${stamp}-${c.person_id.slice(0, 4).toUpperCase()}`);
     setCaseTitle(`Identificación latente vs ${label}`);
     setShowCreateCase(true);
   }, []);
 
-  const handleSubmitCreateCase = useCallback(() => {
-    if (!selectedCandidate) return;
-    if (!caseNumber.trim() || !caseTitle.trim()) {
-      addToast({ type: "error", title: "Campos incompletos" });
-      return;
-    }
-    createCaseMutation.mutate({
-      case_number: caseNumber.trim(),
-      title: caseTitle.trim(),
-      description: `Generado desde análisis top-level. Candidato: ${selectedCandidate.full_name ?? selectedCandidate.external_id ?? selectedCandidate.person_id}.`,
-      status: "open",
-    });
-  }, [selectedCandidate, caseNumber, caseTitle, addToast, createCaseMutation]);
-
   const handleReset = useCallback(() => {
     setLatentFile(null);
-    setLatentPreview(null);
+    setProbeDataUrl(null);
     setPreview(null);
     setSearchResult(null);
-    setSelectedCandidate(null);
-    setStep("upload");
-    setShowEnrollPicker(false);
-    setShowCreateCase(false);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    setSelectedIdx(0);
+    setCandidateDataUrl(null);
   }, []);
 
-  const probeMinutiae: MinutiaPoint[] = (searchResult?.probe_minutiae ?? []).map(
-    (m) => ({ x: m.x, y: m.y, angle: m.angle, type: m.type }),
-  );
+  // ============================================================
+  // Load candidate image when selection changes
+  // ============================================================
+
+  const selectedCandidate: MatchCandidate | null =
+    searchResult?.candidates[selectedIdx] ?? null;
+
+  useEffect(() => {
+    if (!selectedCandidate) {
+      setCandidateDataUrl(null);
+      return;
+    }
+    const captureId = selectedCandidate.match_trace[0]?.candidate_capture_id;
+    if (!captureId) {
+      setCandidateDataUrl(null);
+      return;
+    }
+    let cancelled = false;
+    setCandidateLoading(true);
+    fetchCaptureImage(captureId)
+      .then((url) => {
+        if (!cancelled) {
+          setCandidateDataUrl(url);
+          setCandidateLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setCandidateLoading(false);
+          // 503 is expected for legacy captures; degrade gracefully
+          if (!String(err.message).includes("503")) {
+            addToast({
+              type: "warning",
+              title: "No se pudo cargar la imagen del candidato",
+              description: "Re-enrolá la captura para tener la imagen enhanced.",
+            });
+          }
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCandidate, addToast]);
+
+  // ============================================================
+  // Canvas drawing: probe image with minutiae
+  // ============================================================
+
+  useEffect(() => {
+    const canvas = probeCanvasRef.current;
+    if (!canvas || !probeDataUrl) return;
+    const img = new Image();
+    img.onload = () => {
+      probeImgRef.current = img;
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(img, 0, 0);
+
+      const matchedIndices = new Set<number>();
+      if (selectedCandidate) {
+        for (const e of selectedCandidate.match_trace) {
+          matchedIndices.add(e.probe_cylinder_index);
+        }
+      }
+
+      if (preview?.minutiae) {
+        for (let i = 0; i < preview.minutiae.length; i++) {
+          const m = preview.minutiae[i];
+          if (!m) continue;
+          if (matchedIndices.has(i)) {
+            drawDot(ctx, m.x, m.y, 7, PALETTE_HIT, PALETTE_HIT_RING, 2.5);
+          } else {
+            drawDot(ctx, m.x, m.y, 4, "#9ca3af", "#ffffff", 1);
+          }
+        }
+      }
+    };
+    img.src = probeDataUrl;
+  }, [probeDataUrl, preview, selectedCandidate]);
+
+  // ============================================================
+  // Canvas drawing: candidate image with matched minutiae
+  // ============================================================
+
+  useEffect(() => {
+    const canvas = candidateCanvasRef.current;
+    if (!canvas) return;
+    if (!candidateDataUrl) {
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+      return;
+    }
+    const img = new Image();
+    img.onload = () => {
+      candidateImgRef.current = img;
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(img, 0, 0);
+
+      if (selectedCandidate) {
+        const matched: MinutiaPoint[] = selectedCandidate.match_trace.map(
+          (e) => ({ x: e.candidate_x, y: e.candidate_y, angle: e.candidate_angle, type: 2 }),
+        );
+        for (const m of matched) {
+          drawDot(ctx, m.x, m.y, 7, PALETTE_HIT, PALETTE_HIT_RING, 2.5);
+        }
+      }
+    };
+    img.src = candidateDataUrl;
+  }, [candidateDataUrl, selectedCandidate]);
+
+  // ============================================================
+  // Render
+  // ============================================================
 
   return (
-    <div className="min-h-screen bg-background text-foreground p-8 font-sans dark">
-      <div className="max-w-7xl mx-auto space-y-6">
-        <header className="flex items-center justify-between border-b border-border pb-6">
+    <div className="min-h-screen bg-background text-foreground p-6 font-sans dark">
+      <div className="max-w-[1400px] mx-auto space-y-4">
+        <header className="flex items-center justify-between border-b border-border pb-3">
           <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => navigate("/")}
-              aria-label="Volver al panel"
-            >
+            <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
               <ArrowLeft className="w-5 h-5" />
             </Button>
-            <div className="p-2 bg-primary/10 rounded-full">
-              <Fingerprint className="w-6 h-6 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">Análisis de Huella</h1>
-              <p className="text-muted-foreground text-sm">
-                Subí, analizá, buscá — todo en un solo paso
-              </p>
-            </div>
+            <Fingerprint className="w-5 h-5 text-primary" />
+            <h1 className="text-xl font-bold tracking-tight">Análisis de Huella</h1>
           </div>
           {latentFile && (
             <Button variant="ghost" onClick={handleReset}>
@@ -254,241 +343,274 @@ export default function AnalisisPage() {
           )}
         </header>
 
-        {/* Step 1: Upload */}
-        {!latentFile && (
+        {/* ============================================================ */}
+        {/* If no image yet, show the upload zone                          */}
+        {/* ============================================================ */}
+        {!probeDataUrl && (
           <Card
             className="border-2 border-dashed border-border hover:border-primary/50 transition-colors cursor-pointer"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => document.getElementById("file-input")?.click()}
           >
-            <CardContent className="flex flex-col items-center justify-center py-20">
-              <Upload className="w-16 h-16 mb-4 text-muted-foreground opacity-50" />
-              <h2 className="text-xl font-semibold mb-2">Subí la huella latente</h2>
-              <p className="text-sm text-muted-foreground max-w-md text-center">
-                Una foto del levantado en la escena. BMP, PNG o JPEG. Máximo 10MB.
+            <CardContent className="flex flex-col items-center justify-center py-16">
+              <Upload className="w-12 h-12 mb-3 text-muted-foreground opacity-50" />
+              <h2 className="text-lg font-semibold mb-1">Subí la huella latente</h2>
+              <p className="text-sm text-muted-foreground">
+                BMP, PNG o JPEG. Máx 10MB.
               </p>
               <input
+                id="file-input"
                 type="file"
-                ref={fileInputRef}
                 className="hidden"
                 accept="image/*"
-                onChange={handleFileChange}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleFile(f);
+                }}
               />
             </CardContent>
           </Card>
         )}
 
-        {/* After upload: show image + actions */}
-        {latentFile && latentPreview && (
+        {/* ============================================================ */}
+        {/* The image is loaded: show the workbench                          */}
+        {/* ============================================================ */}
+        {probeDataUrl && (
           <>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Left: image + extract */}
-              <Card className="border-border/60">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                    <Fingerprint className="w-4 h-4" />
-                    Huella cargada
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="bg-muted/20 rounded-lg overflow-hidden border border-border flex items-center justify-center min-h-[280px]">
-                    <img
-                      src={latentPreview}
-                      alt="Huella"
-                      className="max-w-full max-h-[360px] object-contain"
-                    />
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <Upload className="w-3.5 h-3.5 mr-1.5" />
-                      Cambiar
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={handleAnalyze}
-                      disabled={previewMutation.isPending}
-                      className="flex-1"
-                    >
-                      {previewMutation.isPending ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                          Procesando…
-                        </>
-                      ) : (
-                        <>
-                          <Fingerprint className="w-3.5 h-3.5 mr-1.5" />
-                          Extraer minucias
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    className="hidden"
-                    accept="image/*"
-                    onChange={handleFileChange}
-                  />
-                </CardContent>
-              </Card>
+            {/* Top bar: actions + status */}
+            <div className="flex flex-wrap items-center gap-2 p-3 bg-card border border-border rounded-lg">
+              <Button
+                size="sm"
+                onClick={handleSearch}
+                disabled={!preview || searchMutation.isPending || preview.minutiae.length === 0}
+                className="flex-1 sm:flex-none"
+              >
+                {searchMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                    Buscando…
+                  </>
+                ) : (
+                  <>
+                    <Search className="w-3.5 h-3.5 mr-1.5" />
+                    Buscar en la base
+                  </>
+                )}
+              </Button>
 
-              {/* Center: extracted minutiae preview */}
-              <Card className="border-border/60">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm uppercase tracking-wider text-muted-foreground">
-                    Resultado
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {!preview ? (
-                    <div className="flex flex-col items-center justify-center min-h-[200px] text-muted-foreground text-sm">
-                      Presioná "Extraer minucias" para analizar
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="text-center">
-                        <div className="text-4xl font-bold text-primary">
-                          {preview.minutiae.length}
-                        </div>
-                        <div className="text-xs uppercase tracking-wider text-muted-foreground">
-                          minucias detectadas
-                        </div>
-                      </div>
-                      {preview.processed_image && (
-                        <img
-                          src={`data:image/png;base64,${preview.processed_image}`}
-                          alt="Gabor enhanced"
-                          className="w-full rounded border border-border"
-                        />
-                      )}
-                      <Button
-                        size="sm"
-                        onClick={handleSearch}
-                        disabled={preview.minutiae.length === 0 || searchMutation.isPending}
-                        className="w-full"
-                      >
-                        {searchMutation.isPending ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                            Buscando…
-                          </>
-                        ) : (
-                          <>
-                            <Search className="w-3.5 h-3.5 mr-1.5" />
-                            Buscar en la base
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+              {searchResult && searchResult.candidates.length === 0 && (
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={() => setShowEnrollPicker(!showEnrollPicker)}
+                  className="flex-1 sm:flex-none"
+                >
+                  <UserPlus className="w-3.5 h-3.5 mr-1.5" />
+                  No hay match — enrolar
+                </Button>
+              )}
 
-              {/* Right: action picker */}
-              <Card className="border-border/60">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm uppercase tracking-wider text-muted-foreground">
-                    ¿Qué querés hacer?
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {searchResult && searchResult.candidates.length === 0 && (
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={() => setShowEnrollPicker(true)}
-                      className="w-full"
-                    >
-                      <UserPlus className="w-3.5 h-3.5 mr-1.5" />
-                      No hay match — enrolar
-                    </Button>
-                  )}
-                  {showEnrollPicker ? (
-                    <PersonPicker
-                      onSelect={setEnrollPersonId}
-                      onCancel={() => setShowEnrollPicker(false)}
-                      onConfirm={handleEnroll}
-                      selectedId={enrollPersonId}
-                      loading={enrolling}
-                    />
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowEnrollPicker(true)}
-                      className="w-full"
-                    >
-                      <UserPlus className="w-3.5 h-3.5 mr-1.5" />
-                      Enrolar como nueva captura
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowEnrollPicker(!showEnrollPicker)}
+              >
+                <UserPlus className="w-3.5 h-3.5 mr-1.5" />
+                Enrolar
+              </Button>
+
+              <div className="ml-auto text-xs text-muted-foreground font-mono">
+                {preview ? (
+                  <>{preview.minutiae.length} minucias</>
+                ) : previewMutation.isPending ? (
+                  <span className="text-primary">procesando…</span>
+                ) : (
+                  "—"
+                )}
+                {searchResult && (
+                  <> · {searchResult.candidates.length} candidatos · {searchResult.query_time_ms}ms</>
+                )}
+              </div>
             </div>
 
-            {/* Step: results */}
-            {searchResult && (
+            {/* Inline enroll picker */}
+            {showEnrollPicker && (
               <Card className="border-border/60">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Search className="w-4 h-4" />
-                    Resultados ({searchResult.candidates.length})
-                  </CardTitle>
-                  <CardDescription>
-                    {searchResult.candidates.length > 0
-                      ? "Ordenados por similitud. Click en uno para ver detalle."
-                      : "Ningún candidato superó el umbral."}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {searchResult.candidates.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <XCircle className="w-10 h-10 mx-auto mb-2 opacity-40" />
-                      <p className="text-sm">Sin coincidencias. Probá enrolar.</p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {searchResult.candidates.map((candidate, index) => (
-                        <div key={candidate.person_id} className="space-y-2">
-                          <CandidateCard
-                            candidate={candidate}
-                            rank={index + 1}
-                            isSelected={selectedCandidate?.person_id === candidate.person_id}
-                            onSelect={() => setSelectedCandidate(candidate)}
-                          />
-                          {selectedCandidate?.person_id === candidate.person_id && (
-                            <div className="flex gap-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleOpenCreateCase(candidate)}
-                                className="flex-1"
-                              >
-                                <FilePlus className="w-3.5 h-3.5 mr-1.5" />
-                                Crear caso
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                <CardContent className="p-3 flex flex-wrap items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Persona:</span>
+                  <select
+                    value={enrollPersonId}
+                    onChange={(e) => setEnrollPersonId(e.target.value)}
+                    className="flex-1 min-w-[200px] px-2 py-1.5 bg-background border border-border rounded text-sm"
+                  >
+                    <option value="">— seleccionar —</option>
+                    {persons?.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.full_name ?? p.external_id}
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    size="sm"
+                    onClick={handleEnroll}
+                    disabled={!enrollPersonId || enrolling}
+                  >
+                    {enrolling ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                        Enrolando…
+                      </>
+                    ) : (
+                      "Enrolar"
+                    )}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setShowEnrollPicker(false)}
+                  >
+                    Cancelar
+                  </Button>
                 </CardContent>
               </Card>
             )}
 
-            {/* Selected candidate detail */}
-            {selectedCandidate && searchResult && (
-              <CandidateDetailPanel
-                candidate={selectedCandidate}
-                probeImageUrl={latentPreview}
-                probeMinutiae={probeMinutiae}
-                candidateImageUrl={null}
-                onDismiss={() => setSelectedCandidate(null)}
-              />
+            {/* ============================================================ */}
+            {/* THE BIG VIEW: probe image with circles (LEFT) + comparison   */}
+            {/* (RIGHT). The comparison becomes the candidate when one is  */}
+            {/* selected.                                                       */}
+            {/* ============================================================ */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Probe image with circles */}
+              <Card className="border-border/60">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm uppercase tracking-wider text-muted-foreground">
+                    Latente {preview && `· ${preview.minutiae.length} minucias`}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-3">
+                  <div className="aspect-square bg-black rounded overflow-hidden flex items-center justify-center">
+                    <canvas
+                      ref={probeCanvasRef}
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Candidate image with matched minutiae */}
+              <Card className="border-border/60">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                    {selectedCandidate ? (
+                      <>
+                        <span>
+                          Candidato · {selectedCandidate.full_name ?? selectedCandidate.external_id}
+                        </span>
+                        <span className="text-primary font-bold">
+                          {Math.round(selectedCandidate.total_score * 100)}%
+                        </span>
+                      </>
+                    ) : searchResult && searchResult.candidates.length === 0 ? (
+                      "Sin candidatos"
+                    ) : (
+                      "Candidato (selecciona uno)"
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-3">
+                  <div className="aspect-square bg-black rounded overflow-hidden flex items-center justify-center">
+                    {candidateLoading ? (
+                      <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                    ) : candidateDataUrl ? (
+                      <canvas
+                        ref={candidateCanvasRef}
+                        className="w-full h-full object-contain"
+                      />
+                    ) : searchResult ? (
+                      <div className="text-center text-muted-foreground text-sm px-4">
+                        {searchResult.candidates.length === 0
+                          ? "Esta huella no tiene match. Probá enrolar."
+                          : "Click en un candidato para ver la comparación"}
+                      </div>
+                    ) : (
+                      <div className="text-center text-muted-foreground text-sm px-4">
+                        Buscá para ver candidatos
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Candidates strip */}
+            {searchResult && searchResult.candidates.length > 0 && (
+              <Card className="border-border/60">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm uppercase tracking-wider text-muted-foreground">
+                    Candidatos ({searchResult.candidates.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-3">
+                  <div className="flex flex-wrap gap-2">
+                    {searchResult.candidates.map((c, i) => {
+                      const isSelected = i === selectedIdx;
+                      const label = c.full_name ?? c.external_id ?? c.person_id.slice(0, 8);
+                      return (
+                        <button
+                          key={c.person_id}
+                          onClick={() => setSelectedIdx(i)}
+                          className={`
+                            px-3 py-2 rounded border text-left transition-all
+                            ${isSelected
+                              ? "border-primary bg-primary/10 ring-1 ring-primary"
+                              : "border-border hover:border-primary/50 bg-card/50"
+                            }
+                          `}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground font-mono">#{i + 1}</span>
+                            <span className="text-sm font-medium">{label}</span>
+                            <span
+                              className="text-sm font-bold"
+                              style={{
+                                color:
+                                  c.total_score >= 0.8
+                                    ? "#22c55e"
+                                    : c.total_score >= 0.5
+                                    ? "#eab308"
+                                    : "#9ca3af",
+                              }}
+                            >
+                              {Math.round(c.total_score * 100)}%
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-muted-foreground">
+                            {c.hits} cilindros matched
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {selectedCandidate && (
+                    <div className="mt-3 flex items-center gap-2 pt-3 border-t border-border/40">
+                      <span className="text-xs text-muted-foreground">
+                        Match trace: <span className="font-mono text-foreground">{selectedCandidate.match_trace.length}</span> pares
+                      </span>
+                      <div className="ml-auto flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleOpenCreateCase(selectedCandidate)}
+                        >
+                          <FilePlus className="w-3.5 h-3.5 mr-1.5" />
+                          Crear caso
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             )}
           </>
         )}
@@ -499,18 +621,12 @@ export default function AnalisisPage() {
             className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
             onClick={() => !createCaseMutation.isPending && setShowCreateCase(false)}
           >
-            <Card
-              className="w-full max-w-md border-border/60"
-              onClick={(e) => e.stopPropagation()}
-            >
+            <Card className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
                   <FilePlus className="w-4 h-4" />
                   Crear caso
                 </CardTitle>
-                <CardDescription>
-                  Candidato: {selectedCandidate.full_name ?? selectedCandidate.external_id}
-                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div>
@@ -544,7 +660,18 @@ export default function AnalisisPage() {
                     Cancelar
                   </Button>
                   <Button
-                    onClick={handleSubmitCreateCase}
+                    onClick={() => {
+                      if (!selectedCandidate || !caseNumber.trim() || !caseTitle.trim()) {
+                        addToast({ type: "error", title: "Campos incompletos" });
+                        return;
+                      }
+                      createCaseMutation.mutate({
+                        case_number: caseNumber.trim(),
+                        title: caseTitle.trim(),
+                        description: `Generado desde análisis top-level. Candidato: ${selectedCandidate.full_name ?? selectedCandidate.external_id ?? selectedCandidate.person_id}.`,
+                        status: "open",
+                      });
+                    }}
                     disabled={createCaseMutation.isPending}
                   >
                     {createCaseMutation.isPending ? (
@@ -564,65 +691,25 @@ export default function AnalisisPage() {
             </Card>
           </div>
         )}
-
-        <div className="text-xs text-muted-foreground text-center pt-4">
-          Paso actual: {step}
-        </div>
       </div>
     </div>
   );
 }
 
-interface PersonPickerProps {
-  selectedId: string;
-  onSelect: (id: string) => void;
-  onCancel: () => void;
-  onConfirm: () => void;
-  loading: boolean;
-}
-
-function PersonPicker({ selectedId, onSelect, onCancel, onConfirm, loading }: PersonPickerProps) {
-  const { data: persons, isLoading } = useQuery({
-    queryKey: ["persons"],
-    queryFn: () => listPersons(0, 100),
-  });
-  return (
-    <div className="space-y-2 p-3 bg-muted/30 rounded-lg border border-border">
-      <label className="text-xs font-medium text-muted-foreground">
-        Persona
-      </label>
-      <select
-        value={selectedId}
-        onChange={(e) => onSelect(e.target.value)}
-        className="w-full px-2 py-1.5 bg-background border border-border rounded text-sm"
-        disabled={isLoading}
-      >
-        <option value="">{isLoading ? "Cargando…" : "— seleccionar —"}</option>
-        {persons?.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.full_name ?? p.external_id}
-          </option>
-        ))}
-      </select>
-      <div className="flex gap-2">
-        <Button variant="ghost" size="sm" onClick={onCancel}>
-          Cancelar
-        </Button>
-        <Button
-          size="sm"
-          onClick={onConfirm}
-          disabled={!selectedId || loading}
-        >
-          {loading ? (
-            <>
-              <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-              Enrolando…
-            </>
-          ) : (
-            "Enrolar"
-          )}
-        </Button>
-      </div>
-    </div>
-  );
+function drawDot(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radius: number,
+  fillColor: string,
+  ringColor: string,
+  ringWidth: number,
+): void {
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, 2 * Math.PI);
+  ctx.fillStyle = fillColor;
+  ctx.fill();
+  ctx.strokeStyle = ringColor;
+  ctx.lineWidth = ringWidth;
+  ctx.stroke();
 }
