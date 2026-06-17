@@ -15,8 +15,6 @@ from src.core.config import (
     ExtractionConfig,
     FusionConfig,
     GaborConfig,
-    LssrConfig,
-    MccConfig,
     OrientationFieldConfig,
     PipelineConfig,
     QdrantIndexConfig,
@@ -140,41 +138,6 @@ class TestPipelineConfigFromEnv:
         assert cfg.low_confidence_threshold == 0.8
 
 
-class TestLssrConfig:
-    """LSSR consolidation tunables."""
-
-    def test_defaults(self) -> None:
-        cfg = LssrConfig()
-        assert cfg.nrel == 8
-        assert cfg.wr == 0.6
-        assert cfg.tau_p2 == 0.52
-        assert cfg.tau_p3 == 0.52
-        assert cfg.cylinder_radius == 70
-
-    def test_env_override(self) -> None:
-        os.environ["LSSR_NREL"] = "12"
-        os.environ["LSSR_WR"] = "0.75"
-        os.environ["MCC_CYLINDER_RADIUS"] = "90"
-        try:
-            cfg = LssrConfig()
-            assert cfg.nrel == 12
-            assert cfg.wr == 0.75
-            assert cfg.cylinder_radius == 90
-        finally:
-            os.environ.pop("LSSR_NREL", None)
-            os.environ.pop("LSSR_WR", None)
-            os.environ.pop("MCC_CYLINDER_RADIUS", None)
-
-
-class TestMccConfig:
-    """MCC spatial/directional tunables."""
-
-    def test_defaults(self) -> None:
-        cfg = MccConfig()
-        assert cfg.cell_size == 8
-        assert cfg.dir_bins == 6
-
-
 class TestGaborConfig:
     """Gabor enhancement tunables."""
 
@@ -235,8 +198,6 @@ class TestConfigAlgorithmicSectionsPresent:
     def test_all_sections_present(self) -> None:
         cfg = Config()
         assert isinstance(cfg.pipeline, PipelineConfig)
-        assert isinstance(cfg.lssr, LssrConfig)
-        assert isinstance(cfg.mcc, MccConfig)
         assert isinstance(cfg.gabor, GaborConfig)
         assert isinstance(cfg.doric, DoricConfig)
         assert isinstance(cfg.qdrant_index, QdrantIndexConfig)
@@ -248,26 +209,6 @@ class TestConfigAlgorithmicSectionsPresent:
 
 
 class TestConstantsMatchConfig:
-    """Module-level constants (NREL, TAU_P2, etc.) must read from config."""
-
-    def test_mcc_descriptor_constants_loaded(self) -> None:
-        from src.processing.mcc_descriptor import (
-            NREL,
-            TAU_P2,
-            TAU_P3,
-            WR,
-            _CELL_SIZE,
-            _CYLINDER_RADIUS,
-            _DIR_BINS,
-        )
-        from src.core.config import config
-        assert NREL == config.lssr.nrel
-        assert WR == config.lssr.wr
-        assert TAU_P2 == config.lssr.tau_p2
-        assert TAU_P3 == config.lssr.tau_p3
-        assert _CYLINDER_RADIUS == config.lssr.cylinder_radius
-        assert _CELL_SIZE == config.mcc.cell_size
-        assert _DIR_BINS == config.mcc.dir_bins
 
     def test_gabor_constants_loaded(self) -> None:
         from src.processing.gabor import (

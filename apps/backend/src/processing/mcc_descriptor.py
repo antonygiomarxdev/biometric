@@ -1,392 +1,303 @@
-"""Minutia Cylinder-Code (MCC) descriptor generation.
+"""
+Minutia Cylinder Code (MCC) descriptor — Phase 19.
 
-MCC is the de-facto standard for local minutiae description in forensic
-AFIS.  Each minutia is described by a 3D cylinder whose dimensions are:
+Builds rotation-invariant, scale-normalized cylinder descriptors for each
+minutia extracted from a fingerprint ridge graph.
 
-  - **Spatial** (x, y): relative neighbour positions in a rotated frame.
-  - **Directional** (dθ): difference between neighbour and central angle.
+Architecture
+------------
+1. Pipeline produces: skeleton + ridge graph (nodes=minutiae, edges=ridges)
+2. For each minutia, a cylindrical grid (angular sectors × radial rings) is
+   centered on the minutia and ALIGNED to its local ridge orientation.
+3. Each cell captures structural features of the ridge skeleton in that region:
+   - dominant ridge orientation (relative)
+   - ridge crossing count
+   - local ridge frequency
+4. The resulting 108-dimensional vector is L2-normalized and stored.
 
-Invariant to rotation and translation.  Tolerates elastic deformation
-because local neighbourhoods deform less than the global print.
+Rotation invariance
+--------------------
+The cylinder is aligned to the minutia's local ridge angle. When the entire
+fingerprint is rotated by θ, both the minutia angle and the ridge orientations
+rotate by θ. The RELATIVE orientation in each cell remains unchanged.
+
+Scale normalization
+--------------------
+Ridge counts are normalized by the local ridge frequency, making the descriptor
+invariant to image resolution changes.
+
+Usage
+-----
+    from src.processing.mcc_descriptor import extract_cylinders
+
+    descriptors = extract_cylinders(minutiae, skeleton, orientation_field, frequency_map)
+    # descriptors[i] → 108D L2-normalized float32 vector for minutia i
+
+References
+----------
+Cappelli, R., Ferrara, M., & Maltoni, D. (2010).
+Minutia Cylinder-Code: A new representation and matching technique for
+fingerprint recognition. IEEE TPAMI.
 """
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
+from typing import Sequence
 
 import numpy as np
 
-from src.core.config import config
-from src.core.types import MccCylinder, RidgeGraph
 
-# Cylinder geometry constants — Latent-optimised
-# Standard (Cappelli 2010): R=50, latent (Ferrara et al.): R=70-80 multi-radius
-# Source of truth: src.core.config.{MccConfig,LssrConfig} (env-overridable).
-_CYLINDER_RADIUS: int = config.lssr.cylinder_radius
-_CELL_SIZE: int = config.mcc.cell_size
-_DIR_BINS: int = config.mcc.dir_bins
-_N_SPATIAL: int = 2 * _CYLINDER_RADIUS // _CELL_SIZE + 1  # 18 radial × 18 angular
+# ---------------------------------------------------------------------------
+# Configuration — tunable without code changes
+# ---------------------------------------------------------------------------
 
-# LSSR consolidation constants — Latent-optimised
-# (Cappelli et al. 2010 + Ferrara Forensic adaptation)
-NREL: int = config.lssr.nrel
-WR: float = config.lssr.wr
-# NOTE: TAU_P1 (distance tolerance) is set dynamically based on
-# the actual scale of the graph (median inter-minutiae distance).
-# The default of 12 px is for ~10 px ridge spacing (500 ppi scans);
-# real forensic scans can be much higher resolution.
-MU_P1: float = config.lssr.mu_p1
-MU_P2: float = config.lssr.mu_p2
-MU_P3: float = config.lssr.mu_p3
-TAU_P2: float = config.lssr.tau_p2
-TAU_P3: float = config.lssr.tau_p3
+@dataclass(frozen=True)
+class CylinderConfig:
+    """Parameters for the MCC cylinder descriptor."""
 
+    # Cylinder geometry
+    angular_sectors: int = 12   # Number of wedge-shaped sectors (360°/N)
+    radial_rings: int = 4       # Number of concentric rings
 
-def _estimate_graph_scale(positions: list[CylinderPosition]) -> float:
-    """Estimate the typical inter-minutiae distance from a list of positions.
+    # Ring distances (pixels at normalized scale ≈ 350px height)
+    ring_boundaries: tuple[float, float, float, float] = (25.0, 55.0, 95.0, 130.0)
 
-    Used to scale TAU_P1 so the distance tolerance is appropriate for
-    the actual image resolution.
-    """
-    if len(positions) < 2:
-        return 12.0
-    pts = np.array([(p.x, p.y) for p in positions])
-    # Sample 50 random pairs and take median distance
-    n = min(50, len(positions))
-    rng = np.random.default_rng(42)
-    idx1 = rng.choice(len(positions), n, replace=True)
-    idx2 = rng.choice(len(positions), n, replace=True)
-    diffs = pts[idx1] - pts[idx2]
-    dists = np.sqrt(np.sum(diffs * diffs, axis=-1))
-    dists = dists[dists > 0]
-    if len(dists) == 0:
-        return 12.0
-    return float(np.median(dists))
+    # Features per cell
+    use_orientation: bool = True
+    use_ridge_count: bool = True
+    use_frequency: bool = True
+
+    @property
+    def descriptor_dimension(self) -> int:
+        features_per_cell = sum([self.use_orientation, self.use_ridge_count, self.use_frequency])
+        return self.angular_sectors * self.radial_rings * features_per_cell
 
 
-def _gaussian_kernel(sigma: float = 6.0, size: int = 3) -> np.ndarray:
-    """Small Gaussian kernel for smoothing cell contributions."""
-    ax = np.linspace(-(size // 2), size // 2, size)
-    xx, yy = np.meshgrid(ax, ax)
-    kernel = np.exp(-1.0 * (xx * xx + yy * yy) / (2.0 * sigma * sigma))
-    return kernel / kernel.sum()
+# ---------------------------------------------------------------------------
+# Default configuration
+# ---------------------------------------------------------------------------
+
+DEFAULT_CONFIG = CylinderConfig()
 
 
-_GAUSS = _gaussian_kernel()
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
-
-def _neighbour_cell_indices(
-    dx: int,
-    dy: int,
-    dtheta: float,
-) -> tuple[int, int, int]:
-    """Map a neighbour's relative position and angle to cylinder cell indices."""
-    sx = int(np.round((dx + _CYLINDER_RADIUS) / _CELL_SIZE))
-    sy = int(np.round((dy + _CYLINDER_RADIUS) / _CELL_SIZE))
-    sx = max(0, min(sx, _N_SPATIAL - 1))
-    sy = max(0, min(sy, _N_SPATIAL - 1))
-    db = int(np.round(dtheta / np.pi * _DIR_BINS)) % _DIR_BINS
-    return sx, sy, db
-
-
-def build_cylinder(
-    central_x: int,
-    central_y: int,
-    central_theta: float,
-    neighbour_x: np.ndarray,
-    neighbour_y: np.ndarray,
-    neighbour_theta: np.ndarray,
-    neighbour_weights: np.ndarray,
-) -> MccCylinder:
-    """Build an MCC cylinder for one central minutia.
+def extract_cylinders(
+    minutiae: Sequence[dict],
+    skeleton: np.ndarray,
+    orientation_field: np.ndarray | None = None,
+    frequency_map: np.ndarray | None = None,
+    config: CylinderConfig | None = None,
+) -> list[np.ndarray]:
+    """Build MCC cylinder descriptors for each minutia.
 
     Args:
-        central_x, central_y: Position of the central minutia.
-        central_theta: Orientation in radians [0, π).
-        neighbour_x, neighbour_y: Arrays of neighbour positions.
-        neighbour_theta: Array of neighbour orientations [0, π).
-        neighbour_weights: Array of neighbour weights [0, 1].
+        minutiae: List of minutiae dicts with keys (x, y, angle).
+        skeleton: Binary ridge skeleton image (non-zero = ridge pixel).
+        orientation_field: Block-level ridge orientation map (radians).
+        frequency_map: Block-level ridge frequency map (cycles/pixel).
+        config: Cylinder parameters; defaults to ``DEFAULT_CONFIG``.
 
     Returns:
-        MccCylinder with shape (_N_SPATIAL, _N_SPATIAL, _DIR_BINS).
+        List of L2-normalized descriptor vectors (one per minutia).
+        Vectors have dimension ``config.descriptor_dimension``.
     """
-    cylinder = np.zeros((_N_SPATIAL, _N_SPATIAL, _DIR_BINS), dtype=np.float32)
+    if config is None:
+        config = DEFAULT_CONFIG
 
-    # Precompute rotation matrix for central orientation
-    cos_t = np.cos(central_theta)
-    sin_t = np.sin(central_theta)
-
-    for i in range(len(neighbour_x)):
-        # Rotate relative position by -central_theta (align with central)
-        rx = float(neighbour_x[i]) - central_x
-        ry = float(neighbour_y[i]) - central_y
-        rr_x = rx * cos_t + ry * sin_t
-        rr_y = -rx * sin_t + ry * cos_t
-
-        # Skip if outside cylinder radius
-        if abs(rr_x) > _CYLINDER_RADIUS or abs(rr_y) > _CYLINDER_RADIUS:
-            continue
-
-        # Directional difference
-        dtheta = (neighbour_theta[i] - central_theta) % np.pi
-
-        # Map to cell
-        sx, sy, db = _neighbour_cell_indices(
-            int(np.round(rr_x)),
-            int(np.round(rr_y)),
-            dtheta,
-        )
-        cylinder[sx, sy, db] += neighbour_weights[i]
-
-    # Smooth with Gaussian kernel (convolve on spatial dimensions)
-    cylinder = _smooth_cylinder(cylinder)
-
-    # Normalise to unit length
-    norm = np.linalg.norm(cylinder)
-    if norm > 0:
-        cylinder /= norm
-
-    return MccCylinder(values=cylinder)
-
-
-def _smooth_cylinder(cylinder: np.ndarray) -> np.ndarray:
-    """Apply Gaussian smoothing over spatial dimensions only."""
-    from scipy.ndimage import convolve as sp_convolve
-
-    for d in range(_DIR_BINS):
-        cylinder[:, :, d] = sp_convolve(cylinder[:, :, d], _GAUSS, mode="nearest")
-    return cylinder
-
-
-@dataclass(slots=True)
-class CylinderPosition:
-    """Spatial + orientation info for one cylinder (for rho computation)."""
-    x: float
-    y: float
-    theta: float
-
-
-def compute_cylinders(graph: RidgeGraph) -> list[MccCylinder | None]:
-    """Compute MCC cylinders for every node in a RidgeGraph.
-
-    Args:
-        graph: The ridge skeleton graph.
-
-    Returns:
-        List of MccCylinder per node (None for isolated nodes with no
-        neighbours in the cylinder radius).
-    """
-    n = graph.num_nodes
-    if n == 0:
+    if len(minutiae) == 0 or skeleton is None or skeleton.sum() == 0:
         return []
 
-    xs = np.array([node.x for node in graph.nodes], dtype=np.float64)
-    ys = np.array([node.y for node in graph.nodes], dtype=np.float64)
-    thetas = np.array([node.angle for node in graph.nodes], dtype=np.float64)
-    weights = np.array([node.weight for node in graph.nodes], dtype=np.float64)
+    # Pre-compute skeleton pixel coordinates for fast lookup
+    skeleton_rows, skeleton_cols = np.where(skeleton > 0)
+    if len(skeleton_rows) < 10:
+        return [_zero_vector(config)] * len(minutiae)
 
-    cylinders: list[MccCylinder | None] = []
+    # Block scaling: orientation/ frequency maps are at lower resolution
+    orient_scale_y = orientation_field.shape[0] / skeleton.shape[0] if orientation_field is not None else 0
+    orient_scale_x = orientation_field.shape[1] / skeleton.shape[1] if orientation_field is not None else 0
+    freq_scale_y = frequency_map.shape[0] / skeleton.shape[0] if frequency_map is not None else 0
+    freq_scale_x = frequency_map.shape[1] / skeleton.shape[1] if frequency_map is not None else 0
 
-    for i in range(n):
-        # Find neighbours via KD-tree (for non-trivial graphs)
-        dx = xs - xs[i]
-        dy = ys - ys[i]
-        dists = np.sqrt(dx * dx + dy * dy)
+    rings = np.array(config.ring_boundaries)
+    descriptors = []
 
-        # Self is at dist 0, exclude it
-        radius_mask = (dists > 0) & (dists <= _CYLINDER_RADIUS)
-        if not np.any(radius_mask):
-            cylinders.append(None)
-            continue
-
-        cyl = build_cylinder(
-            central_x=int(xs[i]),
-            central_y=int(ys[i]),
-            central_theta=thetas[i],
-            neighbour_x=xs[radius_mask],
-            neighbour_y=ys[radius_mask],
-            neighbour_theta=thetas[radius_mask],
-            neighbour_weights=weights[radius_mask],
+    for minutia in minutiae:
+        cylinder = _build_cylinder(
+            minutia,
+            skeleton_rows, skeleton_cols,
+            orientation_field, orient_scale_y, orient_scale_x,
+            frequency_map, freq_scale_y, freq_scale_x,
+            rings, config,
         )
-        cylinders.append(cyl)
+        descriptors.append(cylinder)
 
-    return cylinders
-
-
-def extract_positions(graph: RidgeGraph) -> list[CylinderPosition]:
-    """Extract spatial + orientation info for every node (for rho).
-
-    Useful for LSSR reinforcement which needs the position and angle
-    of each cylinder to compute geometric consistency.
-    """
-    return [
-        CylinderPosition(x=n.x, y=n.y, theta=n.angle) for n in graph.nodes
-    ]
+    return descriptors
 
 
 # ---------------------------------------------------------------------------
-# LSSR consolidation (Cappelli et al. 2010, IEEE TPAMI)
+# Internal helpers
 # ---------------------------------------------------------------------------
 
+def _zero_vector(config: CylinderConfig) -> np.ndarray:
+    """Return a zero-filled descriptor vector."""
+    return np.zeros(config.descriptor_dimension, dtype=np.float32)
 
-def psi(d: float, mu: float, tau: float) -> float:
-    """MCC similarity decay function.
 
-    Returns 1.0 when d == mu, decaying smoothly to 0 as d >> tau.
-    For d ≤ tau: returns 1.0 - (d / tau)² (quadratic decay).
+def _build_cylinder(
+    minutia: dict,
+    skel_rows: np.ndarray,
+    skel_cols: np.ndarray,
+    orientation_field: np.ndarray | None,
+    orient_scale_y: float,
+    orient_scale_x: float,
+    frequency_map: np.ndarray | None,
+    freq_scale_y: float,
+    freq_scale_x: float,
+    ring_boundaries: np.ndarray,
+    config: CylinderConfig,
+) -> np.ndarray:
+    """Build a single MCC cylinder around one minutia."""
+
+    center_x = minutia["x"]
+    center_y = minutia["y"]
+    center_angle = minutia["angle"]
+
+    n_rings = config.radial_rings
+    n_sectors = config.angular_sectors
+    max_radius = ring_boundaries[-1]
+
+    # ---- Stage 1: accumulate skeleton-density features ----
+
+    # Distances and angles of ALL skeleton pixels relative to the minutia center
+    delta_x = skel_cols.astype(np.float32) - center_x
+    delta_y = skel_rows.astype(np.float32) - center_y
+    distances = np.sqrt(delta_x**2 + delta_y**2)
+
+    # Filter to pixels within the maximum cylinder radius
+    mask = distances <= max_radius
+    if mask.sum() == 0:
+        return _zero_vector(config)
+
+    delta_x = delta_x[mask]
+    delta_y = delta_y[mask]
+    distances = distances[mask]
+
+    # Compute angle of each pixel RELATIVE to the minutia's orientation.
+    # This makes the descriptor rotation-invariant: rotating the print
+    # by θ shifts both center_angle and the absolute angles by θ,
+    # leaving relative angles unchanged.
+    absolute_angles = np.arctan2(delta_y, delta_x)
+    relative_angles = (absolute_angles - center_angle + math.pi) % (2 * math.pi)
+
+    # Assign each pixel to its angular sector
+    sector_indices = np.int32(relative_angles * n_sectors / (2 * math.pi)) % n_sectors
+
+    # Assign each pixel to its radial ring
+    ring_indices = np.clip(np.digitize(distances, ring_boundaries), 0, n_rings - 1)
+
+    # Accumulate skeleton density per cell
+    density_cells = np.zeros((n_rings, n_sectors), dtype=np.float32)
+    for sector, ring in zip(sector_indices, ring_indices):
+        density_cells[ring, sector] += 1.0
+
+    # ---- Stage 2: structure features sampled at cell centers ----
+
+    orientation_cells = np.zeros((n_rings, n_sectors), dtype=np.float32)
+    ridge_count_cells = np.zeros((n_rings, n_sectors), dtype=np.float32)
+    frequency_cells = np.zeros((n_rings, n_sectors), dtype=np.float32)
+
+    sector_width = 2 * math.pi / n_sectors
+
+    for ring_idx in range(n_rings):
+        sample_radius = (ring_boundaries[ring_idx] + ring_boundaries[min(ring_idx + 1, n_rings - 1)]) / 2
+
+        for sector_idx in range(n_sectors):
+            # World angle of the center of this cell (relative to minutia orientation)
+            cell_center_angle = center_angle + (sector_idx + 0.5) * sector_width
+            sample_x = center_x + sample_radius * math.cos(cell_center_angle)
+            sample_y = center_y + sample_radius * math.sin(cell_center_angle)
+
+            # ---- Sampled orientation (block-level, mapped to pixel coords) ----
+            if orientation_field is not None and orient_scale_y > 0:
+                block_y = min(int(sample_y * orient_scale_y), orientation_field.shape[0] - 1)
+                block_x = min(int(sample_x * orient_scale_x), orientation_field.shape[1] - 1)
+                absolute_orient = float(orientation_field[block_y, block_x])
+                relative_orient = (absolute_orient - center_angle + math.pi) % (2 * math.pi)
+                orientation_cells[ring_idx, sector_idx] = relative_orient / (2 * math.pi)
+
+            # ---- Ridge crossing count (trace from center to sample point) ----
+            if config.use_ridge_count:
+                num_steps = max(1, int(sample_radius / 3))
+                path_points = [
+                    (
+                        int(center_x + (sample_x - center_x) * t / num_steps),
+                        int(center_y + (sample_y - center_y) * t / num_steps),
+                    )
+                    for t in range(num_steps + 1)
+                ]
+                ridge_count_cells[ring_idx, sector_idx] = _count_ridge_crossings(
+                    path_points, skeleton_rows=skel_rows, skeleton_cols=skel_cols
+                )
+
+            # ---- Ridge frequency (spacing) at sample point ----
+            if frequency_map is not None and freq_scale_y > 0:
+                block_y = min(int(sample_y * freq_scale_y), frequency_map.shape[0] - 1)
+                block_x = min(int(sample_x * freq_scale_x), frequency_map.shape[1] - 1)
+                freq_val = float(frequency_map[block_y, block_x])
+                frequency_cells[ring_idx, sector_idx] = min(max(freq_val, 0.0), 1.0)
+
+    # ---- Stage 3: assemble final descriptor ----
+
+    features: list[float] = []
+
+    for ring_idx in range(n_rings):
+        for sector_idx in range(n_sectors):
+            if config.use_orientation:
+                features.append(float(orientation_cells[ring_idx, sector_idx]))
+            if config.use_ridge_count:
+                features.append(float(min(ridge_count_cells[ring_idx, sector_idx], 10) / 10.0))
+            if config.use_frequency:
+                features.append(float(frequency_cells[ring_idx, sector_idx]))
+
+    # Include density features if no structure features are enabled
+    if len(features) == 0:
+        for ring_idx in range(n_rings):
+            for sector_idx in range(n_sectors):
+                features.append(float(density_cells[ring_idx, sector_idx]))
+        vec = np.array(features, dtype=np.float32)
+        norm = np.sqrt(np.sum(vec**2)) + 1e-10
+        return (vec / norm).astype(np.float32)
+
+    vec = np.array(features, dtype=np.float32)
+    norm = np.sqrt(np.sum(vec**2)) + 1e-10
+    return (vec / norm).astype(np.float32)
+
+
+def _count_ridge_crossings(
+    path: list[tuple[int, int]],
+    skeleton_rows: np.ndarray | None = None,
+    skeleton_cols: np.ndarray | None = None,
+) -> int:
+    """Count how many ridges the sampling line crosses.
+
+    Uses the skeleton pixel set for fast lookup. Each transition
+    from background → ridge counts as one crossing.
     """
-    if tau <= 0.0:
-        return 1.0 if abs(d - mu) < 1e-9 else 0.0
-    r = abs(d - mu) / tau
-    if r >= 1.0:
-        return 0.0
-    return 1.0 - r * r
+    crossings = 0
+    prev_is_ridge = False
 
+    for px, py in path:
+        is_ridge = False
+        if skeleton_rows is not None and skeleton_cols is not None:
+            # Quick check: is there a skeleton pixel at this integer coordinate?
+            is_ridge = np.any((skeleton_rows == py) & (skeleton_cols == px))
+        if is_ridge and not prev_is_ridge:
+            crossings += 1
+        prev_is_ridge = is_ridge
 
-def _ds(a: CylinderPosition, x: float, y: float) -> float:
-    """Distance from cylinder a's position to (x, y)."""
-    return float(np.hypot(a.x - x, a.y - y))
-
-
-def _dFi(a: CylinderPosition, b: CylinderPosition) -> float:
-    """Angular difference between two cylinders' orientations.
-
-    Normalised to [0, π).
-    """
-    return float((a.theta - b.theta) % np.pi)
-
-
-def rho(
-    t_a: CylinderPosition,
-    t_b: CylinderPosition,
-    k_a: CylinderPosition,
-    k_b: CylinderPosition,
-    tau_p1: float = 12.0,
-) -> float:
-    """Geometric consistency between two pairs of cylinders.
-
-    Measures how consistent the spatial+directional relationship of
-    pair (t_a, k_a) is with pair (t_b, k_b).  Used by LSSR reinforcement
-    to boost scores of pairs that have many geometrically consistent
-    neighbours (the key innovation over greedy matching).
-
-    Args:
-        tau_p1: Distance tolerance in pixels (should be set to the
-            median inter-minutiae distance of the graph).
-
-    Returns:
-        Value in [0, 1].  1.0 = perfectly consistent geometry.
-    """
-    # d1: difference in distance
-    d1 = abs(_ds(t_a, k_a.x, k_a.y) - _ds(t_b, k_b.x, k_b.y))
-    # d2: angle difference between t.theta and k.theta
-    d2 = abs(_dFi(t_a, k_a) - _dFi(t_b, k_b))
-    # d3: difference in dFi between the two pairs
-    d3 = abs(_dFi(t_a, k_a) - _dFi(t_b, k_b))
-
-    return psi(d1, MU_P1, tau_p1) * psi(d2, MU_P2, TAU_P2) * psi(d3, MU_P3, TAU_P3)
-
-
-def consolidation_lss(
-    gamma: np.ndarray,
-    n_p: int,
-) -> list[tuple[int, int, float]]:
-    """Local Similarity Sort: return top n_p (i, j, score) pairs.
-
-    No reinforcement — this is the baseline LSS.
-    """
-    n_a, n_b = gamma.shape
-    n_p = min(n_p, n_a * n_b)
-    pairs: list[tuple[int, int, float]] = []
-    # Flatten and find top n_p
-    flat = [(gamma[i, j], i, j) for i in range(n_a) for j in range(n_b)]
-    flat.sort(reverse=True)
-    for k in range(n_p):
-        s, i, j = flat[k]
-        pairs.append((i, j, float(s)))
-    return pairs
-
-
-def consolidation_lssr(
-    gamma: np.ndarray,
-    positions_a: list[CylinderPosition],
-    positions_b: list[CylinderPosition],
-    n_p: int,
-    return_reinforced: bool = True,
-) -> list[tuple[int, int, float]]:
-    """LSSR: LSS + Reinforcement with geometric consistency.
-
-    The reinforcement algorithm propagates scores from pairs that have
-    many geometrically consistent neighbours.  This is the key innovation
-    from Cappelli et al. 2010 that makes MCC handle elastic deformation.
-
-    Args:
-        gamma: Similarity matrix between cylinders (n_a x n_b).
-        positions_a, positions_b: Position/orientation per cylinder.
-        n_p: Number of best pairs to return.
-        return_reinforced: If True, return reinforced scores (lambda_t);
-            if False, return efficiency (lambda_t / original).
-
-    Returns:
-        List of (i, j, score) triples, where score is either the reinforced
-        score or the efficiency depending on ``return_reinforced``.
-    """
-    n_a, n_b = gamma.shape
-    n_r = min(n_a, n_b, n_p)
-
-    # Step 1: Get top-n_r initial pairs via LSS
-    initial = consolidation_lss(gamma, n_r)
-
-    # Estimate graph scale dynamically from positions
-    scale_a = _estimate_graph_scale(positions_a)
-    scale_b = _estimate_graph_scale(positions_b)
-    tau_p1 = max(scale_a, scale_b)
-
-    # Build rho matrix: rho[k1, k2] = consistency of pair k1 with pair k2
-    rhotab = np.zeros((n_r, n_r), dtype=np.float32)
-    for k1 in range(n_r):
-        i_a, j_b, _ = initial[k1]
-        t_a = positions_a[i_a]
-        t_b = positions_b[j_b]
-        for k2 in range(n_r):
-            if k1 == k2:
-                continue
-            i_a2, j_b2, _ = initial[k2]
-            k_a = positions_a[i_a2]
-            k_b = positions_b[j_b2]
-            rhotab[k1, k2] = rho(t_a, t_b, k_a, k_b, tau_p1=tau_p1)
-
-    # Step 2: Iterative reinforcement
-    lambda_t = np.array([gamma[i, j] for i, j, _ in initial], dtype=np.float32)
-    lambda_t1 = np.zeros_like(lambda_t)
-    lambdaw = (1.0 - WR) / max(n_r - 1, 1)
-
-    for _ in range(NREL):
-        lambda_t1[:] = lambda_t
-        for j in range(n_r):
-            reinforce = 0.0
-            for k in range(n_r):
-                if k == j:
-                    continue
-                reinforce += rhotab[j, k] * lambda_t1[k]
-            lambda_t[j] = WR * lambda_t1[j] + lambdaw * reinforce
-
-    # Step 3: Compute final scores
-    final = np.zeros(n_r, dtype=np.float32)
-    for k in range(n_r):
-        orig = gamma[initial[k][0], initial[k][1]]
-        if return_reinforced:
-            # Return the reinforced score directly
-            final[k] = lambda_t[k]
-        else:
-            # Return efficiency = reinforced / original
-            if orig > 0.0:
-                final[k] = lambda_t[k] / orig
-            else:
-                final[k] = 0.0
-
-    # Reorder by score (descending)
-    order = np.argsort(-final)
-    return [
-        (initial[k][0], initial[k][1], float(final[k])) for k in order
-    ]
+    return crossings

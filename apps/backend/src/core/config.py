@@ -75,50 +75,6 @@ class PipelineConfig:
 
 
 @dataclass(frozen=True)
-class LssrConfig:
-    """LSSR (Local Similarity Sort and Refine) consolidation parameters.
-
-    Latent-optimised defaults from Cappelli et al. 2010 + Ferrara forensic
-    adaptation. See :mod:`src.processing.mcc_descriptor`.
-    """
-    nrel: int = field(
-        default_factory=lambda: int(os.getenv("LSSR_NREL", "8"))
-    )
-    wr: float = field(
-        default_factory=lambda: float(os.getenv("LSSR_WR", "0.6"))
-    )
-    mu_p1: float = field(
-        default_factory=lambda: float(os.getenv("LSSR_MU_P1", "0.0"))
-    )
-    mu_p2: float = field(
-        default_factory=lambda: float(os.getenv("LSSR_MU_P2", "0.0"))
-    )
-    mu_p3: float = field(
-        default_factory=lambda: float(os.getenv("LSSR_MU_P3", "0.0"))
-    )
-    tau_p2: float = field(
-        default_factory=lambda: float(os.getenv("LSSR_TAU_P2", "0.52"))
-    )
-    tau_p3: float = field(
-        default_factory=lambda: float(os.getenv("LSSR_TAU_P3", "0.52"))
-    )
-    cylinder_radius: int = field(
-        default_factory=lambda: int(os.getenv("MCC_CYLINDER_RADIUS", "70"))
-    )
-
-
-@dataclass(frozen=True)
-class MccConfig:
-    """MCC descriptor spatial/directional parameters."""
-    cell_size: int = field(
-        default_factory=lambda: int(os.getenv("MCC_CELL_SIZE", "8"))
-    )
-    dir_bins: int = field(
-        default_factory=lambda: int(os.getenv("MCC_DIR_BINS", "6"))
-    )
-
-
-@dataclass(frozen=True)
 class GaborConfig:
     """Gabor enhancement parameters."""
     block_size: int = field(
@@ -360,8 +316,6 @@ class Config:
 
     # Algorithm tunables (Phase 15 follow-up)
     pipeline: PipelineConfig = field(default_factory=PipelineConfig)
-    lssr: LssrConfig = field(default_factory=LssrConfig)
-    mcc: MccConfig = field(default_factory=MccConfig)
     gabor: GaborConfig = field(default_factory=GaborConfig)
     doric: DoricConfig = field(default_factory=DoricConfig)
     qdrant_index: QdrantIndexConfig = field(default_factory=QdrantIndexConfig)
