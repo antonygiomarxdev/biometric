@@ -89,7 +89,7 @@ Tras evaluación de viabilidad, el MVP priorizará la **IA Generativa** sobre la
 | Vectores / Búsqueda | Qdrant + MCC descriptors | ✅ |
 | Auth | Argon2id + PyJWT | ✅ |
 
-## MCC Matching — Resultados del Spike (Phase 20)
+## MCC Matching — Resultados (Phase 20)
 
 - **80% Rank-1** con 3 minucias, **100% Rank-1** con 15 minucias
 - **216ms** tiempo de búsqueda para 10 huellas enroladas

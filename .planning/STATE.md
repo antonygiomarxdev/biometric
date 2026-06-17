@@ -46,7 +46,7 @@ See: `.planning/PROJECT.md`
 | 21. MCC Integration | 🏃 Planning |
 | 22. Reconocimiento Facial | ⏳ Pendiente |
 
-## MCC Matching — Resultados del Spike
+## MCC Matching — Resultados
 
 - **80% Rank-1** con 3 minucias, **100% Rank-1** con 15 minucias
 - **216ms** tiempo de búsqueda para 10 huellas enroladas

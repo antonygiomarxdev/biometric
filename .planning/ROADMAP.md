@@ -19,6 +19,6 @@
 - [x] **Phase 17:** Person / Fingerprint / Capture Data Model
 - [x] **Phase 18:** End-to-End Forensic Flow (enrollment + search unificado)
 - [~] **Phase 19:** Naming Convention Cleanup (Waves 1-3 done, 4-6 pending)
-- [x] **Phase 20:** MCC Graph Matching Spike — Validated
+- [x] **Phase 20:** MCC Matching — Validated (80% R-1, 100% R-5)
 - [ ] **Phase 21 (ACTUAL):** MCC Integration — Production enrollment + search
 - [ ] **Phase 22:** Reconocimiento Facial
