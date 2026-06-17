@@ -93,18 +93,27 @@ def extract_cylinders(
     frequency_map: np.ndarray | None = None,
     config: CylinderConfig | None = None,
 ) -> list[np.ndarray]:
-    """Build MCC cylinder descriptors for each minutia.
+    """Build MCC cylinder descriptors for each minutia (production path).
+
+    With the default config (12 sectors x 4 rings x 3 features), each
+    descriptor is 144-D, L2-normalized, rotation-invariant (cylinder is
+    aligned to the minutia's local ridge angle) and scale-stable (ridge
+    counts bounded by local frequency).
 
     Args:
-        minutiae: List of minutiae dicts with keys (x, y, angle).
-        skeleton: Binary ridge skeleton image (non-zero = ridge pixel).
+        minutiae: List of dicts with keys ``(x, y, angle)``.
+        skeleton: Binary ridge skeleton (non-zero = ridge pixel).
         orientation_field: Block-level ridge orientation map (radians).
         frequency_map: Block-level ridge frequency map (cycles/pixel).
         config: Cylinder parameters; defaults to ``DEFAULT_CONFIG``.
 
     Returns:
-        List of L2-normalized descriptor vectors (one per minutia).
-        Vectors have dimension ``config.descriptor_dimension``.
+        List of L2-normalized descriptor vectors, each with dimension
+        ``config.descriptor_dimension`` (default 144).
+
+    References:
+        Cappelli, R., Ferrara, M., & Maltoni, D. (2010).
+        Minutia Cylinder-Code. IEEE TPAMI.
     """
     if config is None:
         config = DEFAULT_CONFIG
