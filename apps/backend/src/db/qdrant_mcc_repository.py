@@ -150,22 +150,36 @@ class QdrantMccRepository(IMccMatcher):
         fingerprint_id: str,
         capture_id: str,
         vectors: list[np.ndarray],
+        cylinder_positions: list[tuple[int, int, float]] | None = None,
     ) -> int:
-        """Insert N cylinder vectors. Returns the count inserted."""
+        """Insert N cylinder vectors. Returns the count inserted.
+
+        When ``cylinder_positions`` is provided (same length as ``vectors``),
+        each point's payload includes ``x``, ``y``, and ``angle`` so that
+        :meth:`knn_search` can surface the candidate minutia's spatial
+        location for match-trace rendering (Phase 23).
+        """
         if not vectors:
             return 0
-        points = [
-            qdrant_models.PointStruct(
-                id=_cylinder_point_id(person_id, fingerprint_id, capture_id, i),
-                vector=v.astype(np.float32).tolist(),
-                payload={
-                    "person_id": person_id,
-                    "fingerprint_id": fingerprint_id,
-                    "capture_id": capture_id,
-                },
+        points: list[qdrant_models.PointStruct] = []
+        for i, v in enumerate(vectors):
+            payload: dict[str, object] = {
+                "person_id": person_id,
+                "fingerprint_id": fingerprint_id,
+                "capture_id": capture_id,
+            }
+            if cylinder_positions is not None:
+                x, y, angle = cylinder_positions[i]
+                payload["x"] = int(x)
+                payload["y"] = int(y)
+                payload["angle"] = float(angle)
+            points.append(
+                qdrant_models.PointStruct(
+                    id=_cylinder_point_id(person_id, fingerprint_id, capture_id, i),
+                    vector=v.astype(np.float32).tolist(),
+                    payload=payload,
+                )
             )
-            for i, v in enumerate(vectors)
-        ]
         self._client.upsert(collection_name=self._collection, points=points, wait=True)
         return len(points)
 
@@ -178,11 +192,18 @@ class QdrantMccRepository(IMccMatcher):
         query_vectors: list[np.ndarray],
         top_k_per_vector: int = 5,
     ) -> list[MccCylinderHit]:
-        """For each query cylinder, return top-K similar cylinders."""
+        """For each query cylinder, return top-K similar cylinders.
+
+        The returned ``MccCylinderHit`` includes the loop index
+        (``query_cylinder_index``) so callers can correlate hits back
+        to the probe minutia that generated the query, and spatial
+        position (``candidate_x``/``candidate_y``/``candidate_angle``)
+        from the Qdrant payload for match-trace rendering.
+        """
         if not query_vectors:
             return []
         all_hits: list[MccCylinderHit] = []
-        for qv in query_vectors:
+        for query_idx, qv in enumerate(query_vectors):
             response = self._client.query_points(
                 collection_name=self._collection,
                 query=qv.astype(np.float32).tolist(),
@@ -197,6 +218,10 @@ class QdrantMccRepository(IMccMatcher):
                         fingerprint_id=str(payload.get("fingerprint_id", "")),
                         capture_id=str(payload.get("capture_id", "")),
                         similarity=float(hit.score),
+                        query_cylinder_index=query_idx,
+                        candidate_x=int(payload.get("x", 0)),
+                        candidate_y=int(payload.get("y", 0)),
+                        candidate_angle=float(payload.get("angle", 0.0)),
                     )
                 )
         return all_hits
