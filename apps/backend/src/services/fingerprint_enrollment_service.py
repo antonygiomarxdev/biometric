@@ -31,11 +31,13 @@ class FingerprintEnrollmentService:
         fingerprint_service: FingerprintService,
         qdrant_repo=None,
         nebula_repo=None,
+        mcc_matching_service=None,
     ) -> None:
         self._session = session
         self._fp_service = fingerprint_service
         self._qdrant = qdrant_repo
         self._nebula = nebula_repo
+        self._mcc_service = mcc_matching_service
 
     async def create_capture(
         self,
@@ -118,6 +120,10 @@ class FingerprintEnrollmentService:
             normalized=normalized,
         )
 
+        await self._index_mcc(
+            capture=capture, fingerprint=fp, image_bytes=image_bytes,
+        )
+
         await self._session.refresh(capture)
         return capture, graphs
 
@@ -186,3 +192,41 @@ class FingerprintEnrollmentService:
             )
         except Exception as e:
             log.warning("Qdrant indexing failed for capture %s: %s", capture.id, e)
+
+    async def _index_mcc(
+        self,
+        capture: FingerprintCapture,
+        fingerprint: Fingerprint,
+        image_bytes: bytes,
+    ) -> None:
+        """Build and persist MCC cylinder descriptors (Phase 21).
+
+        Kept best-effort: failures are logged and do not abort enrollment.
+        Dual-writes alongside the deprecated Delaunay _index_external.
+        """
+        if self._mcc_service is None:
+            return
+        try:
+            person: Person | None = await self._session.get(
+                Person, fingerprint.person_id,
+            )
+            if person is None:
+                return
+            person_id = (
+                str(person.external_id) if person.external_id else str(person.id)
+            )
+            loop = asyncio.get_running_loop()
+            n = await loop.run_in_executor(
+                None,
+                self._mcc_service.enroll,
+                str(capture.id),
+                str(fingerprint.id),
+                person_id,
+                image_bytes,
+            )
+            log.info(
+                "MCC indexed %d cylinders for capture %s (person=%s)",
+                n, capture.id, person_id,
+            )
+        except Exception as e:
+            log.warning("MCC indexing failed for capture %s: %s", capture.id, e)

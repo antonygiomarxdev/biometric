@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import numpy as np
 import pytest
@@ -128,3 +128,59 @@ class TestCreateCapture:
         bytes_in = b"hello world"
         c, _ = await svc.create_capture(fp.id, bytes_in)
         assert c.image_hash_sha256 == hashlib.sha256(bytes_in).hexdigest()
+
+
+def test_init_accepts_mcc_service() -> None:
+    """FingerprintEnrollmentService __init__ accepts mcc_matching_service kwarg."""
+    svc = FingerprintEnrollmentService.__new__(FingerprintEnrollmentService)
+    svc._session = MagicMock()
+    svc._fp_service = MagicMock()
+    svc._qdrant = None
+    svc._nebula = None
+    svc._mcc_service = MagicMock()
+    assert svc._mcc_service is not None
+
+
+@pytest.mark.asyncio
+async def test_index_mcc_invokes_enroll_with_image_bytes() -> None:
+    """_index_mcc should call MccMatchingService.enroll with correct params."""
+    calls = []
+
+    class _FakeSvc:
+        def enroll(self, capture_id, fingerprint_id, person_id, image_bytes):
+            calls.append({
+                "capture_id": capture_id,
+                "fingerprint_id": fingerprint_id,
+                "person_id": person_id,
+                "len": len(image_bytes),
+            })
+            return 5
+
+    person = MagicMock(spec=Person)
+    person.external_id = "ext-1"
+    person.id = 1
+
+    svc = FingerprintEnrollmentService.__new__(FingerprintEnrollmentService)
+    svc._session = AsyncMock()
+    svc._session.get.return_value = person
+    svc._fp_service = MagicMock()
+    svc._qdrant = None
+    svc._nebula = None
+    svc._mcc_service = _FakeSvc()
+
+    capture = MagicMock()
+    capture.id = "cap-1"
+    fingerprint = MagicMock()
+    fingerprint.id = "fp-1"
+    fingerprint.person_id = "person-1"
+
+    await svc._index_mcc(
+        capture=capture,
+        fingerprint=fingerprint,
+        image_bytes=b"test-image-bytes",
+    )
+    assert len(calls) == 1
+    assert calls[0]["capture_id"] == "cap-1"
+    assert calls[0]["fingerprint_id"] == "fp-1"
+    assert calls[0]["person_id"] == "ext-1"
+    assert calls[0]["len"] == 16
