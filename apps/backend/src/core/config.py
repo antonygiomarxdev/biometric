@@ -278,8 +278,8 @@ class MccMatchingConfig:
     top_k_per_cylinder: int = field(
         default_factory=lambda: int(os.getenv("MCC_TOP_K_PER_CYLINDER", "5"))
     )
-    score_normalization: str = field(
-        default_factory=lambda: os.getenv("MCC_SCORE_NORMALIZATION", "fingerprint")
+    score_normalization: Literal["fingerprint", "global"] = field(
+        default_factory=lambda: os.getenv("MCC_SCORE_NORMALIZATION", "fingerprint")  # type: ignore[return-value]
     )
 
 

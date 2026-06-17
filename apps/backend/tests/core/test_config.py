@@ -163,13 +163,10 @@ class TestDoricConfig:
         # 2π = 6.283185307179586
         assert cfg.poi_divisor == pytest.approx(2 * 3.141592653589793)
 
-    def test_env_override(self) -> None:
-        os.environ["DORIC_RMS_THRESHOLD"] = "0.45"
-        try:
-            cfg = DoricConfig()
-            assert cfg.rms_threshold == 0.45
-        finally:
-            os.environ.pop("DORIC_RMS_THRESHOLD", None)
+    def test_env_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("DORIC_RMS_THRESHOLD", "0.45")
+        cfg = DoricConfig()
+        assert cfg.rms_threshold == 0.45
 
 
 class TestQdrantIndexConfig:
@@ -394,3 +391,8 @@ class TestMccMatchingConfigFromEnv:
         assert cfg.vector_size == 256
         assert cfg.top_k_per_cylinder == 10
         assert cfg.score_normalization == "global"
+
+    def test_mcc_config_via_config_class_monkeypatch(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("MCC_COLLECTION", "via_config_test")
+        cfg = Config()
+        assert cfg.matching.collection == "via_config_test"
