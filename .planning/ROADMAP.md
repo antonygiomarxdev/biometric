@@ -20,6 +20,6 @@
 - [x] **Phase 18:** End-to-End Forensic Flow (enrollment + search unificado)
 - [~] **Phase 19:** Naming Convention Cleanup (Waves 1-3 done, 4-6 pending)
 - [x] **Phase 20:** MCC Matching — Validated (80% R-1, 100% R-5)
-- [ ] **Phase 21 (ACTUAL):** MCC Integration — Production enrollment + search
+- [ ] **Phase 21:** MCC Integration — Production enrollment + search
 - [ ] **Phase 22:** Reconocimiento Facial
-- [ ] **Phase 23:** Frontend — Flujo Forense Unificado (Enrollment + Search + Minucias)
+- [ ] **Phase 23 (ACTUAL):** Frontend — Flujo Forense Unificado (Enrollment + Search + Minucias) — Plan 01 (match_trace backend) ✅
