@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import Executor
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import cv2
@@ -61,7 +60,7 @@ class MccMatchingService:
 
     def __init__(
         self,
-        fingerprint_service: "FingerprintService | None" = None,
+        fingerprint_service: FingerprintService | None = None,
         mcc_repo: QdrantMccRepository | None = None,
         pool: Executor | None = None,
     ) -> None:

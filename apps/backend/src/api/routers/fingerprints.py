@@ -132,7 +132,7 @@ async def preview_fingerprint(
     terminations = 0
     bifurcations = 0
     for m in normalized.minutiae:
-        type_value = int(m.type.value) if hasattr(m.type, "value") else int(m.type)
+        type_value = int(m.type.value)
         minutiae_points.append(
             {"x": int(m.x), "y": int(m.y), "angle": float(m.angle), "type": type_value},
         )

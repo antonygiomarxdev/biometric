@@ -6,7 +6,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import ClassVar, List, NewType, Optional, Tuple
+from typing import ClassVar
+
 import numpy as np
 
 # Tipos primitivos para claridad
@@ -41,7 +42,7 @@ class MinutiaCandidate:
     confidence: Confidence
     origin: AlgorithmOrigin
 
-    def to_vector_part(self) -> List[float]:
+    def to_vector_part(self) -> list[float]:
         """Serializa la minucia para el vector final."""
         return [float(self.type.value), float(self.x), float(self.y), self.angle]
 
@@ -52,12 +53,12 @@ class NormalizedFingerprint:
     Las coordenadas son relativas al centroide o sistema canónico.
     """
     id: str
-    minutiae: List[MinutiaCandidate]
+    minutiae: list[MinutiaCandidate]
     width: int
     height: int
-    image: Optional[np.ndarray] = field(default=None, repr=False)
+    image: np.ndarray | None = field(default=None, repr=False)
     ridge_graph: RidgeGraph | None = None
-    
+
     @property
     def vector(self) -> np.ndarray:
         """Genera el vector plano normalizado."""
@@ -76,7 +77,7 @@ Minutiae = MinutiaCandidate
 class MatchResult:
     """Resultado detallado de la comparación."""
     matched: bool
-    person_id: Optional[str]
+    person_id: str | None
     score: float  # Combined score
     confidence: float
 
@@ -280,7 +281,7 @@ class MccSearchHit:
     total_score: float
     hits: int
     contributing_fingerprints: list[str]
-    match_trace: list["MatchTraceEntry"] = field(default_factory=list)
+    match_trace: list[MatchTraceEntry] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
