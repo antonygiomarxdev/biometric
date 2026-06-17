@@ -36,12 +36,12 @@ router = APIRouter(
 @router.post("/login")
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
-    db: AsyncSession = Depends(get_async_db),
+    session: AsyncSession = Depends(get_async_db),
 ) -> dict:
     """
     Authenticate a user and return a JWT access token.
     """
-    result = await db.execute(
+    result = await session.execute(
         select(User).where(User.username == form_data.username)
     )
     user = result.scalar_one_or_none()

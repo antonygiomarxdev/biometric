@@ -41,7 +41,7 @@ async def search_latent(
     file: UploadFile = File(..., description="Latent/probe fingerprint image"),
     top_k: int = 10,
     matching: QdrantRagMatchingService = Depends(get_rag_matching_service),
-    db: AsyncSession = Depends(get_async_db),
+    session: AsyncSession = Depends(get_async_db),
 ) -> dict[str, Any]:
     """Search enrolled fingerprints for matches to a probe image.
 
@@ -71,9 +71,9 @@ async def search_latent(
             person_uuid = None
 
         if person_uuid is not None:
-            person = await db.get(Person, person_uuid)
+            person = await session.get(Person, person_uuid)
         else:
-            result = await db.execute(
+            result = await session.execute(
                 select(Person).where(Person.external_id == hit.person_id)
             )
             person = result.scalar_one_or_none()

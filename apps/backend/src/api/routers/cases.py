@@ -89,7 +89,7 @@ async def list_cases(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     status: str | None = Query(None, description="Filter by status"),
-    db: AsyncSession = Depends(get_async_db),
+    session: AsyncSession = Depends(get_async_db),
 ) -> dict[str, object]:
     """
     List all forensic cases with optional status filter and pagination.
@@ -106,7 +106,7 @@ async def list_cases(
 @router.get("/{case_id}", response_model=CaseResponse)
 async def get_case(
     case_id: uuid.UUID,
-    db: AsyncSession = Depends(get_async_db),
+    session: AsyncSession = Depends(get_async_db),
 ) -> object:
     """
     Retrieve a single case by its UUID.
@@ -121,7 +121,7 @@ async def get_case(
 )
 async def create_case(
     body: CaseCreate,
-    db: AsyncSession = Depends(get_async_db),
+    session: AsyncSession = Depends(get_async_db),
 ) -> object:
     """
     Create a new forensic case.
@@ -139,7 +139,7 @@ async def create_case(
 async def update_case(
     case_id: uuid.UUID,
     body: CaseUpdate,
-    db: AsyncSession = Depends(get_async_db),
+    session: AsyncSession = Depends(get_async_db),
 ) -> object:
     """
     Update an existing forensic case.
@@ -156,7 +156,7 @@ async def update_case(
 @router.delete("/{case_id}", status_code=204)
 async def delete_case(
     case_id: uuid.UUID,
-    db: AsyncSession = Depends(get_async_db),
+    session: AsyncSession = Depends(get_async_db),
 ) -> None:
     """
     Delete a forensic case and all its associated evidence (CASCADE).

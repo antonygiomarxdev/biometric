@@ -112,7 +112,7 @@ async def list_decisions(
     limit: int = Query(20, ge=1, le=100),
     case_id: uuid.UUID | None = Query(None, description="Filter by case"),
     verdict: str | None = Query(None, description="Filter by verdict"),
-    db: AsyncSession = Depends(get_async_db),
+    session: AsyncSession = Depends(get_async_db),
 ) -> dict[str, Any]:
     """
     List examiner decisions with optional filters and pagination.
@@ -129,7 +129,7 @@ async def list_decisions(
 @router.get("/{decision_id}", response_model=DecisionResponse)
 async def get_decision(
     decision_id: uuid.UUID,
-    db: AsyncSession = Depends(get_async_db),
+    session: AsyncSession = Depends(get_async_db),
 ) -> Any:
     """
     Retrieve a single decision by its UUID.
@@ -145,7 +145,7 @@ async def get_decision(
 )
 async def create_decision(
     body: DecisionCreate,
-    db: AsyncSession = Depends(get_async_db),
+    session: AsyncSession = Depends(get_async_db),
 ) -> Any:
     """
     Submit an examiner matching decision.

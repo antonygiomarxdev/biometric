@@ -79,7 +79,7 @@ async def list_evidence(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     case_id: uuid.UUID | None = Query(None, description="Filter by case"),
-    db: AsyncSession = Depends(get_async_db),
+    session: AsyncSession = Depends(get_async_db),
 ) -> dict[str, object]:
     """
     List evidence items with optional case filter and pagination.
@@ -98,7 +98,7 @@ async def list_evidence(
 @router.get("/{evidence_id}", response_model=EvidenceResponse)
 async def get_evidence(
     evidence_id: uuid.UUID,
-    db: AsyncSession = Depends(get_async_db),
+    session: AsyncSession = Depends(get_async_db),
 ) -> object:
     """
     Retrieve a single evidence item by its UUID.
@@ -117,7 +117,7 @@ async def create_evidence(
         ..., min_length=1, max_length=100, description="Fingerprint identifier"
     ),
     file: UploadFile | None = None,
-    db: AsyncSession = Depends(get_async_db),
+    session: AsyncSession = Depends(get_async_db),
 ) -> object:
     """
     Register new evidence, optionally uploading a fingerprint image.
@@ -133,7 +133,7 @@ async def create_evidence(
 @router.get("/{evidence_id}/image")
 async def get_evidence_image(
     evidence_id: uuid.UUID,
-    db: AsyncSession = Depends(get_async_db),
+    session: AsyncSession = Depends(get_async_db),
 ) -> Response:
     """Serve the evidence image from MinIO object storage."""
     image_data = await evidence_service.get_evidence_image(db, evidence_id)
@@ -143,7 +143,7 @@ async def get_evidence_image(
 @router.delete("/{evidence_id}", status_code=204)
 async def delete_evidence(
     evidence_id: uuid.UUID,
-    db: AsyncSession = Depends(get_async_db),
+    session: AsyncSession = Depends(get_async_db),
 ) -> None:
     """
     Delete an evidence item.

@@ -210,7 +210,7 @@ class TestGetCurrentUser:
             ),
         ):
             with pytest.raises(HTTPException) as exc_info:
-                await get_current_user(token="invalid", db=mock_db)
+                await get_current_user(token="invalid", session=mock_db)
             assert exc_info.value.status_code == 401
             assert "Could not validate credentials" in exc_info.value.detail
 
@@ -226,7 +226,7 @@ class TestGetCurrentUser:
             ),
         ):
             with pytest.raises(HTTPException) as exc_info:
-                await get_current_user(token="no-sub-token", db=mock_db)
+                await get_current_user(token="no-sub-token", session=mock_db)
             assert exc_info.value.status_code == 401
 
     @pytest.mark.asyncio
@@ -249,7 +249,7 @@ class TestGetCurrentUser:
             ),
         ):
             with pytest.raises(HTTPException) as exc_info:
-                await get_current_user(token="valid-token", db=mock_db)
+                await get_current_user(token="valid-token", session=mock_db)
             assert exc_info.value.status_code == 401
 
     @pytest.mark.asyncio
@@ -275,7 +275,7 @@ class TestGetCurrentUser:
             ),
         ):
             with pytest.raises(HTTPException) as exc_info:
-                await get_current_user(token="valid-token", db=mock_db)
+                await get_current_user(token="valid-token", session=mock_db)
             assert exc_info.value.status_code == 403
             assert "Inactive" in exc_info.value.detail
 
@@ -302,7 +302,7 @@ class TestGetCurrentUser:
                 return_value={"sub": "perito1"},
             ),
         ):
-            result = await get_current_user(token="valid-token", db=mock_db)
+            result = await get_current_user(token="valid-token", session=mock_db)
             assert result is active_user
 
 

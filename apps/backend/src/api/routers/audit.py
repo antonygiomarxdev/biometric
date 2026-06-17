@@ -67,7 +67,7 @@ async def list_audit_logs(
     action: Optional[str] = Query(None, description="Filter by action type (INSERT, UPDATE, DELETE, …)"),
     limit: int = Query(50, ge=1, le=500, description="Max results per page"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
-    db: AsyncSession = Depends(get_async_db),
+    session: AsyncSession = Depends(get_async_db),
 ) -> AuditLogPage:
     """Fetch audit log history with optional filters and pagination.
 
@@ -86,7 +86,7 @@ async def list_audit_logs(
 
     # Total count
     count_query = select(func.count()).select_from(base_query.subquery())
-    total: int = await db.run_sync(lambda s: s.execute(count_query).scalar_one())
+    total: int = await session.run_sync(lambda s: s.execute(count_query).scalar_one())
 
     # Paginated results
     results_query = (
@@ -94,7 +94,7 @@ async def list_audit_logs(
         .offset(offset)
         .limit(limit)
     )
-    rows = await db.run_sync(lambda s: s.execute(results_query).scalars().all())
+    rows = await session.run_sync(lambda s: s.execute(results_query).scalars().all())
 
     items = [
         AuditLogEntry(

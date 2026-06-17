@@ -28,7 +28,7 @@ router = APIRouter(
 
 
 @router.get("/{case_id}")
-async def generate_report(case_id: UUID, db: AsyncSession = Depends(get_async_db)) -> Response:
+async def generate_report(case_id: UUID, session: AsyncSession = Depends(get_async_db)) -> Response:
     """
     Generate a signed forensic dictamen (PDF) for the given case.
 
@@ -41,7 +41,7 @@ async def generate_report(case_id: UUID, db: AsyncSession = Depends(get_async_db
     (mitigates T-01-06: Tampering of PDF export).
     """
     # ── retrieve case ────────────────────────────────────────────
-    result = await db.execute(select(Case).where(Case.id == case_id))
+    result = await session.execute(select(Case).where(Case.id == case_id))
     case = result.scalar_one_or_none()
 
     if case is None:
@@ -51,7 +51,7 @@ async def generate_report(case_id: UUID, db: AsyncSession = Depends(get_async_db
         )
 
     # ── retrieve evidence ────────────────────────────────────────
-    result = await db.execute(select(Evidence).where(Evidence.case_id == case_id))
+    result = await session.execute(select(Evidence).where(Evidence.case_id == case_id))
     evidences = result.scalars().all()
 
     # ── build case data dict for the template ────────────────────
