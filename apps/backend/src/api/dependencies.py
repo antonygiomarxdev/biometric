@@ -225,6 +225,22 @@ def get_rag_matching_service() -> "QdrantRagMatchingService":
         _rag_matching_service = QdrantRagMatchingService()
     return _rag_matching_service
 
+# ---------------------------------------------------------------------------
+# MccMatchingService provider (Phase 21)
+# ---------------------------------------------------------------------------
+
+
+_mcc_matching_service: "MccMatchingService | None" = None
+
+
+def get_mcc_matching_service() -> "MccMatchingService":
+    global _mcc_matching_service
+    if _mcc_matching_service is None:
+        from src.services.mcc_matching_service import MccMatchingService
+        _mcc_matching_service = MccMatchingService()
+    return _mcc_matching_service
+
+
 logger = logging.getLogger(__name__)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
