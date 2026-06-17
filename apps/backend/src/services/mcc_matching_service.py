@@ -14,7 +14,7 @@ Clean Architecture: application service. Orchestrates:
 Algorithm (MCC)
 ---------------
 For each minutia, build a 3-D cylinder aligned to the local ridge
-orientation: 12 angular sectors × 4 radial rings × 3 structural features
+orientation: 12 angular sectors x 4 radial rings x 3 structural features
 (orientation, ridge count, frequency). The cylinder is rotation-invariant
 (because the orientation field is subtracted) and scale-normalized
 (because ridge counts are divided by local ridge frequency).
@@ -26,8 +26,10 @@ bias. Final ranking sorts persons by normalized total score descending.
 from __future__ import annotations
 
 import logging
-from concurrent.futures import Executor
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from concurrent.futures import Executor
 
 import cv2
 import numpy as np
@@ -40,6 +42,7 @@ from src.core.types import (
     MinutiaSummary,
 )
 from src.db.qdrant_mcc_repository import QdrantMccRepository
+from src.dev.logger import dev_log
 
 if TYPE_CHECKING:
     from src.services.fingerprint_service import FingerprintService
@@ -77,12 +80,19 @@ class MccMatchingService:
         nparr = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_GRAYSCALE)
         if img is None:
-            raise ValueError("Failed to decode image bytes")
+            msg = "Failed to decode image bytes"
+            raise ValueError(msg)
         return img
 
     def _run_mcc_pipeline(
         self, image: np.ndarray
-    ) -> tuple[list[dict], np.ndarray, np.ndarray | None, np.ndarray | None]:
+    ) -> tuple[
+        list[dict[str, Any]],
+        np.ndarray,
+        np.ndarray | None,
+        np.ndarray | None,
+        np.ndarray,
+    ]:
         """Run the MCC-specific mini-pipeline (Phase 21).
 
         Mirrors ``scripts/spike_mcc.py`` — uses :class:`RidgeGraphExtractor`
@@ -91,8 +101,9 @@ class MccMatchingService:
         step (the root cause of the original 0-cylinder bug for SOCOFing).
 
         Returns:
-            ``(minutiae_dicts, skeleton, orientation_field, frequency_map)``
-            where each ``minutiae_dict`` has keys ``(x, y, angle)``.
+            ``(minutiae_dicts, skeleton, orientation_field, frequency_map, enhanced_image)``
+            where each ``minutia_dict`` has keys ``(x, y, angle)`` and
+            ``enhanced_image`` is the Gabor-filtered 350px-tall image.
         """
         from src.core.interfaces import PipelineContext
         from src.processing.enhancer import create_enhancer
@@ -123,28 +134,54 @@ class MccMatchingService:
 
         rg = ctx.ridge_graph
         skeleton = ctx.skeleton
+        empty_skel = skeleton if skeleton is not None else np.zeros((1, 1), dtype=np.uint8)
         if rg is None or not rg.nodes:
-            return (
-                [],
-                skeleton if skeleton is not None else np.zeros((1, 1), dtype=np.uint8),
-                orientation_field,
-                frequency_map,
-            )
+            return ([], empty_skel, orientation_field, frequency_map, enhanced)
 
         minutiae_dicts = [
             {"x": float(n.x), "y": float(n.y), "angle": float(n.angle)}
             for n in rg.nodes
         ]
-        return (
-            minutiae_dicts,
-            skeleton if skeleton is not None else np.zeros((1, 1), dtype=np.uint8),
-            orientation_field,
-            frequency_map,
+        return (minutiae_dicts, empty_skel, orientation_field, frequency_map, enhanced)
+
+    def preview(self, image_bytes: bytes) -> dict[str, Any]:
+        """Run the MCC pipeline for preview purposes (no DB / no Qdrant I/O).
+
+        Returns a dict with:
+          - ``minutiae``: list of dicts with x, y, angle, type (type=2 = unknown)
+          - ``enhanced_image``: the Gabor-filtered image as a numpy array
+            (350px-tall, uint8). Caller serializes to base64 PNG.
+
+        This replaces the old ``/fingerprints/preview`` implementation that
+        used ``FingerprintService`` with ``SkeletonMinutiaeExtractor``,
+        which re-binarized the skeleton and produced 0 minutiae on small
+        images (the root cause of empty previews on SOCOFing).
+        """
+        import time as _time
+
+        t0 = _time.monotonic()
+        image = self._decode(image_bytes)
+        t_decode = _time.monotonic()
+        minutiae_dicts, _skel, _orient, _freq, enhanced = self._run_mcc_pipeline(image)
+        t_pipeline = _time.monotonic()
+
+        minutiae: list[dict[str, Any]] = [
+            {"x": int(m["x"]), "y": int(m["y"]), "angle": float(m["angle"]), "type": 2}
+            for m in minutiae_dicts
+        ]
+        dev_log(
+            "mcc.preview",
+            image_bytes=len(image_bytes),
+            minutiae=len(minutiae),
+            enhanced_shape=list(enhanced.shape),
+            decode_ms=round((t_decode - t0) * 1000, 1),
+            pipeline_ms=round((t_pipeline - t_decode) * 1000, 1),
         )
+        return {"minutiae": minutiae, "enhanced_image": enhanced}
 
     @staticmethod
     def _build_cylinders(
-        minutiae_dicts: list[dict],
+        minutiae_dicts: list[dict[str, Any]],
         skeleton: np.ndarray,
         orientation_field: np.ndarray | None,
         frequency_map: np.ndarray | None,
@@ -190,10 +227,27 @@ class MccMatchingService:
 
         Returns the number of cylinders inserted.
         """
+        import time as _time
+        t0 = _time.monotonic()
         image = self._decode(image_bytes)
+        t_decode = _time.monotonic()
         pipeline_result = self._run_mcc_pipeline(image)
-        minutiae_dicts, skeleton, orient, freq = pipeline_result
+        minutiae_dicts, skeleton, orient, freq, _enhanced = pipeline_result
+        t_pipeline = _time.monotonic()
         cylinders, positions = self._build_cylinders(minutiae_dicts, skeleton, orient, freq)
+        t_cyl = _time.monotonic()
+        dev_log(
+            "mcc.enroll",
+            capture_id=capture_id,
+            fingerprint_id=fingerprint_id,
+            person_id=person_id,
+            image_bytes=len(image_bytes),
+            minutiae=len(minutiae_dicts),
+            cylinders=len(cylinders),
+            decode_ms=round((t_decode - t0) * 1000, 1),
+            pipeline_ms=round((t_pipeline - t_decode) * 1000, 1),
+            cylinders_ms=round((t_cyl - t_pipeline) * 1000, 1),
+        )
         if not cylinders:
             logger.info("No cylinders for capture %s; skipping insert", capture_id)
             return 0
@@ -203,6 +257,13 @@ class MccMatchingService:
             capture_id=capture_id,
             vectors=cylinders,
             cylinder_positions=positions,
+        )
+        t_qdrant = _time.monotonic()
+        dev_log(
+            "mcc.enroll.persisted",
+            capture_id=capture_id,
+            inserted=n,
+            qdrant_ms=round((t_qdrant - t_cyl) * 1000, 1),
         )
         logger.info(
             "Enrolled capture %s: %d cylinders for person %s",
@@ -228,12 +289,15 @@ class MccMatchingService:
             ``match_trace`` populated (per-candidate per-cylinder pairs,
             top-1 hit per probe cylinder).
         """
+        import time as _time
+        t0 = _time.monotonic()
         image = self._decode(image_bytes)
         pipeline_result = self._run_mcc_pipeline(image)
-        minutiae_dicts, skeleton, orient, freq = pipeline_result
+        minutiae_dicts, skeleton, orient, freq, _enhanced = pipeline_result
         query_cylinders, query_positions = self._build_cylinders(
             minutiae_dicts, skeleton, orient, freq,
         )
+        t_build = _time.monotonic()
 
         probe_minutiae = [
             MinutiaSummary(
@@ -246,11 +310,25 @@ class MccMatchingService:
         ][: len(query_cylinders)]
 
         if not query_cylinders:
+            dev_log(
+                "mcc.search.no_cylinders",
+                minutiae=len(minutiae_dicts),
+                hint="Image too low quality — pipeline produced 0 valid minutiae",
+            )
             return probe_minutiae, []
 
         cylinder_hits = self._mcc_repo.knn_search(
             query_cylinders,
             top_k_per_vector=config.matching.top_k_per_cylinder,
+        )
+        t_knn = _time.monotonic()
+        dev_log(
+            "mcc.search.knn",
+            query_cylinders=len(query_cylinders),
+            top_k_per_vector=config.matching.top_k_per_cylinder,
+            raw_hits=len(cylinder_hits),
+            build_ms=round((t_build - t0) * 1000, 1),
+            knn_ms=round((t_knn - t_build) * 1000, 1),
         )
         if not cylinder_hits:
             return probe_minutiae, []
@@ -313,6 +391,13 @@ class MccMatchingService:
             )
 
         candidates.sort(key=lambda c: c.total_score, reverse=True)
+        dev_log(
+            "mcc.search.ranked",
+            persons=len(candidates),
+            top_score=round(candidates[0].total_score, 4) if candidates else 0.0,
+            top_person_id=candidates[0].person_id if candidates else None,
+            enrolled_total=sum(enrolled_counts.values()),
+        )
         return probe_minutiae, candidates[:top_k]
 
     def _search_cylinders(
@@ -367,7 +452,7 @@ class MccMatchingService:
             records, offset = self._mcc_repo._client.scroll(
                 collection_name=self._mcc_repo._collection,
                 limit=256,
-                offset=offset,
+                offset=offset,  # type: ignore[arg-type]
                 with_payload=True,
                 with_vectors=False,
             )

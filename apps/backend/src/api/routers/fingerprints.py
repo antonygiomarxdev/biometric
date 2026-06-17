@@ -6,12 +6,11 @@ import asyncio
 import base64
 import logging
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import cv2
 import numpy as np
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 
 from src.api.dependencies import get_async_db, get_fingerprint_service
 from src.api.prefix import API_PREFIX
@@ -24,7 +23,13 @@ from src.schemas.fingerprint_schema import (
     FingerprintResponse,
     MinutiaPoint,
 )
-from src.services.fingerprint_service import FingerprintService
+
+if TYPE_CHECKING:
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from src.services.fingerprint_service import FingerprintService
 
 log = logging.getLogger(__name__)
 
@@ -35,18 +40,26 @@ router = APIRouter(tags=["fingerprints"])
     API_PREFIX + "/persons/{person_id}/fingerprints",
     response_model=FingerprintResponse,
     status_code=201,
-    summary="Create a fingerprint slot",
+    summary="Create or fetch a fingerprint slot (idempotent)",
     responses={
+        200: {"description": "Slot already existed, returned as-is"},
+        201: {"description": "Slot created"},
         404: {"description": "Person not found"},
-        409: {"description": "Fingerprint slot already exists"},
     }
 )
 async def create_fingerprint(
+    response: Response,
     person_id: uuid.UUID,
     data: FingerprintCreate,
     session: AsyncSession = Depends(get_async_db),
 ) -> Any:
-    """Create a new fingerprint slot for a person."""
+    """Idempotent fingerprint slot creation.
+
+    If a slot already exists for the (person, finger_position, capture_type)
+    triple, return it with HTTP 200 instead of raising 409. This makes
+    the enrollment wizard resilient to re-selection, repeated clicks,
+    and re-enrollments of the same finger.
+    """
     person = await session.get(Person, person_id)
     if person is None:
         raise HTTPException(status_code=404, detail="Person not found")
@@ -54,10 +67,9 @@ async def create_fingerprint(
         session, person_id, data.finger_position, data.capture_type,
     )
     if existing is not None:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Slot for finger {data.finger_position}/{data.capture_type} already exists",
-        )
+        response.status_code = 200
+        return existing
+    response.status_code = 201
     return await FingerprintRepository.create(
         session,
         person_id=person_id,
@@ -104,10 +116,10 @@ async def preview_fingerprint(
     """Preview minutiae for a fingerprint image without persisting.
 
     The perito uploads a fingerprint image from the enrollment wizard.
-    The backend runs the full extraction pipeline and returns the
-    enhanced image (base64 PNG), detected minutiae, and summary stats.
-    The perito reviews the result before committing via the captures
-    endpoint.
+    The backend runs the MCC-specific mini-pipeline (Gabor enhancement
+    + skeletonization + RidgeGraphExtractor) and returns the enhanced
+    image (base64 PNG) plus the detected minutiae. The perito reviews
+    the extraction before committing via the captures endpoint.
 
     This endpoint is the backend for ``getMinutiaeForImage`` in
     ``apps/frontend/src/lib/api.ts`` (Phase 23, D-29).
@@ -116,50 +128,33 @@ async def preview_fingerprint(
     if not image_bytes:
         raise HTTPException(status_code=400, detail="Empty file")
 
+    from src.api.dependencies import get_mcc_matching_service
+
+    mcc_svc = get_mcc_matching_service()
     loop = asyncio.get_running_loop()
     try:
-        normalized = await loop.run_in_executor(
-            None,
-            fp_service.process_image_from_bytes,
-            image_bytes,
-            "preview",
+        result = await loop.run_in_executor(
+            None, mcc_svc.preview, image_bytes,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    # Serialize minutiae
-    minutiae_points: list[dict[str, Any]] = []
-    terminations = 0
-    bifurcations = 0
-    for m in normalized.minutiae:
-        type_value = int(m.type.value)
-        minutiae_points.append(
-            {"x": int(m.x), "y": int(m.y), "angle": float(m.angle), "type": type_value},
-        )
-        if type_value == 0:
-            terminations += 1
-        elif type_value == 1:
-            bifurcations += 1
+    minutiae_dicts: list[dict[str, Any]] = result["minutiae"]
+    enhanced = result["enhanced_image"]
+    if enhanced is None or enhanced.size == 0:
+        raise HTTPException(status_code=400, detail="Pipeline produced no enhanced image")
 
-    # Render the enhanced image to a base64 PNG
-    img = getattr(normalized, "image", None)
-    if img is None:
-        # Fall back to the raw bytes via cv2 if the pipeline didn't carry the image forward
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_GRAYSCALE)
-    if img is None:
-        raise HTTPException(status_code=400, detail="Failed to decode image")
-    ok, buf = cv2.imencode(".png", img)
+    ok, buf = cv2.imencode(".png", enhanced)
     if not ok:
         raise HTTPException(status_code=400, detail="Failed to encode processed image")
     b64_png = base64.b64encode(buf.tobytes()).decode("ascii")
 
-    h, w = img.shape[:2]
+    h, w = enhanced.shape[:2]
     return FingerprintPreviewResponse(
         processed_image=b64_png,
-        minutiae=[MinutiaPoint(**p) for p in minutiae_points],
-        terminations=terminations,
-        bifurcations=bifurcations,
+        minutiae=[MinutiaPoint(**p) for p in minutiae_dicts],
+        terminations=0,
+        bifurcations=0,
         image_shape=[int(h), int(w)],
-        image_dtype=str(img.dtype),
+        image_dtype=str(enhanced.dtype),
     )

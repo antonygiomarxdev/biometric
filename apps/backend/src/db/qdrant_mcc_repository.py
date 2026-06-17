@@ -73,7 +73,7 @@ class QdrantMccRepository(IMccMatcher):
         port: int = _DEFAULT_PORT,
         collection: str = COLLECTION_NAME,
         vector_size: int = DEFAULT_VECTOR_SIZE,
-    ) -> "QdrantMccRepository":
+    ) -> QdrantMccRepository:
         """Construct from a host/port pair, falling back to in-memory on failure."""
         try:
             client = QdrantClient(host=host, port=port)
@@ -180,7 +180,12 @@ class QdrantMccRepository(IMccMatcher):
                     payload=payload,
                 )
             )
-        self._client.upsert(collection_name=self._collection, points=points, wait=True)
+        # wait=False avoids synchronous fsync per upsert; the Qdrant
+        # container was hitting "Too many open files" with wait=True.
+        # Async indexing is fine for our latency budget (~50ms target
+        # per search), and we can check indexing status separately if
+        # eventual consistency becomes a concern.
+        self._client.upsert(collection_name=self._collection, points=points, wait=False)
         return len(points)
 
     # ------------------------------------------------------------------
