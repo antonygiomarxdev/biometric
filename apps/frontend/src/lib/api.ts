@@ -377,6 +377,19 @@ export function searchMatching(
   );
 }
 
+/** Fetch the Gabor-enhanced PNG bytes for an enrolled capture (Phase 23).
+ *  Returns a blob URL ready to bind to <img src=...>. */
+export async function fetchCaptureImage(captureId: string): Promise<string> {
+  const res = await fetch(`${API_BASE}/api/v1/captures/${captureId}/image`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch capture image: ${res.status}`);
+  }
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+  );
+}
+
 // Decisions
 export function createDecision(
   decision: DecisionCreate,
