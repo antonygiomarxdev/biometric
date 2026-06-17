@@ -4,13 +4,13 @@ milestone: v2.0-alpha
 milestone_name: milestone
 current_phase: 23
 status: Executing Phase 23 — Plans 06, 08 complete
-stopped_at: Completed 23-08 (Nyquist validation gate — 5 backend tests: domain, Qdrant, service, router, preview)
-last_updated: "2026-06-17T20:20:00.000Z"
+stopped_at: Completed 23-07 (Delete legacy ScannerPage files + /scanner route)
+last_updated: "2026-06-17T18:45:00.000Z"
 progress:
   total_phases: 15
   completed_phases: 1
   total_plans: 60
-  completed_plans: 23
+  completed_plans: 24
   percent: 9
 ---
 
@@ -19,7 +19,7 @@ progress:
 **Last updated:** 2026-06-17
 **Current phase:** 23
 **Previous phase:** 21 (MCC Integration — Planning)
-**Stopped at:** Completed 23-08 (Nyquist validation gate — 5 backend tests)
+**Stopped at:** Completed 23-07 (Delete legacy ScannerPage files + /scanner route)
 
 ## Project Reference
 
