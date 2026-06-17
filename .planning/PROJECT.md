@@ -88,6 +88,15 @@ Tras evaluación de viabilidad, el MVP priorizará la **IA Generativa** sobre la
 | Almacenamiento | MinIO | ✅ |
 | Vectores / Búsqueda | Qdrant + MCC descriptors | ✅ |
 | Auth | Argon2id + PyJWT | ✅ |
+
+## MCC Matching — Resultados del Spike (Phase 20)
+
+- **80% Rank-1** con 3 minucias, **100% Rank-1** con 15 minucias
+- **216ms** tiempo de búsqueda para 10 huellas enroladas
+- **144D** descriptor por minucia (12 sectores × 4 anillos × 3 features)
+- Invariante a rotación, traslación y escala
+- Score normalizado por fingerprint (elimina bias de población)
+- Visualizaciones: `apps/backend/tests/output_visual/mcc_spike/`
 | Matching | MCC Cylinders (144D) + Cosine Similarity | ✅ |
 
 ## Constraints

@@ -47,6 +47,20 @@ Search:      imagen → pipeline → N minucias × cylinder 144D → cosine → 
 
 Cada cylinder captura la estructura de crestas alrededor de una minucia: 12 sectores angulares × 4 anillos radiales × 3 features (orientación, conteo de crestas, espaciado). Invariante a rotación, traslación y escala. Score normalizado por fingerprint para eliminar bias estadístico.
 
+## Visualizaciones
+
+Diagramas generados en `tests/output_visual/mcc_spike/`:
+
+| Archivo | Descripción |
+|---------|-------------|
+| `cylinder_explanation.png` | Minucia real + cylinder 4 anillos + skeleton + aristas + leyenda |
+| `overlap_diagram.png` | Dos minucias cercanas con cylinders solapados |
+| `matching_explanation.png` | Huella completa vs latente: búsqueda, overlap, ranking, scoring |
+| `benchmark_accuracy.png` | Barras de precisión por cantidad de minucias (80%-100%) |
+| `pipeline_diagram.png` | 6 paneles: huella→esqueleto→minucias→cylinder→vector→búsqueda |
+
+Para regenerar: `uv run python scripts/mcc_viz_v4.py && uv run python scripts/mcc_match_v5.py`
+
 ## API Endpoints
 
 | Método | Ruta | Descripción |
