@@ -169,7 +169,7 @@ class FingerprintEnrollmentService:
         graphs: list[RidgeGraph],
         normalized: NormalizedFingerprint,
     ) -> None:
-        """Push chunks to Qdrant and minutiae to NebulaGraph. Best-effort."""
+        """Push chunks to Qdrant and minutiae to NebulaGraph. Best-effort. (Deprecated — Phase 21)"""
         if self._qdrant is None or not normalized.minutiae:
             return
         try:

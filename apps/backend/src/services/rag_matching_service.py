@@ -1,18 +1,16 @@
 """
-QdrantRagMatchingService — Phase 15+ (Qdrant Chunked Indexing).
+QdrantRagMatchingService — Phase 15+ (Qdrant Chunked Indexing) — DEPRECATED (Phase 21).
+
+.. deprecated::
+    Superseded by :class:`~src.services.mcc_matching_service.MccMatchingService`.
+    This Delaunay-triplet implementation is kept compiled for safe migration but
+    will be removed in Phase 22. New code MUST use ``MccMatchingService``.
 
 Wires together:
-  * ``FingerprintService`` with the appropriate forensic validation strategy
-    (enrollment requires >=8 minutiae, search accepts >=2)
+  * ``FingerprintService`` with the appropriate forensic validation strategy.
   * ``RagTripletVectorizer`` to chunk a normalized fingerprint into
-    weighted Delaunay-triangle invariants
-  * ``QdrantChunkRepository`` to persist and search chunks in Qdrant
-
-Search-only service. Enrollment is handled by
-:class:`~src.services.fingerprint_enrollment_service.FingerprintEnrollmentService`.
-
-Replaces the deprecated ``RagMatchingService`` (Qdrant). No SQLAlchemy
-dependency. Preferred path for production.
+    weighted Delaunay-triangle invariants.
+  * ``QdrantChunkRepository`` to persist and search chunks in Qdrant.
 """
 from __future__ import annotations
 
@@ -46,6 +44,8 @@ class SearchHit:
 
 
 class QdrantRagMatchingService:
+    __deprecated__ = True
+
     """Orchestrates search against the Qdrant chunk store.
 
     Enrollment is handled by :class:`FingerprintEnrollmentService`.
