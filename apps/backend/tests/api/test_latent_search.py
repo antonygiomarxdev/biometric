@@ -52,6 +52,8 @@ class TestSearchLatent:
         data = response.json()
         assert data["success"] is True
         assert data["candidates"] == []
+        assert data["probe_minutiae"] == []
+        assert "query_time_ms" in data
 
     async def test_returns_ranked_candidates(self) -> None:
         hits = [
@@ -99,6 +101,10 @@ class TestSearchLatent:
         assert data["candidates"][0]["hits"] == 5
         assert data["candidates"][0]["full_name"] == "Juan Pérez"
         assert data["candidates"][0]["external_id"] == "EXT-001"
+        assert isinstance(data["probe_minutiae"], list)
+        assert data["candidates"][0]["match_trace"] == []  # empty by default in mock
+        assert data["candidates"][0]["contributing_fingerprints"] == ["fp-1"]
+        assert "query_time_ms" in data
 
     async def test_returns_400_for_empty_file(self) -> None:
         mock_db = MagicMock()
