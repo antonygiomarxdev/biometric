@@ -27,7 +27,7 @@ def test_mcc_cylinder_hit_is_frozen() -> None:
         capture_id="c1",
         similarity=0.9,
     )
-    with pytest.raises(Exception):
+    with pytest.raises(AttributeError):
         hit.person_id = "p2"  # type: ignore[misc]
 
 
