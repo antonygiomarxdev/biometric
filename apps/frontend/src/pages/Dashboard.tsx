@@ -140,21 +140,12 @@ export default function Dashboard() {
           </div>
           <div className="flex items-center gap-3">
             <Button
-              variant="outline"
               size="lg"
-              onClick={() => navigate("/search")}
-              className="gap-2"
-            >
-              <Search className="w-4 h-4" />
-              Buscar Huella
-            </Button>
-            <Button
-              size="lg"
-              onClick={() => navigate("/enroll")}
+              onClick={() => navigate("/analisis")}
               className="gap-2"
             >
               <Fingerprint className="w-4 h-4" />
-              Enrolar Huella
+              Analizar Huella
             </Button>
           </div>
         </header>
