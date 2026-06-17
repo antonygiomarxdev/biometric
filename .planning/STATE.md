@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0-alpha
 milestone_name: milestone
 current_phase: 23
-status: Executing Phase 23 — Plan 04 complete
-stopped_at: Completed 23-04 (Canvas infrastructure — useMatchCanvas, MatchOverlay, CandidateCard)
-last_updated: "2026-06-17T18:33:00.000Z"
+status: Executing Phase 23 — Plan 05 complete
+stopped_at: Completed 23-05 (Enrollment wizard — EnrollPage 3-step, routes, Dashboard CTA)
+last_updated: "2026-06-17T18:24:12.000Z"
 progress:
   total_phases: 15
   completed_phases: 1
   total_plans: 60
-  completed_plans: 20
-  percent: 7
+  completed_plans: 21
+  percent: 8
 ---
 
 # State: Biometric v2.0 Alpha
@@ -19,7 +19,7 @@ progress:
 **Last updated:** 2026-06-17
 **Current phase:** 23
 **Previous phase:** 21 (MCC Integration — Planning)
-**Stopped at:** Completed 23-04 (Canvas infrastructure — useMatchCanvas, MatchOverlay, CandidateCard)
+**Stopped at:** Completed 23-05 (Enrollment wizard — EnrollPage 3-step, routes, Dashboard CTA)
 
 ## Project Reference
 
@@ -58,6 +58,7 @@ See: `.planning/PROJECT.md`
 - **Plan 23-02 (SOCOFing Seed):** Person records are seeded from SOCOFing Real filenames via `PersonService.find_or_create_person` (async-only since Phase 17). Fingerprints are NOT seeded — enrollment happens interactively via `/enroll` UI. The legacy `scripts/load_socofing.py` (which used `db_manager.create_tables` and `repository.register`) is deleted. The stale `apps/frontend/openapi.json` and `gen:client` script are removed per D-18.
 - **Plan 23-03 (API Client Rewrite):** `lib/api.ts` rewritten as single source of truth for backend communication (D-28). All types mirror Pydantic v1 models in snake_case. New functions: listPersons, getPerson, createFingerprintSlot, getMinutiaeForImage, enrollFingerprint. searchMatching updated to return MatchSearchResponse with probe_minutiae + per-candidate match_trace. Import paths in useCanvasDrawer.ts and MinutiaeEditor.tsx updated from @/client to @/lib/api ahead of Plan 23-07 client deletion.
 - **Plan 23-04 (Canvas Infrastructure):** Three files created for match trace visualization: (1) `useMatchCanvas` hook with 10-color cyclic `PALETTE`, dual-canvas drawing, and SVG line overlay; (2) `MatchOverlay` compound component (dual-canvas + SVG + stats badge + captions + empty state); (3) `CandidateCard` extracted from ComparisonView using `MatchCandidate` type. All three pass strict TypeScript.
+- **Plan 23-05 (Enrollment Wizard):** 3-step enrollment wizard (select person → upload image → review/edit minutiae → confirm) as single-file EnrollPage.tsx. Two routes added to App.tsx (`/enroll`, `/cases/:caseId/enroll`). Dashboard CTA replaced with single "Enrolar Huella" button. Reuses MinutiaeEditor from D-24 without modifications. Edited minutiae displayed in done state as advisory count.
 
 ### Roadmap Evolution
 
