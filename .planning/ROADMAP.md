@@ -22,4 +22,4 @@
 - [x] **Phase 20:** MCC Matching — Validated (80% R-1, 100% R-5)
 - [ ] **Phase 21:** MCC Integration — Production enrollment + search
 - [ ] **Phase 22:** Reconocimiento Facial
-- [ ] **Phase 23 (ACTUAL):** Frontend — Flujo Forense Unificado (Enrollment + Search + Minucias) — Plan 01 (match_trace backend) ✅
+- [ ] **Phase 23 (ACTUAL):** Frontend — Flujo Forense Unificado (Enrollment + Search + Minucias) — Plan 01 (match_trace backend) ✅, Plan 02 (SOCOFing seed + cleanup) ✅
