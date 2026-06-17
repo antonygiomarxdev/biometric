@@ -48,6 +48,7 @@ export default function AnalisisPage() {
 
   const [latentFile, setLatentFile] = useState<File | null>(null);
   const [probeDataUrl, setProbeDataUrl] = useState<string | null>(null);
+  const [processedDataUrl, setProcessedDataUrl] = useState<string | null>(null);
   const [preview, setPreview] = useState<FingerprintPreviewResponse | null>(null);
   const [searchResult, setSearchResult] = useState<MatchSearchResponse | null>(null);
   const [selectedIdx, setSelectedIdx] = useState(0);
@@ -70,6 +71,9 @@ export default function AnalisisPage() {
     mutationFn: (file: File) => getMinutiaeForImage(file),
     onSuccess: (result) => {
       setPreview(result);
+      if (result.processed_image) {
+        setProcessedDataUrl(`data:image/png;base64,${result.processed_image}`);
+      }
     },
     onError: (err: Error) => {
       addToast({ type: "error", title: "Error al procesar", description: err.message });
@@ -166,6 +170,7 @@ export default function AnalisisPage() {
         setSearchResult(null);
         setSelectedIdx(0);
         setCandidateDataUrl(null);
+        setProcessedDataUrl(null);
         previewMutation.mutate(file);
       };
       reader.readAsDataURL(file);
@@ -198,6 +203,7 @@ export default function AnalisisPage() {
   const handleReset = useCallback(() => {
     setLatentFile(null);
     setProbeDataUrl(null);
+    setProcessedDataUrl(null);
     setPreview(null);
     setSearchResult(null);
     setSelectedIdx(0);
@@ -254,7 +260,9 @@ export default function AnalisisPage() {
 
   useEffect(() => {
     const canvas = probeCanvasRef.current;
-    if (!canvas || !probeDataUrl) return;
+    if (!canvas) return;
+    const src = processedDataUrl ?? probeDataUrl;
+    if (!src) return;
     const img = new Image();
     img.onload = () => {
       probeImgRef.current = img;
@@ -283,8 +291,8 @@ export default function AnalisisPage() {
         }
       }
     };
-    img.src = probeDataUrl;
-  }, [probeDataUrl, preview, selectedCandidate]);
+    img.src = src;
+  }, [processedDataUrl, probeDataUrl, preview, selectedCandidate]);
 
   // ============================================================
   // Canvas drawing: candidate image with matched minutiae
@@ -293,7 +301,8 @@ export default function AnalisisPage() {
   useEffect(() => {
     const canvas = candidateCanvasRef.current;
     if (!canvas) return;
-    if (!candidateDataUrl) {
+    const src = candidateDataUrl ?? processedDataUrl;
+    if (!src) {
       const ctx = canvas.getContext("2d");
       if (ctx) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -316,10 +325,17 @@ export default function AnalisisPage() {
         for (const m of matched) {
           drawDot(ctx, m.x, m.y, 7, PALETTE_HIT, PALETTE_HIT_RING, 2.5);
         }
+      } else if (preview?.minutiae) {
+        // Default mode: show the same processed probe with all minutiae
+        // circled. Lets the perito visually confirm the extraction
+        // before kicking off a search.
+        for (const m of preview.minutiae) {
+          drawDot(ctx, m.x, m.y, 4, "#22c55e", "#ffffff", 1.2);
+        }
       }
     };
-    img.src = candidateDataUrl;
-  }, [candidateDataUrl, selectedCandidate]);
+    img.src = src;
+  }, [candidateDataUrl, processedDataUrl, selectedCandidate, preview]);
 
   // ============================================================
   // Render
@@ -484,7 +500,8 @@ export default function AnalisisPage() {
               <Card className="border-border/60">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm uppercase tracking-wider text-muted-foreground">
-                    Latente {preview && `· ${preview.minutiae.length} minucias`}
+                    {searchResult ? "Procesada" : "Original"}{" "}
+                    {preview && `· ${preview.minutiae.length} minucias`}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-3">
@@ -513,7 +530,7 @@ export default function AnalisisPage() {
                     ) : searchResult && searchResult.candidates.length === 0 ? (
                       "Sin candidatos"
                     ) : (
-                      "Candidato (selecciona uno)"
+                      "Procesada · minucias detectadas"
                     )}
                   </CardTitle>
                 </CardHeader>
@@ -521,20 +538,14 @@ export default function AnalisisPage() {
                   <div className="aspect-square bg-black rounded overflow-hidden flex items-center justify-center">
                     {candidateLoading ? (
                       <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-                    ) : candidateDataUrl ? (
+                    ) : candidateDataUrl || processedDataUrl ? (
                       <canvas
                         ref={candidateCanvasRef}
                         className="w-full h-full object-contain"
                       />
-                    ) : searchResult ? (
-                      <div className="text-center text-muted-foreground text-sm px-4">
-                        {searchResult.candidates.length === 0
-                          ? "Esta huella no tiene match. Probá enrolar."
-                          : "Click en un candidato para ver la comparación"}
-                      </div>
                     ) : (
                       <div className="text-center text-muted-foreground text-sm px-4">
-                        Buscá para ver candidatos
+                        Subí una huella para empezar
                       </div>
                     )}
                   </div>
