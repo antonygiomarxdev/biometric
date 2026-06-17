@@ -1,9 +1,9 @@
 """
-Fingerprint latent search router — Phase 21 (MCC backend).
+Fingerprint latent search router — Phase 21 (MCC production backend).
 
 Accepts a latent/probe fingerprint image, processes it through the
-extraction pipeline, builds MCC cylinder descriptors, and searches the
-Qdrant MCC store for matching enrolled persons.
+extraction pipeline, builds MCC cylinder descriptors (144-D), and
+searches the Qdrant MCC store for matching enrolled persons.
 """
 from __future__ import annotations
 
@@ -28,7 +28,26 @@ router = APIRouter(
 )
 
 
-@router.post("/search")
+@router.post(
+    "/search",
+    summary="Search enrolled prints for a latent/probe image",
+    description=(
+        "Accepts a latent/probe fingerprint image, runs the full extraction "
+        "pipeline (Gabor enhancement → skeletonization → minutiae → MCC cylinder "
+        "descriptors), and returns the top-K enrolled candidates ranked by "
+        "cosine-similarity with per-fingerprint normalization.\n\n"
+        "Each minutia is represented by a 144-D MCC cylinder vector (12 angular "
+        "sectors × 4 radial rings × 3 structural features), L2-normalized and "
+        "rotation-invariant.\n\n"
+        "Search is cosine KNN per cylinder, votes aggregated per person, then "
+        "normalized by the number of enrolled cylinders to remove bias toward "
+        "enrollees with more minutiae."
+    ),
+    responses={
+        200: {"description": "Ranked candidates with scores and person metadata"},
+        400: {"description": "Empty file or invalid image bytes"},
+    },
+)
 async def search_latent(
     file: UploadFile = File(..., description="Latent/probe fingerprint image"),
     top_k: int = 10,
