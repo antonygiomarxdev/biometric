@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -32,61 +32,51 @@ def repo() -> QdrantMccRepository:
     return r
 
 
-@pytest.fixture
-def fp_service_mock() -> MagicMock:
-    mock = MagicMock()
-    normalized = MagicMock()
-    mock._process_image = MagicMock(return_value=normalized)
-    return mock
+def _make_pipeline_result(num_minutiae: int = 3):
+    """Build the (minutiae_dicts, skeleton, orient, freq) tuple that
+    ``MccMatchingService._run_mcc_pipeline`` would return.
 
-
-def _make_normalized(num_minutiae: int = 3) -> MagicMock:
-    n = MagicMock()
-    n.minutiae = [
-        MagicMock(x=10 + i * 20, y=20 + i * 10, angle=0.1 * i)
+    The skeleton is a solid 80x80 block of 1s so that
+    ``extract_cylinders`` produces one cylinder per minutia.
+    """
+    minutiae_dicts = [
+        {"x": float(10 + i * 20), "y": float(20 + i * 10), "angle": 0.1 * i}
         for i in range(num_minutiae)
     ]
-    # Simulate the skeleton/field attributes that extract_cylinders looks for
-    n.image = np.zeros((100, 100), dtype=np.uint8)
-    n.image[10:90, 10:90] = 1  # non-zero skeleton region
-    # Explicitly set optional fields to None so getattr(…, None) returns None
-    n.orientation_field = None
-    n.freq_image = None
-    n.skeleton = None
-    return n
+    skeleton = np.zeros((100, 100), dtype=np.uint8)
+    skeleton[10:90, 10:90] = 1
+    return minutiae_dicts, skeleton, None, None
 
 
-def test_enroll_returns_count(repo: QdrantMccRepository, fp_service_mock: MagicMock) -> None:
-    fp_service_mock._process_image.return_value = _make_normalized(3)
-    svc = MccMatchingService(fingerprint_service=fp_service_mock, mcc_repo=repo)
-    n = svc.enroll(
-        capture_id="c1",
-        fingerprint_id="f1",
-        person_id="p1",
-        image_bytes=b"fake-bytes",
-    )
+def test_enroll_returns_count(repo: QdrantMccRepository) -> None:
+    svc = MccMatchingService(mcc_repo=repo)
+    with patch.object(svc, "_run_mcc_pipeline", return_value=_make_pipeline_result(3)):
+        n = svc.enroll(
+            capture_id="c1",
+            fingerprint_id="f1",
+            person_id="p1",
+            image_bytes=b"fake-bytes",
+        )
     assert n == 3
     assert repo.count_by_person("p1") == 3
 
 
 def test_enroll_returns_zero_for_insufficient_minutiae(
-    repo: QdrantMccRepository, fp_service_mock: MagicMock
+    repo: QdrantMccRepository,
 ) -> None:
-    fp_service_mock._process_image.return_value = _make_normalized(0)
-    svc = MccMatchingService(fingerprint_service=fp_service_mock, mcc_repo=repo)
-    n = svc.enroll(capture_id="c1", fingerprint_id="f1", person_id="p1", image_bytes=b"x")
+    svc = MccMatchingService(mcc_repo=repo)
+    with patch.object(svc, "_run_mcc_pipeline", return_value=_make_pipeline_result(0)):
+        n = svc.enroll(capture_id="c1", fingerprint_id="f1", person_id="p1", image_bytes=b"x")
     assert n == 0
 
 
-def test_search_finds_enrolled_match(
-    repo: QdrantMccRepository, fp_service_mock: MagicMock
-) -> None:
-    fp_service_mock._process_image.return_value = _make_normalized(3)
-    svc = MccMatchingService(fingerprint_service=fp_service_mock, mcc_repo=repo)
-    svc.enroll("c1", "f1", "p1", b"fake")
-    svc.enroll("c2", "f2", "p2", b"fake")
+def test_search_finds_enrolled_match(repo: QdrantMccRepository) -> None:
+    svc = MccMatchingService(mcc_repo=repo)
+    with patch.object(svc, "_run_mcc_pipeline", return_value=_make_pipeline_result(3)):
+        svc.enroll("c1", "f1", "p1", b"fake")
+        svc.enroll("c2", "f2", "p2", b"fake")
 
-    hits = svc.search(b"fake", top_k=5)
+        hits = svc.search(b"fake", top_k=5)
     assert len(hits) >= 1
     assert all(isinstance(h, MccSearchHit) for h in hits)
     for a, b in zip(hits, hits[1:]):
@@ -94,20 +84,18 @@ def test_search_finds_enrolled_match(
 
 
 def test_search_returns_empty_when_no_enrollment(
-    repo: QdrantMccRepository, fp_service_mock: MagicMock
+    repo: QdrantMccRepository,
 ) -> None:
-    fp_service_mock._process_image.return_value = _make_normalized(3)
-    svc = MccMatchingService(fingerprint_service=fp_service_mock, mcc_repo=repo)
-    hits = svc.search(b"fake", top_k=5)
+    svc = MccMatchingService(mcc_repo=repo)
+    with patch.object(svc, "_run_mcc_pipeline", return_value=_make_pipeline_result(3)):
+        hits = svc.search(b"fake", top_k=5)
     assert hits == []
 
 
-def test_search_respects_top_k(
-    repo: QdrantMccRepository, fp_service_mock: MagicMock
-) -> None:
-    fp_service_mock._process_image.return_value = _make_normalized(3)
-    svc = MccMatchingService(fingerprint_service=fp_service_mock, mcc_repo=repo)
-    for i in range(5):
-        svc.enroll(f"c{i}", f"f{i}", f"p{i}", b"fake")
-    hits = svc.search(b"fake", top_k=3)
+def test_search_respects_top_k(repo: QdrantMccRepository) -> None:
+    svc = MccMatchingService(mcc_repo=repo)
+    with patch.object(svc, "_run_mcc_pipeline", return_value=_make_pipeline_result(3)):
+        for i in range(5):
+            svc.enroll(f"c{i}", f"f{i}", f"p{i}", b"fake")
+        hits = svc.search(b"fake", top_k=3)
     assert len(hits) <= 3

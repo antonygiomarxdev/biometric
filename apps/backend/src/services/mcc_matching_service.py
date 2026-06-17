@@ -3,8 +3,11 @@ MccMatchingService — Phase 21 (MCC production matching).
 
 Clean Architecture: application service. Orchestrates:
 
-  * ``FingerprintService`` — full image → minutiae + skeleton + orientation
-    + frequency pipeline.
+  * An inline MCC-specific mini-pipeline (enhance + orientation + quality +
+    skeletonize + RidgeGraphExtractor) that produces minutiae directly from
+    the ridge graph — bypassing FingerprintService, which routes through
+    SkeletonMinutiaeExtractor and destroys the binary skeleton with a
+    ``>127`` re-binarization step.
   * ``extract_cylinders`` — builds L2-normalized 144-D descriptors per minutia.
   * ``QdrantMccRepository`` — persists/searches cylinders in Qdrant.
 
@@ -22,7 +25,6 @@ bias. Final ranking sorts persons by normalized total score descending.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 from concurrent.futures import Executor
 from dataclasses import dataclass
@@ -31,8 +33,8 @@ from typing import TYPE_CHECKING
 import cv2
 import numpy as np
 
-from src.db.qdrant_mcc_repository import QdrantMccRepository
 from src.core.config import config
+from src.db.qdrant_mcc_repository import QdrantMccRepository
 
 if TYPE_CHECKING:
     from src.services.fingerprint_service import FingerprintService
@@ -51,11 +53,14 @@ class MccSearchHit:
 
 
 class MccMatchingService:
-    """Clean replacement for :class:`QdrantRagMatchingService`.
+    """MCC production matching service.
 
     Single service handles both enrollment and search. Constructor DI:
-    pass ``fingerprint_service`` and ``mcc_repo`` in tests; defaults
-    are constructed on first use.
+    pass ``mcc_repo`` in tests; defaults are constructed on first use.
+
+    The ``fingerprint_service`` parameter is preserved for DI compatibility
+    with the legacy production DI graph but is no longer used — the MCC
+    pipeline runs its own mini-pipeline (see :meth:`_run_mcc_pipeline`).
     """
 
     def __init__(
@@ -73,12 +78,6 @@ class MccMatchingService:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _ensure_service(self) -> "FingerprintService":
-        if self._fp_service is None:
-            from src.services.fingerprint_service import FingerprintService
-            self._fp_service = FingerprintService()
-        return self._fp_service
-
     def _decode(self, image_bytes: bytes) -> np.ndarray:
         nparr = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_GRAYSCALE)
@@ -86,32 +85,75 @@ class MccMatchingService:
             raise ValueError("Failed to decode image bytes")
         return img
 
-    def _run_pipeline(self, image: np.ndarray, fingerprint_id: str):
-        service = self._ensure_service()
-        return service._process_image(image, fingerprint_id=fingerprint_id)
+    def _run_mcc_pipeline(
+        self, image: np.ndarray
+    ) -> tuple[list[dict], np.ndarray, np.ndarray | None, np.ndarray | None]:
+        """Run the MCC-specific mini-pipeline (Phase 21).
 
-    def _build_cylinders(self, normalized) -> list[np.ndarray]:
-        from src.processing.mcc_descriptor import extract_cylinders
+        Mirrors ``scripts/spike_mcc.py`` — uses :class:`RidgeGraphExtractor`
+        directly to get minutiae, bypassing :class:`SkeletonMinutiaeExtractor`
+        which destroys the binary skeleton with a ``>127`` re-binarization
+        step (the root cause of the original 0-cylinder bug for SOCOFing).
 
-        if not normalized.minutiae:
-            return []
+        Returns:
+            ``(minutiae_dicts, skeleton, orientation_field, frequency_map)``
+            where each ``minutiae_dict`` has keys ``(x, y, angle)``.
+        """
+        from src.core.interfaces import PipelineContext
+        from src.processing.enhancer import create_enhancer
+        from src.processing.gabor import QualityMaskStep
+        from src.processing.graph_extractor import RidgeGraphExtractor
+        from src.processing.pre_hooks import (
+            OrientationFieldAnalyzer,
+            SingularityDetector,
+        )
+        from src.processing.skeletonize_step import SkeletonizationStep
+        from src.processing.spurious_filter import SkeletonCleanerStep
+
+        ctx = PipelineContext(raw_image=image, fingerprint_id="mcc")
+        enh = create_enhancer()
+        enhanced = enh.enhance(image, resize=True)
+        ctx.enhanced_image = enhanced
+        ctx.preprocessed_image = enhanced
+
+        OrientationFieldAnalyzer().process(ctx)
+        QualityMaskStep().process(ctx)
+        orientation_field = ctx.orientation_field
+        frequency_map = ctx.freq_image
+
+        SingularityDetector(roi_radius=140).process(ctx)
+        SkeletonizationStep(min_island_size=20).process(ctx)
+        SkeletonCleanerStep().process(ctx)
+        RidgeGraphExtractor().process(ctx)
+
+        rg = ctx.ridge_graph
+        skeleton = ctx.skeleton
+        if rg is None or not rg.nodes:
+            return (
+                [],
+                skeleton if skeleton is not None else np.zeros((1, 1), dtype=np.uint8),
+                orientation_field,
+                frequency_map,
+            )
 
         minutiae_dicts = [
-            {"x": int(m.x), "y": int(m.y), "angle": float(m.angle)}
-            for m in normalized.minutiae
+            {"x": float(n.x), "y": float(n.y), "angle": float(n.angle)}
+            for n in rg.nodes
         ]
+        return (
+            minutiae_dicts,
+            skeleton if skeleton is not None else np.zeros((1, 1), dtype=np.uint8),
+            orientation_field,
+            frequency_map,
+        )
 
-        orientation_field = getattr(normalized, "orientation_field", None)
-        frequency_map = getattr(normalized, "freq_image", None)
-        skeleton = getattr(normalized, "image", None)
-        if skeleton is None or not hasattr(skeleton, "sum"):
-            skeleton_attr = getattr(normalized, "skeleton", None)
-            if skeleton_attr is not None:
-                skeleton = skeleton_attr
+    def _build_cylinders(self, image: np.ndarray) -> list[np.ndarray]:
+        """Run the MCC mini-pipeline and build cylinder descriptors."""
+        from src.processing.mcc_descriptor import extract_cylinders
 
-        if skeleton is None or not hasattr(skeleton, "sum"):
+        minutiae_dicts, skeleton, orientation_field, frequency_map = self._run_mcc_pipeline(image)
+        if not minutiae_dicts or skeleton is None or skeleton.sum() == 0:
             return []
-
         return extract_cylinders(
             minutiae_dicts,
             skeleton,
@@ -130,13 +172,12 @@ class MccMatchingService:
         person_id: str,
         image_bytes: bytes,
     ) -> int:
-        """Extract minutiae -> cylinders -> persist in Qdrant.
+        """Extract minutiae → cylinders → persist in Qdrant.
 
         Returns the number of cylinders inserted.
         """
         image = self._decode(image_bytes)
-        normalized = self._run_pipeline(image, fingerprint_id)
-        cylinders = self._build_cylinders(normalized)
+        cylinders = self._build_cylinders(image)
         if not cylinders:
             logger.info("No cylinders for capture %s; skipping insert", capture_id)
             return 0
@@ -163,8 +204,7 @@ class MccMatchingService:
     ) -> list[MccSearchHit]:
         """Search enrolled cylinders for matches to a probe image."""
         image = self._decode(image_bytes)
-        normalized = self._run_pipeline(image, "latent")
-        query_cylinders = self._build_cylinders(normalized)
+        query_cylinders = self._build_cylinders(image)
         if not query_cylinders:
             return []
         return self._search_cylinders(query_cylinders, top_k=top_k)
