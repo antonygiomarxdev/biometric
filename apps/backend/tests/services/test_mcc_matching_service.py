@@ -102,3 +102,38 @@ def test_search_respects_top_k(repo: QdrantMccRepository) -> None:
         probe_minutiae, hits = svc.search(b"fake", top_k=3)
     assert len(hits) <= 3
     assert len(probe_minutiae) >= 1
+
+
+def test_search_returns_match_trace(
+    repo: QdrantMccRepository,
+) -> None:
+    """MccMatchingService.search returns (probe_minutiae, candidates_with_match_trace)."""
+    from unittest.mock import MagicMock
+
+    svc = MccMatchingService(mcc_repo=repo)
+    with patch.object(svc, "_run_mcc_pipeline", return_value=_make_pipeline_result(3)):
+        svc.enroll("c1", "f1", "p1", b"fake")
+        svc.enroll("c2", "f2", "p2", b"fake")
+
+        probe_minutiae, hits = svc.search(b"fake", top_k=5)
+    # probe_minutiae is a list (possibly empty if pipeline produced no cylinders)
+    assert isinstance(probe_minutiae, list)
+    # hits is a list of MccSearchHit
+    assert isinstance(hits, list)
+    for hit in hits:
+        # MccSearchHit has a match_trace field (default empty list)
+        assert hasattr(hit, "match_trace")
+        assert isinstance(hit.match_trace, list)
+        # Each entry in match_trace is a MatchTraceEntry
+        for entry in hit.match_trace:
+            assert hasattr(entry, "probe_cylinder_index")
+            assert hasattr(entry, "probe_x")
+            assert hasattr(entry, "probe_y")
+            assert hasattr(entry, "probe_angle")
+            assert hasattr(entry, "candidate_capture_id")
+            assert hasattr(entry, "candidate_fingerprint_id")
+            assert hasattr(entry, "candidate_x")
+            assert hasattr(entry, "candidate_y")
+            assert hasattr(entry, "candidate_angle")
+            assert hasattr(entry, "similarity")
+            assert 0.0 <= entry.similarity <= 1.0 + 1e-6  # tolerate FP epsilon
