@@ -23,11 +23,12 @@ from src.api.dependencies import get_async_db, get_current_user
 from src.services.auth_service import create_access_token, verify_password
 from src.core.config import config
 from src.db.models import User
+from src.api.prefix import API_PREFIX
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
-    prefix="/api/v1/auth",
+    prefix=f"{API_PREFIX}/auth",
     tags=["auth"],
 )
 

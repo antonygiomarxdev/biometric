@@ -17,11 +17,12 @@ from src.api.dependencies import get_async_db
 from src.api.errors import NotFoundError
 from src.db.models import Case, Evidence
 from src.services.pdf_generator import pdf_generator_service
+from src.api.prefix import API_PREFIX
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
-    prefix="/api/v1/reports",
+    prefix=f"{API_PREFIX}/reports",
     tags=["reports"],
 )
 

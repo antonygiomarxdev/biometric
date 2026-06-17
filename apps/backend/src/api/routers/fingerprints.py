@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_async_db
+from src.api.prefix import API_PREFIX
 from src.db.models import Person
 from src.db.repositories.fingerprint_repository import FingerprintRepository
 from src.schemas.fingerprint_schema import (
@@ -24,11 +25,10 @@ router = APIRouter(tags=["fingerprints"])
 
 
 @router.post(
-    "/api/v1/persons/{person_id}/fingerprints",
+    API_PREFIX + "/persons/{person_id}/fingerprints",
     response_model=FingerprintResponse,
     status_code=201,
     summary="Create a fingerprint slot",
-    description="Register a new fingerprint slot for a person. Acts as a container for captures.",
     responses={
         404: {"description": "Person not found"},
         409: {"description": "Fingerprint slot already exists"},
@@ -61,10 +61,9 @@ async def create_fingerprint(
 
 
 @router.get(
-    "/api/v1/persons/{person_id}/fingerprints",
+    API_PREFIX + "/persons/{person_id}/fingerprints",
     response_model=FingerprintListResponse,
     summary="List fingerprints for a person",
-    description="List all registered fingerprint slots for a specific person.",
 )
 async def list_fingerprints(
     person_id: uuid.UUID,

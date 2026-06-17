@@ -12,10 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.dependencies import get_async_db
 from src.schemas.person_schema import PersonCreate, PersonResponse
 from src.services.person_service import PersonService
+from src.api.prefix import API_PREFIX
 
 log = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/persons", tags=["persons"])
+router = APIRouter(prefix=f"{API_PREFIX}/persons", tags=["persons"])
 
 
 @router.post(

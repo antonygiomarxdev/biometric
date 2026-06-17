@@ -20,10 +20,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_async_db
 from src.services.decision_service import decision_service
+from src.api.prefix import API_PREFIX
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/decisions", tags=["decisions"])
+router = APIRouter(prefix=f"{API_PREFIX}/decisions", tags=["decisions"])
 
 # ---------------------------------------------------------------------------
 # Examiner verdict vocabulary (Spanish — forensic domain language)

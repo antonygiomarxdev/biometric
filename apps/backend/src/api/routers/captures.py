@@ -17,6 +17,7 @@ from fastapi import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_async_db, get_fingerprint_service
+from src.api.prefix import API_PREFIX
 from src.db.repositories.fingerprint_capture_repository import (
     FingerprintCaptureRepository,
 )
@@ -44,7 +45,7 @@ def _get_qdrant_repo() -> QdrantChunkRepository:
 
 
 @router.post(
-    "/api/v1/fingerprints/{fingerprint_id}/captures",
+    API_PREFIX + "/fingerprints/{fingerprint_id}/captures",
     response_model=CaptureUploadResponse,
     status_code=201,
     summary="Upload fingerprint capture",
@@ -104,7 +105,7 @@ async def upload_capture(
 
 
 @router.get(
-    "/api/v1/captures/{capture_id}", 
+    API_PREFIX + "/captures/{capture_id}", 
     response_model=CaptureResponse,
     summary="Get capture details",
     responses={404: {"description": "Capture not found"}}
@@ -129,7 +130,7 @@ async def get_capture(
 
 
 @router.get(
-    "/api/v1/captures/{capture_id}/graphs",
+    API_PREFIX + "/captures/{capture_id}/graphs",
     response_model=list[RidgeGraphResponse],
     summary="List graphs for capture",
 )
@@ -142,7 +143,7 @@ async def get_capture_graphs(
 
 
 @router.patch(
-    "/api/v1/captures/{capture_id}", 
+    API_PREFIX + "/captures/{capture_id}", 
     response_model=CaptureResponse,
     summary="Update capture",
     responses={404: {"description": "Capture not found"}}

@@ -21,6 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_async_db, get_rag_matching_service
+from src.api.prefix import API_PREFIX
 from src.db.models import Person
 from src.services.rag_matching_service import (
     QdrantRagMatchingService,
@@ -30,7 +31,7 @@ from src.services.rag_matching_service import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
-    prefix="/api/v1/matching",
+    prefix=f"{API_PREFIX}/matching",
     tags=["matching"],
 )
 

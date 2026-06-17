@@ -23,10 +23,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_async_db
 from src.db.models import AuditLog
+from src.api.prefix import API_PREFIX
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/audit", tags=["audit"])
+router = APIRouter(prefix=f"{API_PREFIX}/audit", tags=["audit"])
 
 
 # ------------------------------------------------------------------ #

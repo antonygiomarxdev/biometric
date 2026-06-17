@@ -18,10 +18,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_async_db
 from src.services.case_service import case_service
+from src.api.prefix import API_PREFIX
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/cases", tags=["cases"])
+router = APIRouter(prefix=f"{API_PREFIX}/cases", tags=["cases"])
 
 # ---------------------------------------------------------------------------
 # Pydantic schemas

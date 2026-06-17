@@ -19,10 +19,11 @@ from pydantic import BaseModel, Field
 from src.ai.assistant import ask_assistant
 from src.ai.report_generator import generate_dictamen
 from src.schemas.dictamen_schema import DictamenPericial
+from src.api.prefix import API_PREFIX
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/genai", tags=["genai"])
+router = APIRouter(prefix=f"{API_PREFIX}/genai", tags=["genai"])
 
 # ---------------------------------------------------------------------------
 # Request / response schemas
