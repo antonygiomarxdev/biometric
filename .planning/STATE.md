@@ -2,20 +2,21 @@
 gsd_state_version: 2.0
 milestone: v2.0-alpha
 milestone_name: V2 Alpha (Matching Biométrico)
-current_phase: 21
+current_phase: 23
 status: planning
-last_updated: "2026-06-17T09:00:00.000Z"
+last_updated: "2026-06-17T10:00:00.000Z"
 progress:
-  total_phases: 22
+  total_phases: 23
   completed_phases: 20
-  percent: 91
+  percent: 87
 ---
 
 # State: Biometric v2.0 Alpha
 
 **Last updated:** 2026-06-17
-**Current phase:** 21 (MCC Integration)
-**Previous phase:** 20 (Graph Matching Spike — COMPLETED)
+**Current phase:** 23 (Frontend Flujo Forense Unificado)
+**Previous phase:** 21 (MCC Integration — Planning)
+**Stopped at:** Phase 23 context gathered — ready for `/gsd-plan-phase 23`
 
 ## Project Reference
 
@@ -45,6 +46,12 @@ See: `.planning/PROJECT.md`
 | 20. MCC Graph Matching Spike | ✅ COMPLETED |
 | 21. MCC Integration | 🏃 Planning |
 | 22. Reconocimiento Facial | ⏳ Pendiente |
+| 23. Frontend — Flujo Forense Unificado | 📝 Context gathered, ready for planning |
+
+## Accumulated Context
+
+### Roadmap Evolution
+- Phase 23 added: Frontend — Flujo Forense Unificado (Enrollment + Search + Minucias). MVP operable con personas pre-sembradas desde SOCOFing; sin auth/users/audit (diferido).
 
 ## MCC Matching — Resultados
 

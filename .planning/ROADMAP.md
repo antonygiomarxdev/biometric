@@ -22,3 +22,4 @@
 - [x] **Phase 20:** MCC Matching — Validated (80% R-1, 100% R-5)
 - [ ] **Phase 21 (ACTUAL):** MCC Integration — Production enrollment + search
 - [ ] **Phase 22:** Reconocimiento Facial
+- [ ] **Phase 23:** Frontend — Flujo Forense Unificado (Enrollment + Search + Minucias)
