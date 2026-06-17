@@ -9,16 +9,11 @@ All business logic and database operations are delegated to
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
-
-if TYPE_CHECKING:
-    import uuid
-    from datetime import datetime
-
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_async_db
 from src.api.prefix import API_PREFIX
