@@ -40,11 +40,12 @@ Si el pipeline automático no da buen resultado:
 
 ## What We Have Now
 
-- Pipeline básico de procesamiento (enhancement → extracción CN → normalización → matching vectorial)
-- API REST (8 endpoints)
-- Frontend React con carga de imagen y visualización básica
-- PostgreSQL + pgvector + MinIO en Docker
-- Sin auth, sin auditoría, sin herramientas forenses
+- Pipeline de procesamiento completo: enhancement (Gabor) → skeleton → ridge graph → minucias
+- Matching biométrico: MCC (Minutia Cylinder Code) con cylinders de 144D en Qdrant
+- API REST completa con 11 routers (async, tipado estricto)
+- Frontend React con carga de imagen y visualización
+- PostgreSQL 17 + Qdrant + MinIO en Docker
+- Auth con Argon2id + JWT, auditoría inmutable con hash chain
 
 ## Pivot Estratégico del MVP (Foco en Productividad)
 
@@ -56,9 +57,8 @@ Tras evaluación de viabilidad, el MVP priorizará la **IA Generativa** sobre la
    - *Data Anonymization:* Tokenizador PII bidireccional (Compliance Core) para asegurar privacidad.
 
 2. **Visión Computacional Tradicional (El Músculo) - MVP:**
-   - Extracción de minucias basada en filtros de Gabor y esqueletización (CPU).
-   - Ideal para huellas tomadas en comisaría (limpias). Las huellas latentes (sucias) requerirán que el perito use el Editor de Fallback (UI manual) para corregir falsos positivos antes del match.
-   - *Matching:* Búsqueda vectorial 1:N ultrarrápida usando embeddings y `pgvector`.
+   - Extracción de minucias basada en Gabor y esqueletización (CPU).
+   - Matching: MCC (Minutia Cylinder Code) con descriptores de 144D por minucia. Búsqueda por similitud coseno en Qdrant.
 
 3. **IA de Visión Computacional SOTA - DEFERIDO (Post-MVP):**
    - Reemplazar la esqueletización por MinutiaeNet/FingerNet (Deep Learning) para mejorar el hit rate en huellas sucias sin intervención manual.
@@ -82,12 +82,13 @@ Tras evaluación de viabilidad, el MVP priorizará la **IA Generativa** sobre la
 
 | Componente | Tecnología | Estado |
 |-----------|-----------|--------|
-| Backend | Python 3.12+ / FastAPI | ✅ Confirmado |
-| Frontend | React + TypeScript + Vite | ✅ Confirmado |
-| Database | PostgreSQL + pgvector (HNSW) | ✅ Confirmado |
-| Storage | MinIO (imágenes) | ✅ Confirmado |
-| Queue | Redis + Celery (para async) | 📅 Futuro |
-| Auth | JWT + bcrypt | 📅 Fase 2 |
+| Backend | Python 3.12+ / FastAPI | ✅ Async (psycopg3) |
+| Frontend | React + TypeScript + Vite | ✅ |
+| Database | PostgreSQL 17 | ✅ |
+| Almacenamiento | MinIO | ✅ |
+| Vectores / Búsqueda | Qdrant + MCC descriptors | ✅ |
+| Auth | Argon2id + PyJWT | ✅ |
+| Matching | MCC Cylinders (144D) + Cosine Similarity | ✅ |
 
 ## Constraints
 

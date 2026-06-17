@@ -1,6 +1,6 @@
 # Roadmap: Biometric
 
-**Created:** 2025-06-12 | **Updated:** 2026-06-16
+**Created:** 2025-06-12 | **Updated:** 2026-06-17
 **Strategy:** Entregas Verticales (Vertical Slices) agresivas. Arquitectura evolutiva regida por la doctrina "No Legacy".
 
 ---
@@ -19,6 +19,6 @@
 - [x] **Phase 17:** Person / Fingerprint / Capture Data Model
 - [x] **Phase 18:** End-to-End Forensic Flow (enrollment + search unificado)
 - [~] **Phase 19:** Naming Convention Cleanup (Waves 1-3 done, 4-6 pending)
-- [ ] **Phase 20 (ACTUAL):** Graph Matching — NebulaGraph + RAG
-- [ ] **Phase 21:** Reconocimiento Facial (Multimodal)
-- [ ] **Phase 22:** Sincronización P2P
+- [x] **Phase 20:** MCC Graph Matching Spike — Validated
+- [ ] **Phase 21 (ACTUAL):** MCC Integration — Production enrollment + search
+- [ ] **Phase 22:** Reconocimiento Facial
