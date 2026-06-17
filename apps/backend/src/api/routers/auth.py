@@ -13,17 +13,20 @@ from __future__ import annotations
 
 import logging
 from datetime import timedelta
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_async_db, get_current_user
-from src.services.auth_service import create_access_token, verify_password
+from src.api.prefix import API_PREFIX
 from src.core.config import config
 from src.db.models import User
-from src.api.prefix import API_PREFIX
+from src.services.auth_service import create_access_token, verify_password
 
 logger = logging.getLogger(__name__)
 
