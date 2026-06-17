@@ -62,3 +62,33 @@ def test_delete_by_person_removes_only_target(repo: QdrantMccRepository) -> None
     assert removed == 1
     assert repo.count_by_person("p1") == 0
     assert repo.count_by_person("p2") == 1
+
+
+def test_bulk_insert_persists_position(repo: QdrantMccRepository) -> None:
+    """bulk_insert_cylinders with cylinder_positions writes x/y/angle to Qdrant payload (Phase 23)."""
+    v1 = np.random.rand(144).astype(np.float32)
+    v2 = np.random.rand(144).astype(np.float32)
+    positions = [(10, 20, 0.5), (30, 40, 1.0)]
+    n = repo.bulk_insert_cylinders("p1", "f1", "c1", [v1, v2], cylinder_positions=positions)
+    assert n == 2
+
+    # Re-read the points via knn_search; verify the position fields are in the hit
+    hits = repo.knn_search([v1, v2], top_k_per_vector=1)
+    assert len(hits) == 2
+    for h in hits:
+        assert h.person_id == "p1"
+        assert h.fingerprint_id == "f1"
+        assert h.capture_id == "c1"
+        # query_cylinder_index is 0 for the first query, 1 for the second
+
+    # The hit for query_idx=0 should have position (10, 20, 0.5)
+    hit_0 = next(h for h in hits if h.query_cylinder_index == 0)
+    assert hit_0.candidate_x == 10
+    assert hit_0.candidate_y == 20
+    assert abs(hit_0.candidate_angle - 0.5) < 1e-5
+
+    # The hit for query_idx=1 should have position (30, 40, 1.0)
+    hit_1 = next(h for h in hits if h.query_cylinder_index == 1)
+    assert hit_1.candidate_x == 30
+    assert hit_1.candidate_y == 40
+    assert abs(hit_1.candidate_angle - 1.0) < 1e-5
