@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import Protocol, List, runtime_checkable
 import numpy as np
 
-from src.core.types import CoarseMatch, MinutiaCandidate, NormalizedFingerprint, MatchResult, RidgeGraph, TripletVector, ChunkHit, PersonHit
+from src.core.types import CoarseMatch, MinutiaCandidate, NormalizedFingerprint, MatchResult, RidgeGraph, TripletVector, ChunkHit, PersonHit, MccCylinderHit, MccPersonHit
 
 
 # ---------------------------------------------------------------------------
@@ -251,4 +251,55 @@ class IChunkMatcher(Protocol):
 
     def delete_by_person(self, person_id: str) -> int:
         """Remove all chunks for a person. Returns count."""
+        ...
+
+
+class IMccMatcher(Protocol):
+    """Port for MCC cylinder matchers (Phase 21).
+
+    Unlike :class:`IChunkMatcher` (Delaunay triplets), this port stores
+    and searches L2-normalized cylinder descriptors (default 144-D) directly via
+    cosine KNN. Aggregation is normalized per-fingerprint (not per-person)
+    to remove bias from enrollees with more minutiae.
+    """
+
+    def ensure_collection(self) -> None:
+        """Create the backing collection if it does not exist."""
+        ...
+
+    def bulk_insert_cylinders(
+        self,
+        person_id: str,
+        fingerprint_id: str,
+        capture_id: str,
+        vectors: list[np.ndarray],
+    ) -> int:
+        """Insert N cylinder vectors for one fingerprint enrollment.
+
+        Returns the count of vectors actually inserted.
+        """
+        ...
+
+    def knn_search(
+        self,
+        query_vectors: list[np.ndarray],
+        top_k_per_vector: int = 5,
+    ) -> list[MccCylinderHit]:
+        """For each query cylinder, return top-K similar cylinders."""
+        ...
+
+    def aggregate_scores_by_person(
+        self,
+        hits: list[MccCylinderHit],
+        enrolled_counts: dict[str, int],
+    ) -> list[MccPersonHit]:
+        """Group cylinder hits by person, normalize by enrollment count.
+
+        ``enrolled_counts[person_id]`` is the number of cylinders stored for
+        that person; used as the denominator for per-fingerprint normalization.
+        """
+        ...
+
+    def delete_by_person(self, person_id: str) -> int:
+        """Remove all cylinders for a person. Returns count."""
         ...
