@@ -4,7 +4,7 @@ import { useMatchCanvas, type UseMatchCanvasArgs } from "@/hooks/useMatchCanvas"
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
-interface MatchOverlayProps extends UseMatchCanvasArgs {
+interface MatchOverlayProps extends Omit<UseMatchCanvasArgs, "containerRef"> {
   /** Display label for the candidate canvas caption (e.g. external_id or full_name). */
   candidateLabel: string;
 }
