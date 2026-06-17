@@ -121,3 +121,15 @@ OK: no DefaultService, OpenAPI, or @/client imports remain
 - [x] `pnpm build` — 3 pre-existing errors only (none introduced by this plan)
 - [x] No `DefaultService`, `OpenAPI`, or `@/client` imports remain
 - [x] `FingerprintViewer` deleted (dead, had dangling `@/types/fingerprint` import)
+
+## Self-Check: PASSED
+
+- ✅ SUMMARY.md exists at `.planning/phases/23-frontend-flujo-forense-unificado/23-07-SUMMARY.md`
+- ✅ 3 commits created:
+  - `b26c64f` chore(23-07): delete 11 legacy files and src/client/ directory
+  - `365739b` feat(23-07): remove /scanner route and ScannerPage import from App.tsx
+  - `cee89e2` docs(23-07): complete legacy ScannerPage cleanup plan
+- ✅ All 11 legacy files deleted
+- ✅ `src/client/` directory deleted
+- ✅ App.tsx: 0 ScannerPage/scanner references, 4 Route paths
+- ✅ Empty face/, layout/, types/ directories removed
