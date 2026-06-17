@@ -34,22 +34,18 @@ import cv2
 import numpy as np
 
 from src.core.config import config
+from src.core.types import (
+    MatchTraceEntry,
+    MccCylinderHit,
+    MccSearchHit,
+    MinutiaSummary,
+)
 from src.db.qdrant_mcc_repository import QdrantMccRepository
 
 if TYPE_CHECKING:
     from src.services.fingerprint_service import FingerprintService
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True, slots=True)
-class MccSearchHit:
-    """A single ranked match candidate from MCC search."""
-
-    person_id: str
-    total_score: float
-    hits: int
-    contributing_fingerprints: list[str]
 
 
 class MccMatchingService:
@@ -147,19 +143,38 @@ class MccMatchingService:
             frequency_map,
         )
 
-    def _build_cylinders(self, image: np.ndarray) -> list[np.ndarray]:
-        """Run the MCC mini-pipeline and build cylinder descriptors."""
+    @staticmethod
+    def _build_cylinders(
+        minutiae_dicts: list[dict],
+        skeleton: np.ndarray,
+        orientation_field: np.ndarray | None,
+        frequency_map: np.ndarray | None,
+    ) -> tuple[list[np.ndarray], list[tuple[int, int, float]]]:
+        """Build MCC cylinder descriptors from pipeline output.
+
+        Returns:
+            ``(cylinders, positions)`` where each element of ``positions``
+            is ``(x, y, angle)`` for the corresponding cylinder index.
+        """
         from src.processing.mcc_descriptor import extract_cylinders
 
-        minutiae_dicts, skeleton, orientation_field, frequency_map = self._run_mcc_pipeline(image)
         if not minutiae_dicts or skeleton is None or skeleton.sum() == 0:
-            return []
-        return extract_cylinders(
+            return [], []
+
+        positions: list[tuple[int, int, float]] = [
+            (int(m["x"]), int(m["y"]), float(m["angle"]))
+            for m in minutiae_dicts
+        ]
+        cylinders = extract_cylinders(
             minutiae_dicts,
             skeleton,
             orientation_field=orientation_field,
             frequency_map=frequency_map,
         )
+        # extract_cylinders may filter out minutiae that cannot form
+        # a valid cylinder; keep only positions matching the output count.
+        n = len(cylinders)
+        return cylinders, positions[:n]
 
     # ------------------------------------------------------------------
     # Enrollment
@@ -177,7 +192,9 @@ class MccMatchingService:
         Returns the number of cylinders inserted.
         """
         image = self._decode(image_bytes)
-        cylinders = self._build_cylinders(image)
+        pipeline_result = self._run_mcc_pipeline(image)
+        minutiae_dicts, skeleton, orient, freq = pipeline_result
+        cylinders, positions = self._build_cylinders(minutiae_dicts, skeleton, orient, freq)
         if not cylinders:
             logger.info("No cylinders for capture %s; skipping insert", capture_id)
             return 0
@@ -186,6 +203,7 @@ class MccMatchingService:
             fingerprint_id=fingerprint_id,
             capture_id=capture_id,
             vectors=cylinders,
+            cylinder_positions=positions,
         )
         logger.info(
             "Enrolled capture %s: %d cylinders for person %s",
@@ -201,13 +219,102 @@ class MccMatchingService:
         self,
         image_bytes: bytes,
         top_k: int = 10,
-    ) -> list[MccSearchHit]:
-        """Search enrolled cylinders for matches to a probe image."""
+    ) -> tuple[list[MinutiaSummary], list[MccSearchHit]]:
+        """Search enrolled cylinders for matches to a probe image.
+
+        Returns a tuple of:
+          - ``probe_minutiae``: list of :class:`MinutiaSummary` for the
+            probe image, in the same order as the cylinder vectors.
+          - ``candidates``: ranked list of :class:`MccSearchHit` with
+            ``match_trace`` populated (per-candidate per-cylinder pairs,
+            top-1 hit per probe cylinder).
+        """
         image = self._decode(image_bytes)
-        query_cylinders = self._build_cylinders(image)
+        pipeline_result = self._run_mcc_pipeline(image)
+        minutiae_dicts, skeleton, orient, freq = pipeline_result
+        query_cylinders, query_positions = self._build_cylinders(
+            minutiae_dicts, skeleton, orient, freq,
+        )
+
+        probe_minutiae = [
+            MinutiaSummary(
+                x=int(m["x"]),
+                y=int(m["y"]),
+                angle=float(m["angle"]),
+                type=2,  # unknown — RidgeGraphExtractor does not classify types
+            )
+            for m in minutiae_dicts
+        ][: len(query_cylinders)]
+
         if not query_cylinders:
-            return []
-        return self._search_cylinders(query_cylinders, top_k=top_k)
+            return probe_minutiae, []
+
+        cylinder_hits = self._mcc_repo.knn_search(
+            query_cylinders,
+            top_k_per_vector=config.matching.top_k_per_cylinder,
+        )
+        if not cylinder_hits:
+            return probe_minutiae, []
+
+        # Group hits by person; also bucket by fingerprint for contributing_fingerprints
+        per_person: dict[str, list[MccCylinderHit]] = {}
+        for h in cylinder_hits:
+            per_person.setdefault(h.person_id, []).append(h)
+
+        # Per-cylinder top-1: bucket hits by (person, query_cylinder_index),
+        # keep the highest similarity, then flatten.
+        per_person_top: dict[str, list[MccCylinderHit]] = {}
+        for person_id, hits in per_person.items():
+            best_per_probe: dict[int, MccCylinderHit] = {}
+            for h in hits:
+                cur = best_per_probe.get(h.query_cylinder_index)
+                if cur is None or h.similarity > cur.similarity:
+                    best_per_probe[h.query_cylinder_index] = h
+            per_person_top[person_id] = list(best_per_probe.values())
+
+        enrolled_counts = self._count_enrolled_by_person()
+
+        candidates: list[MccSearchHit] = []
+        for person_id, top_hits in per_person_top.items():
+            total_similarity = sum(h.similarity for h in top_hits)
+            denom = enrolled_counts.get(person_id, 1) or 1
+            score = total_similarity / denom
+            contributing = sorted({h.fingerprint_id for h in top_hits})
+
+            # Build match_trace in probe-cyl-index order for deterministic UI
+            match_trace: list[MatchTraceEntry] = []
+            top_hits_sorted = sorted(top_hits, key=lambda h: h.query_cylinder_index)
+            for h in top_hits_sorted:
+                idx = h.query_cylinder_index
+                if idx >= len(probe_minutiae) or idx >= len(query_positions):
+                    continue
+                probe_x, probe_y, probe_angle = query_positions[idx]
+                match_trace.append(
+                    MatchTraceEntry(
+                        probe_cylinder_index=idx,
+                        probe_x=probe_x,
+                        probe_y=probe_y,
+                        probe_angle=probe_angle,
+                        candidate_capture_id=h.capture_id,
+                        candidate_fingerprint_id=h.fingerprint_id,
+                        candidate_x=h.candidate_x,
+                        candidate_y=h.candidate_y,
+                        candidate_angle=h.candidate_angle,
+                        similarity=h.similarity,
+                    )
+                )
+            candidates.append(
+                MccSearchHit(
+                    person_id=person_id,
+                    total_score=score,
+                    hits=len(top_hits),
+                    contributing_fingerprints=contributing,
+                    match_trace=match_trace,
+                )
+            )
+
+        candidates.sort(key=lambda c: c.total_score, reverse=True)
+        return probe_minutiae, candidates[:top_k]
 
     def _search_cylinders(
         self,
@@ -221,6 +328,11 @@ class MccMatchingService:
         Underscore-prefixed: intended for same-module callers (e.g. the
         Phase 21 SOCOFing benchmark) that need to feed synthetic or
         perturbed cylinders without re-running the full image pipeline.
+
+        .. note::
+            This legacy path does NOT build ``match_trace`` because it
+            does not have access to the probe minutiae positions. Call
+            :meth:`search` for the full match-trace path.
         """
         if not query_cylinders:
             return []

@@ -76,9 +76,10 @@ def test_search_finds_enrolled_match(repo: QdrantMccRepository) -> None:
         svc.enroll("c1", "f1", "p1", b"fake")
         svc.enroll("c2", "f2", "p2", b"fake")
 
-        hits = svc.search(b"fake", top_k=5)
+        probe_minutiae, hits = svc.search(b"fake", top_k=5)
     assert len(hits) >= 1
     assert all(isinstance(h, MccSearchHit) for h in hits)
+    assert len(probe_minutiae) >= 1
     for a, b in zip(hits, hits[1:]):
         assert a.total_score >= b.total_score
 
@@ -88,8 +89,9 @@ def test_search_returns_empty_when_no_enrollment(
 ) -> None:
     svc = MccMatchingService(mcc_repo=repo)
     with patch.object(svc, "_run_mcc_pipeline", return_value=_make_pipeline_result(3)):
-        hits = svc.search(b"fake", top_k=5)
+        probe_minutiae, hits = svc.search(b"fake", top_k=5)
     assert hits == []
+    assert len(probe_minutiae) >= 1
 
 
 def test_search_respects_top_k(repo: QdrantMccRepository) -> None:
@@ -97,5 +99,6 @@ def test_search_respects_top_k(repo: QdrantMccRepository) -> None:
     with patch.object(svc, "_run_mcc_pipeline", return_value=_make_pipeline_result(3)):
         for i in range(5):
             svc.enroll(f"c{i}", f"f{i}", f"p{i}", b"fake")
-        hits = svc.search(b"fake", top_k=3)
+        probe_minutiae, hits = svc.search(b"fake", top_k=3)
     assert len(hits) <= 3
+    assert len(probe_minutiae) >= 1

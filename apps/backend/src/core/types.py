@@ -266,6 +266,20 @@ class MccPersonHit:
     total_score: float
     hits: int
     contributing_fingerprints: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class MccSearchHit:
+    """A single ranked match candidate from MCC search (Phase 21 / Phase 23).
+
+    ``match_trace`` is populated by :meth:`MccMatchingService.search`
+    with per-cylinder (probe ↔ candidate) pairs for frontend overlay
+    rendering.
+    """
+    person_id: str
+    total_score: float
+    hits: int
+    contributing_fingerprints: list[str]
     match_trace: list["MatchTraceEntry"] = field(default_factory=list)
 
 

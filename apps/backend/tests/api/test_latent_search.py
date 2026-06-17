@@ -28,7 +28,7 @@ class TestSearchLatent:
 
     async def test_returns_empty_when_no_matches(self) -> None:
         mock_matching = MagicMock()
-        mock_matching.search = MagicMock(return_value=[])
+        mock_matching.search = MagicMock(return_value=([], []))  # (probe_minutiae, candidates)
 
         mock_db = MagicMock()
         async def _execute(*args: object, **kwargs: object) -> MagicMock:
@@ -59,7 +59,7 @@ class TestSearchLatent:
             _make_hit(person_id="550e8400-e29b-41d4-a716-446655440002", score=0.82, hits=3),
         ]
         mock_matching = MagicMock()
-        mock_matching.search = MagicMock(return_value=hits)
+        mock_matching.search = MagicMock(return_value=([], hits))  # (probe_minutiae, candidates)
 
         mock_person1 = MagicMock()
         mock_person1.full_name = "Juan Pérez"
