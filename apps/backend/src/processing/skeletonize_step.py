@@ -14,9 +14,9 @@ logger = logging.getLogger(__name__)
 class SkeletonizationStep(IPipelineStep):
     """
     Convierte la imagen mejorada en un esqueleto estricto (1 pixel de grosor).
-    
-    Aplica binarización de Otsu y un filtro morfológico para eliminar 
-    "pelusas" (islas pequeñas desconectadas) antes de esqueletizar. 
+
+    Aplica binarización de Otsu y un filtro morfológico para eliminar
+    "pelusas" (islas pequeñas desconectadas) antes de esqueletizar.
     El resultado se guarda en `ctx.skeleton` como un array uint8 (0 y 1).
     """
     def __init__(self, min_island_size: int = 20) -> None:
@@ -24,7 +24,7 @@ class SkeletonizationStep(IPipelineStep):
 
     def process(self, ctx: PipelineContext) -> None:
         source = ctx.enhanced_image if ctx.enhanced_image is not None else ctx.raw_image
-        
+
         if source.ndim == 3:
             source = cv2.cvtColor(source, cv2.COLOR_BGR2GRAY)
 

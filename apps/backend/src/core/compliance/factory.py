@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from src.core.compliance.base import BaseStrategy
 from src.core.compliance.extreme import ExtremePrivacyStrategy
-from src.core.compliance.strategy import IComplianceStrategy
 
+if TYPE_CHECKING:
+    from src.core.compliance.strategy import IComplianceStrategy
 
 # Registry of available compliance strategy names to their constructors.
 # New strategies register here following the Open/Closed principle —
@@ -37,10 +40,11 @@ def get_compliance_strategy(name: str) -> IComplianceStrategy:
     strategy_cls = _STRATEGY_REGISTRY.get(name)
     if strategy_cls is None:
         valid = ", ".join(sorted(_STRATEGY_REGISTRY))
-        raise ValueError(
+        msg = (
             f"Unknown compliance strategy: '{name}'. "
             f"Available strategies: {valid}"
         )
+        raise ValueError(msg)
     return strategy_cls()
 
 

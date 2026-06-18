@@ -12,7 +12,7 @@ Proprietary SDKs are avoided to prevent vendor lock-in and ensure auditability.
 """
 
 import logging
-from typing import Protocol
+from typing import ClassVar, Protocol
 
 from llama_index.core.llms.llm import LLM
 from llama_index.llms.openai_like import OpenAILike
@@ -33,17 +33,17 @@ class OpenAICompatibleProvider:
     Universal provider that talks to ANY backend supporting the OpenAI REST API format.
     This includes: Local Ollama, vLLM, LiteLLM Proxy, and actual OpenAI/Azure APIs.
     """
-    
+
     def get_llm(self, use_case: str = "default") -> LLM:
         # Determine timeout based on use case
         timeout = 120.0 if use_case == "sql" else 60.0
-        
+
         logger.info(
             f"Configuring LLM for use_case '{use_case}' connecting to {config.llm_api_base}"
         )
-        
+
         # Use OpenAILike which allows overriding the API Base URL seamlessly
-        return OpenAILike(
+        return OpenAILike(  # type: ignore[no-any-return]
             model=config.llm_model_name,
             api_base=config.llm_api_base,
             api_key=config.llm_api_key.get_secret_value() if config.llm_api_key else "fake-key-for-local",
@@ -54,9 +54,9 @@ class OpenAICompatibleProvider:
 
 class LLMFactory:
     """Factory to instantiate the appropriate LLM provider based on config."""
-    
+
     # We now unify all providers under the standard compatible REST interface
-    _providers: dict[str, ILLMProvider] = {
+    _providers: ClassVar[dict[str, ILLMProvider]] = {
         "standard": OpenAICompatibleProvider(),
     }
 
@@ -69,5 +69,6 @@ class LLMFactory:
         # The actual routing (Local vs Azure vs Gateway) is handled by changing `config.llm_api_base`.
         provider = cls._providers.get("standard")
         if not provider:
-            raise ValueError("Standard provider not configured.")
+            msg = "Standard provider not configured."
+            raise ValueError(msg)
         return provider.get_llm(use_case)

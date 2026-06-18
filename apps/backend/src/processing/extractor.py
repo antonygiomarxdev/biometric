@@ -10,7 +10,6 @@ Available extractors
 import logging
 import math
 
-import cv2
 import numpy as np
 from skimage.morphology import convex_hull_image, erosion
 from skimage.morphology.footprints import square
@@ -191,7 +190,7 @@ class SkeletonMinutiaeExtractor:
 
         IMPORTANTE: skel DEBE ser binario (0/1) para que el CN funcione correctamente.
         """
-        rows, cols = skel.shape
+        _, _ = skel.shape
         candidates = []
 
         # Validar que el skeleton sea binario (0/1)
@@ -262,7 +261,7 @@ class SkeletonMinutiaeExtractor:
             n_curr = neighbors[i].astype(np.int16)
             n_next = neighbors[i + 1].astype(np.int16)
             diff = np.abs(n_curr - n_next)
-            
+
             # Validar que las diferencias sean 0 o 1
             diff_max = diff.max()
             if diff_max > 1:
@@ -382,12 +381,11 @@ class SkeletonMinutiaeExtractor:
 
         if m_type == MinutiaType.TERMINATION:
             return angles[0]
-        elif m_type == MinutiaType.BIFURCATION and len(angles) >= 3:
+        if m_type == MinutiaType.BIFURCATION and len(angles) >= 3:
             # Promedio vectorial correcto
             sin_sum = sum(math.sin(math.radians(a)) for a in angles)
             cos_sum = sum(math.cos(math.radians(a)) for a in angles)
-            mean_angle = math.degrees(math.atan2(sin_sum, cos_sum))
-            return mean_angle
+            return math.degrees(math.atan2(sin_sum, cos_sum))
 
         return angles[0]
 

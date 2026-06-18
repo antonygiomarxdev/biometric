@@ -36,7 +36,7 @@ class BinarizationHook(IPipelineStep):
     writes the binary result back to ``ctx.preprocessed_image``.
     """
 
-    def __init__(self, invert: bool = True) -> None:
+    def __init__(self, *, invert: bool = True) -> None:
         self.invert = invert
 
     def process(self, ctx: PipelineContext) -> None:
@@ -160,7 +160,7 @@ class SingularityDetector(IPipelineStep):
 
     Algorithm (Módulo 4 of LATENT_AFIS_SOTA):
     1. Convert ``θ → (Vx=cos(2θ), Vy=sin(2θ))`` for continuous representation.
-    2. Strong Gaussian blur (σ=2.0) on Vx, Vy to suppress scar noise.
+     2. Strong Gaussian blur (σ=2.0) on Vx, Vy to suppress scar noise.
     3. Poincaré Index over 8-connected neighborhood.
     4. DORIC validation: fit candidate to theoretical Zero-Pole model;
        reject if RMS residual > 0.15 rad.
@@ -315,6 +315,7 @@ class SingularityDetector(IPipelineStep):
         theta_smooth: np.ndarray,
         cy: int,
         cx: int,
+        *,
         is_core: bool,
     ) -> bool:
         """DORIC: validate a singularity candidate against the theoretical

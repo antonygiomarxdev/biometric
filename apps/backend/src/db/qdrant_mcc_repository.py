@@ -30,9 +30,13 @@ from src.core.types import MccCylinderHit, MccPersonHit
 logger = logging.getLogger(__name__)
 
 COLLECTION_NAME: str = "mcc_cylinders"
+PAIR_COLLECTION_NAME: str = "pair_features"
+TRIPLET_COLLECTION_NAME: str = "triplet_features"
 _DEFAULT_HOST: str = "localhost"
 _DEFAULT_PORT: int = 6333
 DEFAULT_VECTOR_SIZE: int = 144
+PAIR_VECTOR_SIZE: int = 5
+TRIPLET_VECTOR_SIZE: int = 6
 
 
 def _cylinder_point_id(
@@ -231,12 +235,54 @@ class QdrantMccRepository(IMccMatcher):
                 )
         return all_hits
 
+    def scroll_all_cylinders(
+        self,
+    ) -> list[dict[str, object]]:
+        """Return all enrolled cylinders with vectors and payloads.
+
+        Used by :meth:`MccMatchingService.exhaustive_search` for latent
+        matching where position-aware exhaustive comparison is required
+        (Hough voting needs pairs whose (Δx, Δy, Δθ) is meaningful —
+        KNN discards that information).
+        """
+        records: list[dict[str, object]] = []
+        offset: object = None
+        while True:
+            batch, next_offset = self._client.scroll(
+                collection_name=self._collection,
+                limit=256,
+                offset=offset,  # type: ignore[arg-type]
+                with_payload=True,
+                with_vectors=True,
+            )
+            records.extend(
+                {
+                    "id": r.id,
+                    "vector": np.asarray(r.vector, dtype=np.float32),
+                    "payload": r.payload or {},
+                }
+                for r in batch
+            )
+            if next_offset is None:
+                break
+            offset = next_offset
+        return records
+
     def aggregate_scores_by_person(
         self,
         hits: list[MccCylinderHit],
-        enrolled_counts: dict[str, int],
+        query_cylinder_count: int,
+        enrolled_counts: dict[str, int] | None = None,
     ) -> list[MccPersonHit]:
-        """Group cylinder hits by person, normalize by per-person count."""
+        """Group cylinder hits by person, normalize by query cylinder count.
+
+        ``query_cylinder_count`` is the total number of cylinders in the
+        probe image (NOT the per-person enrolled count). Dividing by it
+        yields an average per-probe-cylinder similarity in [0, 1] — the
+        only formula that is comparable across queries of different
+        sizes (e.g., cropped latents vs full rolled prints) and across
+        candidates with different enrollment sizes.
+        """
         sums: dict[str, float] = defaultdict(float)
         counts: dict[str, int] = defaultdict(int)
         fps: dict[str, set[str]] = defaultdict(set)
@@ -248,7 +294,13 @@ class QdrantMccRepository(IMccMatcher):
         norm_mode = config.matching.score_normalization
         persons: list[MccPersonHit] = []
         for person_id, total in sums.items():
-            if norm_mode == "fingerprint":
+            if norm_mode == "query":
+                denom = max(query_cylinder_count, 1)
+                score = total / denom
+            elif norm_mode == "fingerprint":
+                if enrolled_counts is None:
+                    msg = "fingerprint mode requires enrolled_counts"
+                    raise ValueError(msg)
                 denom = enrolled_counts.get(person_id, 1) or 1
                 score = total / denom
             else:
@@ -263,6 +315,309 @@ class QdrantMccRepository(IMccMatcher):
             )
         persons.sort(key=lambda p: p.total_score, reverse=True)
         return persons
+
+    # ------------------------------------------------------------------
+    # Pair features (Phase 24, Plan 24-02)
+    # ------------------------------------------------------------------
+
+    def ensure_pair_collection(self) -> None:
+        """Create the pair_features collection with 5-D vectors."""
+        if self._collection_exists_in(PAIR_COLLECTION_NAME):
+            return
+        idx_cfg = config.qdrant_index
+        self._client.create_collection(
+            collection_name=PAIR_COLLECTION_NAME,
+            vectors_config=qdrant_models.VectorParams(
+                size=PAIR_VECTOR_SIZE,
+                distance=qdrant_models.Distance.COSINE,
+                hnsw_config=qdrant_models.HnswConfigDiff(
+                    m=idx_cfg.hnsw_m,
+                    ef_construct=idx_cfg.hnsw_ef_construct,
+                    full_scan_threshold=idx_cfg.hnsw_full_scan_threshold,
+                ),
+            ),
+            optimizers_config=qdrant_models.OptimizersConfigDiff(
+                default_segment_number=2,
+            ),
+        )
+        self._client.create_payload_index(
+            collection_name=PAIR_COLLECTION_NAME,
+            field_name="person_id",
+            field_schema=qdrant_models.PayloadSchemaType.KEYWORD,
+        )
+        self._client.create_payload_index(
+            collection_name=PAIR_COLLECTION_NAME,
+            field_name="capture_id",
+            field_schema=qdrant_models.PayloadSchemaType.KEYWORD,
+        )
+        logger.info("Created Qdrant collection %s (size=%d)", PAIR_COLLECTION_NAME, PAIR_VECTOR_SIZE)
+
+    def _collection_exists_in(self, name: str) -> bool:
+        try:
+            collections = self._client.get_collections().collections
+            return any(c.name == name for c in collections)
+        except Exception:
+            return False
+
+    def _pair_point_id(
+        self,
+        person_id: str,
+        fingerprint_id: str,
+        capture_id: str,
+        pair_index: int,
+    ) -> int:
+        key = f"pair:{person_id}:{fingerprint_id}:{capture_id}:{pair_index}"
+        return int(hashlib.sha256(key.encode()).hexdigest()[:16], 16)
+
+    def bulk_insert_pairs(
+        self,
+        person_id: str,
+        fingerprint_id: str,
+        capture_id: str,
+        pair_dicts: list[dict],
+    ) -> int:
+        """Insert pair feature vectors into the pair_features collection."""
+        if not pair_dicts:
+            return 0
+        from src.processing.pair_extractor import pair_to_vector
+
+        points: list[qdrant_models.PointStruct] = []
+        for i, p in enumerate(pair_dicts):
+            vec = pair_to_vector(p)
+            points.append(
+                qdrant_models.PointStruct(
+                    id=self._pair_point_id(person_id, fingerprint_id, capture_id, i),
+                    vector=vec,
+                    payload={
+                        "person_id": person_id,
+                        "fingerprint_id": fingerprint_id,
+                        "capture_id": capture_id,
+                        "i_idx": p["i"],
+                        "j_idx": p["j"],
+                        "mi_x": p["mi_x"],
+                        "mi_y": p["mi_y"],
+                        "mi_angle": p["mi_angle"],
+                        "mj_x": p["mj_x"],
+                        "mj_y": p["mj_y"],
+                        "mj_angle": p["mj_angle"],
+                        "dx": p["dx"],
+                        "dy": p["dy"],
+                        "dtheta": p["dtheta"],
+                        "distance": p["distance"],
+                        "type_pair": p["type_pair"],
+                    },
+                )
+            )
+        self._client.upsert(collection_name=PAIR_COLLECTION_NAME, points=points, wait=False)
+        return len(points)
+
+    def knn_search_pairs(
+        self,
+        query_vectors: list[list[float]],
+        top_k_per_vector: int = 10,
+    ) -> list[dict]:
+        """For each query pair vector, return top-K similar pairs."""
+        if not query_vectors:
+            return []
+        all_hits: list[dict] = []
+        for query_idx, qv in enumerate(query_vectors):
+            response = self._client.query_points(
+                collection_name=PAIR_COLLECTION_NAME,
+                query=qv,
+                limit=top_k_per_vector,
+                with_payload=True,
+            )
+            for hit in response.points:
+                payload = hit.payload or {}
+                all_hits.append({
+                    "query_pair_index": query_idx,
+                    "similarity": float(hit.score),
+                    "person_id": str(payload.get("person_id", "")),
+                    "fingerprint_id": str(payload.get("fingerprint_id", "")),
+                    "capture_id": str(payload.get("capture_id", "")),
+                    "i_idx": int(payload.get("i_idx", 0)),
+                    "j_idx": int(payload.get("j_idx", 0)),
+                    "mi_x": float(payload.get("mi_x", 0.0)),
+                    "mi_y": float(payload.get("mi_y", 0.0)),
+                    "mi_angle": float(payload.get("mi_angle", 0.0)),
+                    "mj_x": float(payload.get("mj_x", 0.0)),
+                    "mj_y": float(payload.get("mj_y", 0.0)),
+                    "mj_angle": float(payload.get("mj_angle", 0.0)),
+                    "dx": float(payload.get("dx", 0.0)),
+                    "dy": float(payload.get("dy", 0.0)),
+                    "dtheta": float(payload.get("dtheta", 0.0)),
+                })
+        return all_hits
+
+    def delete_pairs_by_person(self, person_id: str) -> int:
+        """Remove all pairs for a person. Returns count of deleted points."""
+        filter_ = qdrant_models.Filter(
+            must=[
+                qdrant_models.FieldCondition(
+                    key="person_id",
+                    match=qdrant_models.MatchValue(value=person_id),
+                )
+            ]
+        )
+        before = self._client.count(
+            collection_name=PAIR_COLLECTION_NAME,
+            count_filter=filter_,
+        )
+        self._client.delete(
+            collection_name=PAIR_COLLECTION_NAME,
+            points_selector=qdrant_models.FilterSelector(filter=filter_),
+        )
+        return int(before.count)
+
+    # ------------------------------------------------------------------
+    # Triplet features (Phase 25, Plan 25-02)
+    # ------------------------------------------------------------------
+
+    def ensure_triplet_collection(self) -> None:
+        """Create the triplet_features collection with 6-D vectors."""
+        if self._collection_exists_in(TRIPLET_COLLECTION_NAME):
+            return
+        idx_cfg = config.qdrant_index
+        self._client.create_collection(
+            collection_name=TRIPLET_COLLECTION_NAME,
+            vectors_config=qdrant_models.VectorParams(
+                size=TRIPLET_VECTOR_SIZE,
+                distance=qdrant_models.Distance.COSINE,
+                hnsw_config=qdrant_models.HnswConfigDiff(
+                    m=idx_cfg.hnsw_m,
+                    ef_construct=idx_cfg.hnsw_ef_construct,
+                    full_scan_threshold=idx_cfg.hnsw_full_scan_threshold,
+                ),
+            ),
+            optimizers_config=qdrant_models.OptimizersConfigDiff(
+                default_segment_number=2,
+            ),
+        )
+        self._client.create_payload_index(
+            collection_name=TRIPLET_COLLECTION_NAME,
+            field_name="person_id",
+            field_schema=qdrant_models.PayloadSchemaType.KEYWORD,
+        )
+        self._client.create_payload_index(
+            collection_name=TRIPLET_COLLECTION_NAME,
+            field_name="capture_id",
+            field_schema=qdrant_models.PayloadSchemaType.KEYWORD,
+        )
+        logger.info("Created Qdrant collection %s (size=%d)", TRIPLET_COLLECTION_NAME, TRIPLET_VECTOR_SIZE)
+
+    @staticmethod
+    def _triplet_point_id(
+        person_id: str,
+        fingerprint_id: str,
+        capture_id: str,
+        triplet_index: int,
+    ) -> int:
+        key = f"triplet:{person_id}:{fingerprint_id}:{capture_id}:{triplet_index}"
+        return int(hashlib.sha256(key.encode()).hexdigest()[:16], 16)
+
+    def bulk_insert_triplets(
+        self,
+        person_id: str,
+        fingerprint_id: str,
+        capture_id: str,
+        triplet_dicts: list[dict],
+    ) -> int:
+        """Insert triplet vectors into the triplet_features collection."""
+        if not triplet_dicts:
+            return 0
+        from src.processing.triplet_extractor import triplet_to_vector
+
+        points: list[qdrant_models.PointStruct] = []
+        for i, t in enumerate(triplet_dicts):
+            vec = triplet_to_vector(t)
+            points.append(
+                qdrant_models.PointStruct(
+                    id=self._triplet_point_id(person_id, fingerprint_id, capture_id, i),
+                    vector=vec,
+                    payload={
+                        "person_id": person_id,
+                        "fingerprint_id": fingerprint_id,
+                        "capture_id": capture_id,
+                        "mi_idx": t["mi_idx"],
+                        "mj_idx": t["mj_idx"],
+                        "mk_idx": t["mk_idx"],
+                        "mi_x": t["mi_x"],
+                        "mi_y": t["mi_y"],
+                        "mi_angle": t["mi_angle"],
+                        "mj_x": t["mj_x"],
+                        "mj_y": t["mj_y"],
+                        "mj_angle": t["mj_angle"],
+                        "mk_x": t["mk_x"],
+                        "mk_y": t["mk_y"],
+                        "mk_angle": t["mk_angle"],
+                        "type_triple": t["type_triple"],
+                        "quality_min": t["quality_min"],
+                    },
+                )
+            )
+        self._client.upsert(collection_name=TRIPLET_COLLECTION_NAME, points=points, wait=False)
+        return len(points)
+
+    def knn_search_triplets(
+        self,
+        query_vectors: list[list[float]],
+        top_k_per_vector: int = 5,
+    ) -> list[dict]:
+        """For each query triplet vector, return top-K similar triplets."""
+        if not query_vectors:
+            return []
+        all_hits: list[dict] = []
+        for query_idx, qv in enumerate(query_vectors):
+            response = self._client.query_points(
+                collection_name=TRIPLET_COLLECTION_NAME,
+                query=qv,
+                limit=top_k_per_vector,
+                with_payload=True,
+            )
+            for hit in response.points:
+                payload = hit.payload or {}
+                all_hits.append({
+                    "query_triplet_index": query_idx,
+                    "similarity": float(hit.score),
+                    "person_id": str(payload.get("person_id", "")),
+                    "fingerprint_id": str(payload.get("fingerprint_id", "")),
+                    "capture_id": str(payload.get("capture_id", "")),
+                    "mi_idx": int(payload.get("mi_idx", 0)),
+                    "mj_idx": int(payload.get("mj_idx", 0)),
+                    "mk_idx": int(payload.get("mk_idx", 0)),
+                    "mi_x": float(payload.get("mi_x", 0.0)),
+                    "mi_y": float(payload.get("mi_y", 0.0)),
+                    "mi_angle": float(payload.get("mi_angle", 0.0)),
+                    "mj_x": float(payload.get("mj_x", 0.0)),
+                    "mj_y": float(payload.get("mj_y", 0.0)),
+                    "mj_angle": float(payload.get("mj_angle", 0.0)),
+                    "mk_x": float(payload.get("mk_x", 0.0)),
+                    "mk_y": float(payload.get("mk_y", 0.0)),
+                    "mk_angle": float(payload.get("mk_angle", 0.0)),
+                    "type_triple": int(payload.get("type_triple", 0)),
+                    "quality_min": float(payload.get("quality_min", 0.0)),
+                })
+        return all_hits
+
+    def delete_triplets_by_person(self, person_id: str) -> int:
+        """Remove all triplets for a person. Returns count of deleted points."""
+        filter_ = qdrant_models.Filter(
+            must=[
+                qdrant_models.FieldCondition(
+                    key="person_id",
+                    match=qdrant_models.MatchValue(value=person_id),
+                )
+            ]
+        )
+        before = self._client.count(
+            collection_name=TRIPLET_COLLECTION_NAME,
+            count_filter=filter_,
+        )
+        self._client.delete(
+            collection_name=TRIPLET_COLLECTION_NAME,
+            points_selector=qdrant_models.FilterSelector(filter=filter_),
+        )
+        return int(before.count)
 
     # ------------------------------------------------------------------
     # Maintenance

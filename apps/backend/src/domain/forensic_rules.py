@@ -15,13 +15,19 @@ Per the expert domain knowledge:
 """
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from src.core.types import MinutiaCandidate
+if TYPE_CHECKING:
+    from src.core.types import MinutiaCandidate
 
 
 class InsufficientFeaturesError(ValueError):
     """Raised when a fingerprint fails a forensic validation rule."""
+
+    def __init__(self, got: int, required: int, action: str = "operation") -> None:
+        super().__init__(
+            f"{action} requires at least {required} minutiae (had {got})."
+        )
 
 
 @runtime_checkable
@@ -47,8 +53,7 @@ class EnrollmentValidationStrategy:
     def validate(self, candidates: list[MinutiaCandidate]) -> None:
         if len(candidates) < self.MIN_MINUTIAE:
             raise InsufficientFeaturesError(
-                f"Enrollment requires at least {self.MIN_MINUTIAE} minutiae "
-                f"(had {len(candidates)})."
+                len(candidates), self.MIN_MINUTIAE, action="Enrollment"
             )
 
 
@@ -65,6 +70,5 @@ class SearchValidationStrategy:
     def validate(self, candidates: list[MinutiaCandidate]) -> None:
         if len(candidates) < self.MIN_MINUTIAE:
             raise InsufficientFeaturesError(
-                f"Search requires at least {self.MIN_MINUTIAE} minutiae "
-                f"(had {len(candidates)})."
+                len(candidates), self.MIN_MINUTIAE, action="Search"
             )

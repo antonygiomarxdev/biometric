@@ -3,7 +3,7 @@
 __all__ = []
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> object:
     """Lazy-load ``app`` to break the circular import chain.
 
     ``src.api.dependencies`` is imported by ``auth_service``, which would
@@ -11,6 +11,7 @@ def __getattr__(name: str):
     are ready.  Deferring the import avoids the cycle.
     """
     if name == "app":
-        from src.main import app  # noqa: F811
+        from src.main import app
         return app
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    msg = f"module {__name__!r} has no attribute {name!r}"
+    raise AttributeError(msg)

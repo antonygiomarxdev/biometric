@@ -7,50 +7,51 @@ y scripts de consola. En un entorno de producción distribuido
 no se compartirá. Para producción real, migrar a OpenTelemetry.
 """
 
-import time
 import logging
+import time
+from collections.abc import Callable
 from contextlib import contextmanager
-from typing import Any, Dict, Optional
 from functools import wraps
+from typing import Any, TypeVar
 
 logger = logging.getLogger(__name__)
 
 
 class PerformanceMetrics:
     """Colector de métricas de performance."""
-    
-    def __init__(self):
-        self.metrics: Dict[str, list] = {}
-    
+
+    def __init__(self) -> None:
+        self.metrics: dict[str, list[dict[str, Any]]] = {}
+
     def record(
         self,
         operation: str,
         duration_ms: float,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Registra una métrica de duración."""
         if operation not in self.metrics:
             self.metrics[operation] = []
-        
+
         entry = {
             "duration_ms": duration_ms,
             "timestamp": time.time(),
         }
         if metadata:
             entry.update(metadata)
-        
+
         self.metrics[operation].append(entry)
         logger.debug(f"{operation}: {duration_ms:.2f}ms {metadata or ''}")
-    
-    def get_stats(self, operation: str) -> Dict[str, float]:
+
+    def get_stats(self, operation: str) -> dict[str, float]:
         """Obtiene estadísticas de una operación."""
         if operation not in self.metrics or not self.metrics[operation]:
             return {}
-        
+
         durations = [m["duration_ms"] for m in self.metrics[operation]]
         durations.sort()
         n = len(durations)
-        
+
         return {
             "count": n,
             "mean": sum(durations) / n,
@@ -60,8 +61,8 @@ class PerformanceMetrics:
             "min": durations[0],
             "max": durations[-1],
         }
-    
-    def reset(self):
+
+    def reset(self) -> None:
         """Limpia todas las métricas."""
         self.metrics.clear()
 
@@ -70,8 +71,11 @@ class PerformanceMetrics:
 metrics = PerformanceMetrics()
 
 
+F = TypeVar("F", bound=Callable[..., Any])
+
+
 @contextmanager
-def measure_time(operation: str, **metadata):
+def measure_time(operation: str, **metadata: Any) -> Any:
     """Context manager para medir tiempo de ejecución."""
     start = time.perf_counter()
     try:
@@ -81,14 +85,14 @@ def measure_time(operation: str, **metadata):
         metrics.record(operation, duration_ms, metadata)
 
 
-def timed(operation_name: Optional[str] = None):
+def timed(operation_name: str | None = None) -> Callable[[F], F]:
     """Decorador para medir tiempo de funciones."""
-    def decorator(func):
+    def decorator(func: F) -> F:
         op_name = operation_name or func.__name__
-        
+
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             with measure_time(op_name):
                 return func(*args, **kwargs)
-        return wrapper
+        return wrapper  # type: ignore[return-value]
     return decorator

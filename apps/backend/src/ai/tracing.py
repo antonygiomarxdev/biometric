@@ -46,9 +46,9 @@ def setup_tracing() -> None:
 
     try:
         import phoenix as px
+        from openinference.instrumentation.llama_index import LlamaIndexInstrumentor
         from opentelemetry import trace
         from opentelemetry.sdk.trace import TracerProvider
-        from openinference.instrumentation.llama_index import LlamaIndexInstrumentor
 
         # Start the local Phoenix collector (on-premise compatible).
         # Listens at http://localhost:6006 by default.

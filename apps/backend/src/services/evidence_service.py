@@ -10,17 +10,22 @@ and :class:`~src.db.repositories.case_repository.CaseRepository`.
 from __future__ import annotations
 
 import logging
-import uuid
-from typing import TypedDict
-
-from fastapi import UploadFile
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import TYPE_CHECKING, TypedDict
 
 from src.api.errors import NotFoundError, ValidationError
-from src.db.models import Evidence
+
+if TYPE_CHECKING:
+    from fastapi import UploadFile
 from src.db.repositories.case_repository import CaseRepository
 from src.db.repositories.evidence_repository import EvidenceRepository
 from src.storage.object_storage import storage
+
+if TYPE_CHECKING:
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from src.db.models import Evidence
 
 logger = logging.getLogger(__name__)
 
@@ -161,7 +166,7 @@ class EvidenceService:
         skip: int = 0,
         limit: int = 20,
         case_id: uuid.UUID | None = None,
-    ) -> "PaginatedEvidence":
+    ) -> PaginatedEvidence:
         """Return a paginated list of evidence, optionally filtered by case.
 
         Args:
@@ -173,7 +178,7 @@ class EvidenceService:
         Returns:
             A dict with ``items``, ``total``, ``skip``, and ``limit``.
         """
-        items = await self._evidence_repo.list(
+        items = await self._evidence_repo.list_all(
             db, skip=skip, limit=limit, case_id=case_id
         )
         total = await self._evidence_repo.count(db, case_id=case_id)
@@ -282,10 +287,12 @@ class EvidenceService:
         """
         ev = await self._evidence_repo.get_by_id(db, evidence_id)
         if not ev or not ev.image_path:
-            raise NotFoundError("Image not found")
+            msg = "Image not found"
+            raise NotFoundError(msg)
         image_data = storage.download_file(ev.image_path)
         if image_data is None:
-            raise NotFoundError("Image not found in storage")
+            msg = "Image not found in storage"
+            raise NotFoundError(msg)
         return image_data
 
     async def delete_evidence(

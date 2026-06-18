@@ -10,11 +10,20 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from typing import Protocol, runtime_checkable
-import numpy as np
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
-from src.core.types import CoarseMatch, MinutiaCandidate, NormalizedFingerprint, MatchResult, RidgeGraph, MccCylinderHit, MccPersonHit
+if TYPE_CHECKING:
+    import numpy as np
 
+    from src.core.types import (
+        CoarseMatch,
+        MatchResult,
+        MccCylinderHit,
+        MccPersonHit,
+        MinutiaCandidate,
+        NormalizedFingerprint,
+        RidgeGraph,
+    )
 
 # ---------------------------------------------------------------------------
 # Pipeline context: single source of truth for shared state.
@@ -106,7 +115,7 @@ class AsyncPipelineStep:
 
 class IEnhancer(Protocol):
     """Image enhancement interface (used by CpuEnhancer, GpuEnhancer, etc.)."""
-    def enhance(self, img: np.ndarray, resize: bool = True) -> np.ndarray: ...
+    def enhance(self, img: np.ndarray, *, resize: bool = True) -> np.ndarray: ...
 
 @runtime_checkable
 class IFeatureExtractor(Protocol):
@@ -166,7 +175,7 @@ class ICoarseMatcher(Protocol):
         self,
         fingerprint_id: str,
         embedding: np.ndarray,
-        metadata: dict | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Insert or update one fingerprint embedding."""
         ...
@@ -178,7 +187,7 @@ class ICoarseMatcher(Protocol):
 
 class IFineMatcher(Protocol):
     """Port for the Fine Matcher (Phase 11-03/11-04).
-    
+
     Fine matchers compare a probe RidgeGraph against a shortlist of
     enrolled candidates using forensic spatial alignment and topological
     verification, returning a highly discriminative final score.
@@ -240,9 +249,10 @@ class IMccMatcher(Protocol):
     def aggregate_scores_by_person(
         self,
         hits: list[MccCylinderHit],
-        enrolled_counts: dict[str, int],
+        query_cylinder_count: int,
+        enrolled_counts: dict[str, int] | None = None,
     ) -> list[MccPersonHit]:
-        """Group cylinder hits by person, normalize by enrollment count.
+        """Group cylinder hits by person, normalize by query cylinder count.
 
         ``enrolled_counts[person_id]`` is the number of cylinders stored for
         that person; used as the denominator for per-fingerprint normalization.

@@ -1,9 +1,9 @@
 """Centralized system configuration with robust .env support."""
 
+import logging
 import os
 from dataclasses import dataclass, field
-from typing import Literal, Optional
-import logging
+from typing import Literal
 
 from pydantic import SecretStr
 
@@ -14,7 +14,7 @@ try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
-    logging.warning("python-dotenv not installed, skipping .env loading. Make sure to set environment variables in production.")    
+    logging.warning("python-dotenv not installed, skipping .env loading. Make sure to set environment variables in production.")
 
 @dataclass(frozen=True)
 class JurisdictionConfig:
@@ -266,7 +266,7 @@ class EnhancerDefaultsConfig:
 class MccMatchingConfig:
     """Parameters for MCC cylinder matching (Phase 21).
 
-    Defaults mirror the spike results (12 sectors × 4 rings × 3 features = 144-D).
+    Defaults mirror the spike results (12 sectors x 4 rings x 3 features = 144-D).
     Override via env vars without code changes.
     """
     collection: str = field(
@@ -276,10 +276,39 @@ class MccMatchingConfig:
         default_factory=lambda: int(os.getenv("MCC_VECTOR_SIZE", "144"))
     )
     top_k_per_cylinder: int = field(
-        default_factory=lambda: int(os.getenv("MCC_TOP_K_PER_CYLINDER", "5"))
+        default_factory=lambda: int(os.getenv("MCC_TOP_K_PER_CYLINDER", "20"))
     )
-    score_normalization: Literal["fingerprint", "global"] = field(
-        default_factory=lambda: os.getenv("MCC_SCORE_NORMALIZATION", "fingerprint")  # type: ignore[return-value]
+    # Similarity threshold for the exhaustive all-pairs matcher. Pairs
+    # below this cosine are dropped before Hough voting. Higher values
+    # produce cleaner votes but may discard valid matches for noisy
+    # cropped latents. 0.5 is a safe starting point for SOCOFing.
+    exhaustive_sim_threshold: float = field(
+        default_factory=lambda: float(os.getenv("MCC_EXHAUSTIVE_SIM_THRESHOLD", "0.5"))
+    )
+    score_normalization: Literal["query", "fingerprint", "global"] = field(
+        default_factory=lambda: os.getenv("MCC_SCORE_NORMALIZATION", "query")  # type: ignore[arg-type,return-value]
+    )
+    # Hough voting for global geometric alignment (Phase 23, latent support).
+    # Each cylinder match votes for the rigid transformation (Δx, Δy, Δθ)
+    # that aligns the probe minutia to the candidate minutia. Only matches
+    # near the dominant peak are kept, removing spatially inconsistent votes.
+    # Bin sizes are intentionally wider than strict: SOCOFing minutiae are
+    # at 96-103px scale, so 16px / 10° / ±2 bins collects more genuine
+    # matches without admitting random ones (which spread across many bins).
+    hough_dx_bin: int = field(
+        default_factory=lambda: int(os.getenv("MCC_HOUGH_DX_BIN", "16"))
+    )
+    hough_dy_bin: int = field(
+        default_factory=lambda: int(os.getenv("MCC_HOUGH_DY_BIN", "16"))
+    )
+    hough_dtheta_bin_deg: float = field(
+        default_factory=lambda: float(os.getenv("MCC_HOUGH_DTHETA_BIN_DEG", "10"))
+    )
+    hough_peak_tolerance_bins: int = field(
+        default_factory=lambda: int(os.getenv("MCC_HOUGH_PEAK_TOLERANCE_BINS", "2"))
+    )
+    hough_min_support: int = field(
+        default_factory=lambda: int(os.getenv("MCC_HOUGH_MIN_SUPPORT", "5"))
     )
 
 
@@ -297,7 +326,7 @@ class Config:
     database_url: str = field(
         default_factory=lambda: os.getenv(
             "DATABASE_URL",
-            "postgresql://postgres:postgres@localhost:5434/fingerprint"
+            "postgresql+psycopg://postgres:postgres@localhost:5434/fingerprint"
         )
     )
     db_pool_size: int = field(default_factory=lambda: int(os.getenv("DB_POOL_SIZE", "5")))
@@ -346,7 +375,7 @@ class Config:
     extraction: ExtractionConfig = field(default_factory=ExtractionConfig)
     enhancer_defaults: EnhancerDefaultsConfig = field(default_factory=EnhancerDefaultsConfig)
     matching: MccMatchingConfig = field(default_factory=MccMatchingConfig)
-    
+
     # Logging & Metrics
     log_level: str = field(default_factory=lambda: os.getenv("LOG_LEVEL", "INFO").upper())
     enable_metrics: bool = field(default_factory=lambda: os.getenv("ENABLE_METRICS", "true").lower() == "true")
@@ -428,7 +457,7 @@ class Config:
         )
     )
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Post-initialization validations."""
         if self.combined_score_weight_l2 + self.combined_score_weight_cos != 1.0:
             # Normalize if they don't sum to 1 (optional, or raise warning)

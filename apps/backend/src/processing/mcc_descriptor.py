@@ -7,7 +7,7 @@ minutia extracted from a fingerprint ridge graph.
 Architecture
 ------------
 1. Pipeline produces: skeleton + ridge graph (nodes=minutiae, edges=ridges)
-2. For each minutia, a cylindrical grid (angular sectors × radial rings) is
+2. For each minutia, a cylindrical grid (angular sectors x radial rings) is
    centered on the minutia and ALIGNED to its local ridge orientation.
 3. Each cell captures structural features of the ridge skeleton in that region:
    - dominant ridge orientation (relative)
@@ -44,10 +44,12 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Sequence
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 import numpy as np
-
 
 # ---------------------------------------------------------------------------
 # Configuration — tunable without code changes
@@ -87,7 +89,7 @@ DEFAULT_CONFIG = CylinderConfig()
 # ---------------------------------------------------------------------------
 
 def extract_cylinders(
-    minutiae: Sequence[dict],
+    minutiae: Sequence[dict[str, Any]],
     skeleton: np.ndarray,
     orientation_field: np.ndarray | None = None,
     frequency_map: np.ndarray | None = None,
@@ -158,7 +160,7 @@ def _zero_vector(config: CylinderConfig) -> np.ndarray:
 
 
 def _build_cylinder(
-    minutia: dict,
+    minutia: dict[str, Any],
     skel_rows: np.ndarray,
     skel_cols: np.ndarray,
     orientation_field: np.ndarray | None,
@@ -211,7 +213,7 @@ def _build_cylinder(
 
     # Accumulate skeleton density per cell
     density_cells = np.zeros((n_rings, n_sectors), dtype=np.float32)
-    for sector, ring in zip(sector_indices, ring_indices):
+    for sector, ring in zip(sector_indices.tolist(), ring_indices.tolist(), strict=True):
         density_cells[ring, sector] += 1.0
 
     # ---- Stage 2: structure features sampled at cell centers ----
@@ -275,9 +277,11 @@ def _build_cylinder(
 
     # Include density features if no structure features are enabled
     if len(features) == 0:
-        for ring_idx in range(n_rings):
-            for sector_idx in range(n_sectors):
-                features.append(float(density_cells[ring_idx, sector_idx]))
+        features.extend(
+            float(density_cells[ring_idx, sector_idx])
+            for ring_idx in range(n_rings)
+            for sector_idx in range(n_sectors)
+        )
         vec = np.array(features, dtype=np.float32)
         norm = np.sqrt(np.sum(vec**2)) + 1e-10
         return (vec / norm).astype(np.float32)

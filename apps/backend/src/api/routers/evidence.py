@@ -17,8 +17,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_async_db
-from src.services.evidence_service import evidence_service
 from src.api.prefix import API_PREFIX
+from src.services.evidence_service import evidence_service
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,7 @@ async def list_evidence(
     List evidence items with optional case filter and pagination.
     """
     result = await evidence_service.list_evidence(
-        db, skip=skip, limit=limit, case_id=case_id
+        session, skip=skip, limit=limit, case_id=case_id
     )
     return {
         "items": [EvidenceResponse.model_validate(e) for e in result["items"]],
@@ -103,7 +103,7 @@ async def get_evidence(
     """
     Retrieve a single evidence item by its UUID.
     """
-    return await evidence_service.get_evidence(db, evidence_id)
+    return await evidence_service.get_evidence(session, evidence_id)
 
 
 @router.post(
@@ -123,7 +123,7 @@ async def create_evidence(
     Register new evidence, optionally uploading a fingerprint image.
     """
     return await evidence_service.create_evidence(
-        db,
+        session,
         case_id=case_id,
         fingerprint_id=fingerprint_id,
         file=file,
@@ -136,7 +136,7 @@ async def get_evidence_image(
     session: AsyncSession = Depends(get_async_db),
 ) -> Response:
     """Serve the evidence image from MinIO object storage."""
-    image_data = await evidence_service.get_evidence_image(db, evidence_id)
+    image_data = await evidence_service.get_evidence_image(session, evidence_id)
     return Response(content=image_data, media_type="image/png")
 
 
@@ -148,4 +148,4 @@ async def delete_evidence(
     """
     Delete an evidence item.
     """
-    await evidence_service.delete_evidence(db, evidence_id)
+    await evidence_service.delete_evidence(session, evidence_id)

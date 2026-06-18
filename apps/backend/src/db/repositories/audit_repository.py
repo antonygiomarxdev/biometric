@@ -12,11 +12,13 @@ Three operations:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import desc, select, text
-from sqlalchemy.orm import Session
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 from src.db.models import AuditLog
 
@@ -101,7 +103,7 @@ class AuditRepository:
             payload=entry_data["payload"],
             previous_hash=entry_data.get("previous_hash"),
             current_hash=entry_data["current_hash"],
-            created_at=entry_data.get("created_at", datetime.now(timezone.utc)),
+            created_at=entry_data.get("created_at", datetime.now(UTC)),
         )
         session.add(entry)
         session.flush()

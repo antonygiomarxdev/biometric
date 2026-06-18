@@ -19,7 +19,7 @@ if config.config_file_name is not None:
 # Import the declarative Base so that Alembic can see all model metadata.
 # This is the critical link: ``target_metadata = Base.metadata`` tells
 # autogenerate which tables/columns to diff against the database.
-from src.db.models import Base
+from src.db.models import Base  # noqa: E402
 
 target_metadata = Base.metadata
 

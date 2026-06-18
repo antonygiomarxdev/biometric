@@ -35,8 +35,8 @@ def fit_tps(
     Standard TPS formulation (Bookstein 1989):
         L * [warps; affine] = [target; 0]
     where:
-        L = [[Phi(K×K),  P^T(K×D+1)],
-             [P(D+1×K),  0(D+1×D+1) ]]
+        L = [[Phi(KxK),  P^T(KxD+1)],
+             [P(D+1xK),  0(D+1xD+1) ]]
     """
     source_points = np.asarray(source_points, dtype=np.float64)
     target_points = np.asarray(target_points, dtype=np.float64)
@@ -85,7 +85,6 @@ def apply_tps(
     are [x, y, ...] — we must prepend a 1 for the constant term.
     """
     points = np.asarray(points, dtype=np.float64)
-    D = points.shape[1]
     # [1, x, y, ...] for affine multiplication
     homogeneous = np.hstack([np.ones((points.shape[0], 1)), points])
     affine_part = homogeneous @ affine.T

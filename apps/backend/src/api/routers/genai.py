@@ -18,8 +18,8 @@ from pydantic import BaseModel, Field
 
 from src.ai.assistant import ask_assistant
 from src.ai.report_generator import generate_dictamen
-from src.schemas.dictamen_schema import DictamenPericial
 from src.api.prefix import API_PREFIX
+from src.schemas.dictamen_schema import DictamenPericial
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +142,6 @@ async def generate_report(
             case_id=caso_id,
             sql_results=body.sql_results,
         )
-        return report
     except Exception as exc:
         logger.warning("Report generation failed for case %s: %s", caso_id, exc)
         raise HTTPException(
@@ -152,3 +151,5 @@ async def generate_report(
                 "momento. Intente más tarde."
             ),
         ) from exc
+    else:
+        return report

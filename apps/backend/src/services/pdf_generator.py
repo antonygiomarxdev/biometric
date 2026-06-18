@@ -11,7 +11,7 @@ import hashlib
 import hmac
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from weasyprint import HTML
@@ -38,7 +38,7 @@ def _generate_signature(payload: str, timestamp: str) -> str:
         expected = hmac.new(secret, f"{payload}|{ts}".encode(), sha256).hexdigest()
         hmac.compare_digest(expected, stored)
     """
-    message = f"{payload}|{timestamp}".encode("utf-8")
+    message = f"{payload}|{timestamp}".encode()
     return hmac.new(_PDF_SECRET, message, hashlib.sha256).hexdigest()
 
 
@@ -247,7 +247,7 @@ class PDFGeneratorService:
         Returns:
             PDF bytes with embedded HMAC-SHA256 signature.
         """
-        sig_timestamp = datetime.now(timezone.utc).isoformat()
+        sig_timestamp = datetime.now(UTC).isoformat()
 
         # Build the canonical payload for signing (fields that define
         # the document's identity). The HMAC proves these fields have
@@ -270,15 +270,13 @@ class PDFGeneratorService:
 
         # WeasyPrint is CPU-bound — run in executor per D-12 pattern
         loop = asyncio.get_event_loop()
-        pdf_bytes = await loop.run_in_executor(
+        return await loop.run_in_executor(
             None,
             self._render_pdf,
             html_str,
             case_data.get("case_number", "dictamen"),
             signature,
         )
-
-        return pdf_bytes
 
     # ── internal ──────────────────────────────────────────────────
 
@@ -299,13 +297,14 @@ class PDFGeneratorService:
         meta.custom = {
             "hmac_signature": signature,
             "signature_algorithm": "HMAC-SHA256",
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
         pdf_bytes = doc.write_pdf()
         if pdf_bytes is None:
-            raise RuntimeError("WeasyPrint returned no PDF bytes")
-        return pdf_bytes
+            msg = "WeasyPrint returned no PDF bytes"
+            raise RuntimeError(msg)
+        return pdf_bytes  # type: ignore[no-any-return]
 
 
 # Module-level singleton for convenience (mirrors existing pattern

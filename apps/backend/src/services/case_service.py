@@ -9,14 +9,17 @@ queries are delegated to :class:`~src.db.repositories.case_repository.CaseReposi
 from __future__ import annotations
 
 import logging
-import uuid
-from typing import TypedDict
-
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import TYPE_CHECKING, TypedDict
 
 from src.api.errors import IntegrityError, NotFoundError
-from src.db.models import Case
 from src.db.repositories.case_repository import CaseRepository
+
+if TYPE_CHECKING:
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from src.db.models import Case
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +60,7 @@ class CaseService:
         skip: int = 0,
         limit: int = 20,
         status: str | None = None,
-    ) -> "PaginatedCases":
+    ) -> PaginatedCases:
         """Return a paginated list of cases, optionally filtered by status."""
         items = await self._repo.list(db, skip=skip, limit=limit, status=status)
         total = await self._repo.count(db, status=status)

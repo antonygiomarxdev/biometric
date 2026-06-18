@@ -20,8 +20,8 @@ export function CandidateCard({
   isSelected,
   onSelect,
 }: CandidateCardProps) {
-  const scorePercent = (candidate.total_score * 100).toFixed(1);
-  const traceCount = candidate.match_trace.length;
+  const scorePercent = ((candidate.score ?? 0) * 100).toFixed(1);
+  const traceCount = candidate.supporting_pairs.length;
 
   return (
     <div
@@ -60,7 +60,7 @@ export function CandidateCard({
           <div className="flex items-center gap-2 mt-1.5">
             <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
               <div
-                className={`h-full rounded-full ${scoreColorClass(candidate.total_score)}`}
+                className={`h-full rounded-full ${scoreColorClass(candidate.score ?? 0)}`}
                 style={{ width: `${Math.min(Number(scorePercent), 100)}%` }}
               />
             </div>
@@ -69,11 +69,11 @@ export function CandidateCard({
             </span>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {candidate.hits} cilindros coincidentes
+            {candidate.peak_votes} pares coincidentes
             {traceCount > 0 && (
               <>
                 <span className="text-muted-foreground/60"> · </span>
-                <span className="text-primary">{traceCount} pares matched</span>
+                <span className="text-primary">{traceCount} supporting</span>
               </>
             )}
           </p>

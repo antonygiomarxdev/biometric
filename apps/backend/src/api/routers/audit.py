@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 """
 Router for the forensic audit log (auditoría de cadena de custodia).
 
@@ -13,7 +12,8 @@ Endpoints
 """
 
 import logging
-from typing import Any, Optional
+from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -22,8 +22,8 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_async_db
-from src.db.models import AuditLog
 from src.api.prefix import API_PREFIX
+from src.db.models import AuditLog
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ class AuditLogEntry(BaseModel):
     record_id: str
     action: str
     payload: Any
-    previous_hash: Optional[str] = None
+    previous_hash: str | None = None
     current_hash: str
     created_at: datetime
 
@@ -62,9 +62,9 @@ class AuditLogPage(BaseModel):
 
 @router.get("/logs", response_model=AuditLogPage)
 async def list_audit_logs(
-    table_name: Optional[str] = Query(None, description="Filter by affected table"),
-    record_id: Optional[UUID] = Query(None, description="Filter by affected record UUID"),
-    action: Optional[str] = Query(None, description="Filter by action type (INSERT, UPDATE, DELETE, …)"),
+    table_name: str | None = Query(None, description="Filter by affected table"),
+    record_id: UUID | None = Query(None, description="Filter by affected record UUID"),
+    action: str | None = Query(None, description="Filter by action type (INSERT, UPDATE, DELETE, …)"),
     limit: int = Query(50, ge=1, le=500, description="Max results per page"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
     session: AsyncSession = Depends(get_async_db),

@@ -15,26 +15,26 @@ Each router handles a single REST resource (per D-02):
 
 from .audit import router as audit_router
 from .auth import router as auth_router
+from .captures import router as captures_router
 from .cases import router as cases_router
 from .decisions import router as decisions_router
-from .genai import router as genai_router
-from .reports import router as reports_router
 from .evidence import router as evidence_router
+from .fingerprints import router as fingerprints_router
+from .genai import router as genai_router
 from .latent_search import router as latent_search_router
 from .persons import router as persons_router
-from .fingerprints import router as fingerprints_router
-from .captures import router as captures_router
+from .reports import router as reports_router
 
 __all__ = [
     "audit_router",
     "auth_router",
+    "captures_router",
     "cases_router",
     "decisions_router",
-    "genai_router",
-    "reports_router",
     "evidence_router",
+    "fingerprints_router",
+    "genai_router",
     "latent_search_router",
     "persons_router",
-    "fingerprints_router",
-    "captures_router",
+    "reports_router",
 ]

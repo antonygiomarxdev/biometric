@@ -108,16 +108,8 @@ def _mock_processing_pipeline() -> Generator[None, None, None]:
 
     with (
         patch(
-            "src.services.fingerprint_service.create_enhancer",
-            return_value=mock_enhancer,
-        ),
-        patch(
             "src.processing.enhancer.create_enhancer",
             return_value=mock_enhancer,
-        ),
-        patch(
-            "src.services.fingerprint_service.SkeletonMinutiaeExtractor",
-            return_value=mock_extractor,
         ),
     ):
         yield

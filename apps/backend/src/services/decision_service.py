@@ -9,15 +9,19 @@ while all SQLAlchemy queries are delegated to repositories.
 from __future__ import annotations
 
 import logging
-import uuid
+from typing import TYPE_CHECKING
 
-from sqlalchemy.ext.asyncio import AsyncSession
+if TYPE_CHECKING:
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.errors import NotFoundError, ValidationError
 from src.db.repositories.case_repository import CaseRepository
 from src.db.repositories.decision_repository import DecisionRepository
 from src.db.repositories.evidence_repository import EvidenceRepository
-from src.services.audit_service import AuditService, audit_service as default_audit_service
+from src.services.audit_service import AuditService
+from src.services.audit_service import audit_service as default_audit_service
 
 logger = logging.getLogger(__name__)
 
@@ -199,7 +203,7 @@ class DecisionService:
 
         # Log to the immutable audit hash chain (D-09)
         self._audit_service.log_event(
-            session=db,
+            session=db,  # type: ignore[arg-type]
             table_name="decisions",
             record_id=decision.id,
             action="INSERT",
