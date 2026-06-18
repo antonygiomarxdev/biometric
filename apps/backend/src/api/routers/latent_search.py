@@ -57,7 +57,20 @@ async def search_latent(
         raise HTTPException(status_code=400, detail="Empty file uploaded")
 
     t0 = time.monotonic()
-    result = matching.search_by_triplets(image_bytes, top_k=top_k)
+
+    # Fetch enrolled OF records for pre-filter (Phase 26)
+    try:
+        from src.db.of_registry import OFRegistry
+        registry = OFRegistry(session)
+        enrolled_ofs_raw = await registry.get_all()
+        enrolled_ofs: dict[str, Any] | None = enrolled_ofs_raw
+    except Exception:
+        enrolled_ofs = None
+
+    result = matching.search_by_triplets(
+        image_bytes, top_k=top_k,
+        enrolled_ofs=enrolled_ofs,
+    )
     query_time_ms = int((time.monotonic() - t0) * 1000)
 
     candidates = result["candidates"]

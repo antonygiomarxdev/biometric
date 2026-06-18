@@ -441,10 +441,15 @@ class MccMatchingService:
         fingerprint_id: str,
         person_id: str,
         image_bytes: bytes,
-    ) -> tuple[int, int]:
+    ) -> tuple[int, int, dict[str, object] | None]:
         """Quality pipeline → triplet extraction → persist in Qdrant.
 
-        Returns ``(num_minutiae, num_triplets)``.
+        Also computes the orientation field on the enhanced image and
+        returns it as a serialisable dict so the caller can persist it
+        via ``OFRegistry``.
+
+        Returns ``(num_minutiae, num_triplets, of_result)`` where
+        ``of_result`` is ``None`` if OF computation fails.
         """
         import time as _time
         from src.processing.triplet_extractor import extract_triplets
@@ -454,6 +459,7 @@ class MccMatchingService:
         minutiae = result["minutiae"]
         skeleton = result["skeleton"]
         normalized_shape = result["normalized_shape"]
+        enhanced = result["enhanced_image"]
         t_pipeline = _time.monotonic()
 
         triplets = extract_triplets(
@@ -469,21 +475,40 @@ class MccMatchingService:
             triplet_dicts=triplets,
         )
         t_qdrant = _time.monotonic()
+
+        # Build OF for pre-filter (Phase 26)
+        of_result: dict[str, object] | None = None
+        try:
+            from src.processing.of_similarity import OFSimilarity
+
+            of = OFSimilarity.build(enhanced, block_size=16)
+            of_result = {
+                "ori": of.ori.tolist(),
+                "coh": of.coh.tolist(),
+                "block_size": of.block_size,
+            }
+        except Exception as exc:
+            logger.warning("OF build failed for capture %s: %s", capture_id, exc)
+
+        t_of = _time.monotonic()
         dev_log(
             "mcc.enroll_triplets",
             capture_id=capture_id,
             person_id=person_id,
             minutiae=len(minutiae),
             triplets=num_triplets,
+            has_of=of_result is not None,
             pipeline_ms=round((t_pipeline - t0) * 1000, 1),
             triplets_ms=round((t_triplets - t_pipeline) * 1000, 1),
             qdrant_ms=round((t_qdrant - t_triplets) * 1000, 1),
+            of_ms=round((t_of - t_qdrant) * 1000, 1),
         )
         logger.info(
-            "Enrolled triplets: capture %s, %d minutiae, %d triplets for %s",
+            "Enrolled triplets: capture %s, %d minutiae, %d triplets for %s (OF=%s)",
             capture_id, len(minutiae), num_triplets, person_id,
+            "yes" if of_result else "no",
         )
-        return len(minutiae), num_triplets
+        return len(minutiae), num_triplets, of_result
 
     # ------------------------------------------------------------------
     # Triplet-based search (Phase 25, Plan 25-02)
@@ -494,6 +519,7 @@ class MccMatchingService:
         image_bytes: bytes,
         top_k: int = 10,
         knn_per_triplet: int = 5,
+        enrolled_ofs: dict[str, Any] | None = None,
     ) -> SearchByPairsResult:
         """Search using triplet-based matching with growing algorithm.
 
@@ -501,6 +527,13 @@ class MccMatchingService:
         collection.  The growing algorithm then validates geometric
         consistency of triplet matches per candidate person, replacing
         the old Hough voting with the standard AFIS approach.
+
+        Parameters
+        ----------
+        enrolled_ofs:
+            Pre-fetched OF records keyed by ``fingerprint_id`` (str).
+            If provided, KNN hits are pre-filtered by OF similarity
+            before the growing algorithm (Phase 26 OF pre-filter).
 
         Returns a dict with keys:
           - ``candidates``: list of candidate dicts, each with:
@@ -551,6 +584,28 @@ class MccMatchingService:
 
         if not all_hits:
             return {"candidates": [], "probe_minutiae": pixel_minutiae}
+
+        # OF pre-filter (Phase 26) — drop hits whose enrolled OF is
+        # inconsistent with the probe before running growing algorithm.
+        if enrolled_ofs is not None:
+            try:
+                from src.processing.of_filter import OFFilter
+                from src.processing.of_similarity import OFSimilarity
+
+                probe_of = OFSimilarity.build(enhanced, block_size=16)
+                filter_ = OFFilter()
+                all_hits = filter_.filter_hits(probe_of, all_hits, enrolled_ofs)
+            except Exception as exc:
+                logger.warning("OF filter failed (continuing without): %s", exc)
+
+            if not all_hits:
+                return {"candidates": [], "probe_minutiae": pixel_minutiae}
+            t_of = _time.monotonic()
+            dev_log(
+                "mcc.search.of_filtered",
+                remaining_hits=len(all_hits),
+                of_ms=round((t_of - t_knn) * 1000, 1),
+            )
 
         # Growing algorithm
         t_grow_start = _time.monotonic()
