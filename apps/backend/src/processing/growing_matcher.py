@@ -12,7 +12,7 @@ Reference: NIST NBIS Bozorth3.
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .triplet_alignment import AlignmentTransform
 from .triplet_validator import TripletCorrespondence, TripletValidator, extract_correspondence
@@ -52,6 +52,7 @@ class GrowthResult:
     confirming_triplets: int
     total_probe_triplets: int
     score: float
+    validated_hits: list[dict] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +186,7 @@ def _grow_person(
         confirming_triplets=n_confirmed,
         total_probe_triplets=num_probe_triplets,
         score=round(score, 4),
+        validated_hits=[c.candidate_hit for c in confirmed_correspondences],
     )
 
 

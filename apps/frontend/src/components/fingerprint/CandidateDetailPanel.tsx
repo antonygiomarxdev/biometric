@@ -129,7 +129,7 @@ export function CandidateDetailPanel({
                     >
                       <td className="px-3 py-1.5">
                         <Badge variant="outline" className="text-[10px]">
-                          #{p.probe_pair_index}
+                          #{idx + 1}
                         </Badge>
                       </td>
                       <td className="px-3 py-1.5 truncate max-w-[280px]">

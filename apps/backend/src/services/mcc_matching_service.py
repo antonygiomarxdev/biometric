@@ -620,24 +620,48 @@ class MccMatchingService:
             grow_ms=round((t_grow - t_grow_start) * 1000, 1),
         )
 
-        # Build response
+        # Build response — map triplet fields to frontend's MatchCandidate shape
+        probe_triplet_by_idx = {i: t for i, t in enumerate(probe_triplets)}
         candidates: list[dict] = []
         for gr in growth_results[:top_k]:
-            # Collect supporting triplets (KNN hits that confirmed)
-            person_hits = [h for h in all_hits if h["person_id"] == gr.person_id]
+            # Use only validated hits — these are the ones that fit the
+            # confirmed transformation. Including raw KNN hits would mix
+            # in noise from other captures of the same person.
+            person_hits = gr.validated_hits
+
+            # Flatten triplet hits into supporting_pairs (frontend expects pairs)
+            supporting_pairs: list[dict] = []
+            for h in person_hits:
+                pt = probe_triplet_by_idx.get(h["query_triplet_index"])
+                if pt is None:
+                    continue
+                supporting_pairs.append({
+                    "probe_mi_idx": pt["mi_idx"],
+                    "probe_mj_idx": pt["mj_idx"],
+                    "candidate_mi_x": h["mi_x"],
+                    "candidate_mi_y": h["mi_y"],
+                    "candidate_mi_angle": h["mi_angle"],
+                    "candidate_mj_x": h["mj_x"],
+                    "candidate_mj_y": h["mj_y"],
+                    "candidate_mj_angle": h["mj_angle"],
+                    "candidate_fingerprint_id": h["fingerprint_id"],
+                    "candidate_capture_id": h["capture_id"],
+                    "similarity": h["similarity"],
+                })
+
             candidates.append({
                 "person_id": gr.person_id,
                 "score": gr.score,
-                "validated_count": gr.validated_count,
-                "confirming_triplets": gr.confirming_triplets,
-                "transformation": {
-                    "scale": round(gr.transform.scale, 4),
-                    "angle": round(gr.transform.angle, 4),
+                "peak_votes": gr.validated_count,
+                "peak_transformation": {
                     "dx": round(gr.transform.dx, 4),
                     "dy": round(gr.transform.dy, 4),
+                    "dtheta": round(gr.transform.angle, 4),
                 },
-                "num_probe_triplets": gr.total_probe_triplets,
-                "supporting_triplets": person_hits,
+                "num_probe_pairs": gr.total_probe_triplets,
+                "supporting_pairs": supporting_pairs,
+                "full_name": None,
+                "external_id": None,
             })
 
         return {"candidates": candidates, "probe_minutiae": pixel_minutiae}
