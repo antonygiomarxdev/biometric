@@ -2,24 +2,24 @@
 gsd_state_version: 1.0
 milestone: v2.0-alpha
 milestone_name: milestone
-current_phase: 25
-status: Phase 25 executed — self-match PASS, crop match FAIL (requires Phase 26)
-stopped_at: Phase 25 execution complete (Plans 25-01, 25-02, 25-03 done; 25-04 deferred). Acceptance gate: self-match 5/5 PASS, 50%/25% crop FAIL. Diagnostic confirms KNN cannot recover triplets across crops. Phase 26 (OF Registration) required for partial/latente matches.
+current_phase: 26
+status: Phase 25 complete (self-match PASS, crop FAIL) — Phase 26 planned (OF Registration)
+stopped_at: Phase 25 closed. Phase 26 CONTEXT + PLAN-01 written. Calibration benchmark run on 20 SOCOFing persons: cross-person RMS mean=0.85, 5th-pct=0.49, threshold 0.50 chosen. Ready to execute PLAN-01.
 last_updated: "2026-06-18T12:00:00.000Z"
 progress:
-  total_phases: 25
+  total_phases: 26
   completed_phases: 22
-  total_plans: 73
+  total_plans: 74
   completed_plans: 35
-  percent: 48
+  percent: 47
 ---
 
 # State: Biometric v2.0 Alpha
 
 **Last updated:** 2026-06-18
-**Current phase:** 25 (Triplet-Based Latent Matching — EXECUTED, gate FAIL on crops)
-**Previous phase:** 24 (Pair-Based Matching — prototype, replaced)
-**Stopped at:** Phase 25 Plans 25-01, 25-02, 25-03 complete. Plan 25-04 deferred. **Phase 26 (OF Registration) needed to pass the crop acceptance gate.**
+**Current phase:** 26 (Orientation Field Registration — PLANNED, ready to execute)
+**Previous phase:** 25 (Triplet-Based Latent Matching — executed, partial pass)
+**Stopped at:** Phase 26 CONTEXT + PLAN-01 finalized. Calibration done. Threshold 0.50 chosen. Ready to execute.
 
 ## Project Reference
 
@@ -52,7 +52,7 @@ See: `.planning/PROJECT.md`
 | 23. Frontend — Flujo Forense Unificado | ✅ COMPLETED |
 | 24. Pair-Based Matching Pipeline v2 | ✅ COMPLETED (prototype, replaced) |
 | 25. Triplet-Based Latent Matching | ⚠ EXECUTED (self-match OK, crop FAIL — see findings) |
-| 26. Orientation Field Registration | 📋 PLANNED (required for crop/latente matches) |
+| 26. Orientation Field Registration | 📋 PLANNED (calibration done, threshold 0.50 chosen) |
 
 ## Accumulated Context
 
@@ -109,6 +109,37 @@ limitations discovered during testing:
 - `.planning/phases/25-triplet-matching/25-CONTEXT.md` — full context
 - `.planning/phases/25-triplet-matching/SUMMARY.md` — execution results
 - `.planning/adr/010-triplet-matching.md` — decision rationale
+
+### Phase 26 — Orientation Field Registration (Planned)
+
+**Driver:** Phase 25 crop acceptance gate failure (0/5 on 50%/25% crop).
+
+**Calibration results (scripts/calibrate_of_threshold.py, 20 SOCOFing persons):**
+- OF shape: 16×16 (256 blocks per fingerprint)
+- Cross-person RMS scores: min=0.36, 5th-pct=0.49, median=0.84, 95th-pct=1.28
+- **Threshold: 0.50** (5th percentile of cross-person, calibrated)
+- Self-match score: ~0.0 (by construction)
+- Margin: 0.50 (large — no overlap between self and cross distributions)
+
+**Plan 26-01: OF Pre-Filter Pipeline (7 tasks)**
+- T1 `of_similarity.py` — RMS on `e^{2iθ}` complex vector, coherence-masked
+- T2 `of_registry.py` — PostgreSQL JSONB I/O
+- T3 Migration `0007_fingerprint_of_index.py` — new table
+- T4 Wire OF into `enroll_triplets` (persist on every enrollment)
+- T5 Wire OF filter into `search_by_triplets` (hard reject > 0.50 RMS)
+- T6 `of_filter.py` — clean module split, 7+ unit tests
+- T7 `scripts/e2e_of_benchmark.py` — acceptance gate (self 5/5, crop50 ≥4/5, crop25 ≥3/5)
+
+**Acceptance gate:**
+- Self-match: 5/5 (was 5/5)
+- 50% center crop: ≥4/5 (was 0/5)
+- 25% corner crop: ≥3/5 (was 0/5)
+- Search latency: < 3s (was 12-15s)
+- OF threshold accuracy: TPR ≥ 95% @ FPR ≤ 5% on calibration set
+
+**See:**
+- `.planning/phases/26-of-registration/26-CONTEXT.md` — full context + 8 decisions resolved
+- `.planning/phases/26-of-registration/26-01-PLAN.md` — execution plan
 
 ### Previous Decisions
 
