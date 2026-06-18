@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import logging
-import uuid
-from datetime import datetime, timezone
-from typing import Any
-
-from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from src.db.enums import DocumentType
-from src.db.models import Person
 from src.db.repositories.person_repository import PersonRepository
-from src.schemas.person_schema import PersonCreate
+
+if TYPE_CHECKING:
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from src.db.models import Person
+    from src.schemas.person_schema import PersonCreate
 
 log = logging.getLogger(__name__)
 
@@ -32,11 +35,10 @@ class PersonService:
         if ext_id:
             existing = await PersonRepository.find_by_external_id(self._session, ext_id)
             if existing is not None:
-                raise ValueError(
-                    f"Person with external_id={data.external_id} already exists"
-                )
+                msg = f"Person with external_id={data.external_id} already exists"
+                raise ValueError(msg)
         dob_dt = (
-            datetime.combine(data.dob, datetime.min.time()).replace(tzinfo=timezone.utc)
+            datetime.combine(data.dob, datetime.min.time()).replace(tzinfo=UTC)
             if data.dob
             else None
         )

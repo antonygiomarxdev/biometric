@@ -1,18 +1,18 @@
 """Core module: configuration, models, and metrics."""
 
-from .config import config, Config
-from .types import MinutiaCandidate, NormalizedFingerprint, MatchResult, Fingerprint, Minutiae
-from .metrics import metrics, measure_time, timed
+from .config import Config, config
+from .metrics import measure_time, metrics, timed
+from .types import Fingerprint, MatchResult, MinutiaCandidate, Minutiae, NormalizedFingerprint
 
 __all__ = [
-    "config",
     "Config",
-    "MinutiaCandidate",
-    "NormalizedFingerprint",
-    "MatchResult",
     "Fingerprint",
+    "MatchResult",
+    "MinutiaCandidate",
     "Minutiae",
-    "metrics",
+    "NormalizedFingerprint",
+    "config",
     "measure_time",
+    "metrics",
     "timed",
 ]

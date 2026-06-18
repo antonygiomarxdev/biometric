@@ -12,9 +12,7 @@ garantiza que los puntos de entrada estén limpios, ordenados y sin duplicados.
 
 from __future__ import annotations
 
-from typing import List, Tuple
-
-import numpy as np
+from typing import Any
 
 from src.core.types import MinutiaCandidate, NormalizedFingerprint
 
@@ -34,8 +32,8 @@ class MinutiaNormalizer:
 
     def normalize(
         self,
-        minutiae: List[MinutiaCandidate],
-        img_shape: Tuple[int, int],
+        minutiae: list[MinutiaCandidate],
+        img_shape: tuple[int, int],
     ) -> NormalizedFingerprint:
         if not minutiae:
             return NormalizedFingerprint(
@@ -58,14 +56,14 @@ class MinutiaNormalizer:
 
     def _apply_consensus(
         self,
-        candidates: List[MinutiaCandidate],
-    ) -> List[MinutiaCandidate]:
+        candidates: list[MinutiaCandidate],
+    ) -> list[MinutiaCandidate]:
         """Fusiona candidatos muy cercanos (distancia euclidiana)."""
         if not candidates:
             return []
 
         ordered = sorted(candidates, key=lambda m: m.confidence, reverse=True)
-        kept: List[MinutiaCandidate] = []
+        kept: list[MinutiaCandidate] = []
 
         for cand in ordered:
             is_dup = False
@@ -82,14 +80,14 @@ class MinutiaNormalizer:
 
     def _canonical_sort(
         self,
-        minutiae: List[MinutiaCandidate],
-        img_shape: Tuple[int, int],
-    ) -> List[MinutiaCandidate]:
+        minutiae: list[MinutiaCandidate],
+        img_shape: tuple[int, int],
+    ) -> list[MinutiaCandidate]:
         """Ordena por (radio desde el centro de la imagen, ángulo polar)."""
         cx = img_shape[1] / 2.0
         cy = img_shape[0] / 2.0
 
-        def sort_key(m: MinutiaCandidate) -> tuple:
+        def sort_key(m: MinutiaCandidate) -> tuple[Any, ...]:
             r = (m.x - cx) ** 2 + (m.y - cy) ** 2
             return (r, m.y, m.x, m.angle)
 

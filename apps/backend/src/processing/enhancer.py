@@ -9,10 +9,12 @@ extractor.
 from __future__ import annotations
 
 import logging
-from typing import Literal, Optional
+from typing import TYPE_CHECKING, Literal
 
-from src.core.interfaces import IEnhancer
 from src.processing.enhancers.base import EnhancerConfig
+
+if TYPE_CHECKING:
+    from src.core.interfaces import IEnhancer
 from src.processing.enhancers.cpu import CpuEnhancer
 
 logger = logging.getLogger(__name__)
@@ -22,7 +24,7 @@ EnhancerKind = Literal["cpu"]
 
 
 def create_enhancer(
-    config: Optional[EnhancerConfig] = None,
+    config: EnhancerConfig | None = None,
 ) -> IEnhancer:
     """Create a :class:`CpuEnhancer` instance.
 

@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import io
 import logging
-from typing import Optional
+from typing import TYPE_CHECKING
 
 from cryptography.fernet import InvalidToken
 from minio import Minio
 from minio.error import S3Error
 
-from src.core.compliance.encryption import EncryptionService
-from src.core.compliance.strategy import IComplianceStrategy
 from src.core.config import config
+
+if TYPE_CHECKING:
+    from src.core.compliance.encryption import EncryptionService
+    from src.core.compliance.strategy import IComplianceStrategy
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,8 @@ class ObjectStorage:
     directly — it receives an ``IComplianceStrategy`` and an
     ``EncryptionService`` via constructor injection.
     """
+
+    client: Minio | None
 
     def __init__(
         self,
@@ -52,8 +56,8 @@ class ObjectStorage:
             )
             self.bucket = config.minio_bucket
             self._ensure_bucket_exists()
-        except Exception as e:
-            logger.error("Error inicializando MinIO: %s", e)
+        except Exception:
+            logger.exception("Error inicializando MinIO")
             self.client = None
 
     # ------------------------------------------------------------------
@@ -86,8 +90,8 @@ class ObjectStorage:
             if not self.client.bucket_exists(self.bucket):
                 self.client.make_bucket(self.bucket)
                 logger.info("Bucket '%s' creado exitosamente.", self.bucket)
-        except Exception as e:
-            logger.error("Error verificando bucket '%s': %s", self.bucket, e)
+        except Exception:
+            logger.exception("Error verificando bucket '%s'", self.bucket)
 
     def _should_encrypt(self) -> bool:
         """Return True when the active strategy mandates encryption."""
@@ -104,7 +108,7 @@ class ObjectStorage:
         file_data: bytes,
         object_name: str,
         content_type: str = "application/octet-stream",
-    ) -> Optional[str]:
+    ) -> str | None:
         """Sube un archivo al bucket, cifrándolo si la estrategia lo exige.
 
         Args:
@@ -139,12 +143,13 @@ class ObjectStorage:
                 content_type=content_type,
             )
             logger.info("Archivo subido: %s", object_name)
-            return object_name
-        except S3Error as e:
-            logger.error("Error subiendo archivo a MinIO: %s", e)
+        except S3Error:
+            logger.exception("Error subiendo archivo a MinIO")
             return None
+        else:
+            return object_name
 
-    def download_file(self, object_name: str) -> Optional[bytes]:
+    def download_file(self, object_name: str) -> bytes | None:
         """Descarga un archivo del bucket y lo descifra si es necesario.
 
         Transparently handles backward compatibility with files that
@@ -173,7 +178,7 @@ class ObjectStorage:
             )
             return raw_data
 
-    def get_file(self, object_name: str) -> Optional[bytes]:
+    def get_file(self, object_name: str) -> bytes | None:
         """Descarga un archivo del bucket (sin descifrado).
 
         This is a low-level method that bypasses any encryption layer.
@@ -193,8 +198,8 @@ class ObjectStorage:
         try:
             response = self.client.get_object(self.bucket, object_name)
             return response.read()
-        except Exception as e:
-            logger.error("Error descargando archivo '%s': %s", object_name, e)
+        except Exception:
+            logger.exception("Error descargando archivo '%s'", object_name)
             return None
         finally:
             if response is not None:
@@ -202,7 +207,7 @@ class ObjectStorage:
                 if hasattr(response, "release_conn"):
                     response.release_conn()
 
-    def get_presigned_url(self, object_name: str) -> Optional[str]:
+    def get_presigned_url(self, object_name: str) -> str | None:
         """Genera una URL firmada temporal para acceso directo.
 
         Args:
@@ -216,8 +221,8 @@ class ObjectStorage:
 
         try:
             return self.client.get_presigned_url("GET", self.bucket, object_name)
-        except Exception as e:
-            logger.error("Error generando presigned URL: %s", e)
+        except Exception:
+            logger.exception("Error generando presigned URL")
             return None
 
 

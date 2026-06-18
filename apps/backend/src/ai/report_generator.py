@@ -33,6 +33,7 @@ from typing import cast
 from pydantic import ValidationError
 
 from src.ai.llm import LLMFactory
+from src.core.config import config
 from src.schemas.dictamen_schema import DictamenPericial
 
 logger = logging.getLogger(__name__)
@@ -40,11 +41,6 @@ logger = logging.getLogger(__name__)
 # ── constants ──────────────────────────────────────────────────────────
 
 _MAX_RETRIES: int = 3
-
-# The system prompt is written in formal Spanish (legal domain language)
-# to shape the LLM's persona and tone. The ``{sql_results}`` placeholder
-# is filled with actual case data retrieved from the database.
-from src.core.config import config
 
 _SYSTEM_PROMPT_TEMPLATE: str = (
     "Eres un {expert_title} experto en la legislación de {country} "
@@ -111,8 +107,7 @@ async def generate_dictamen(
                 sql_results=sql_results
             )
             completion = await structured_llm.acomplete(prompt)
-            result: DictamenPericial = cast(DictamenPericial, completion.raw)
-            return result
+            result: DictamenPericial = cast("DictamenPericial", completion.raw)
         except ValidationError as exc:
             last_error = exc
             logger.warning(
@@ -122,6 +117,8 @@ async def generate_dictamen(
                 case_id,
                 exc,
             )
+        else:
+            return result
 
     msg = (
         f"Report generation failed after {_MAX_RETRIES} retries "

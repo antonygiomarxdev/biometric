@@ -20,12 +20,11 @@ from fastapi.responses import JSONResponse
 from src.ai.tracing import setup_tracing
 from src.api.dependencies import lifespan
 from src.api.errors import ForensicError, IntegrityError, NotFoundError, ValidationError
-from src.core.compliance import setup_compliance_logging
 from src.api.routers import (
     audit_router,
     auth_router,
-    cases_router,
     captures_router,
+    cases_router,
     decisions_router,
     evidence_router,
     fingerprints_router,
@@ -34,6 +33,7 @@ from src.api.routers import (
     persons_router,
     reports_router,
 )
+from src.core.compliance import setup_compliance_logging
 
 logger = logging.getLogger(__name__)
 

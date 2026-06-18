@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.core.compliance.strategy import IComplianceStrategy
-
 
 class BaseStrategy:
     """Default compliance strategy with no PII scrubbing or encryption overhead.

@@ -5,16 +5,18 @@ import {
   Upload,
   Fingerprint,
   Loader2,
-  XCircle,
   CheckCircle2,
   ArrowLeft,
   UserPlus,
   FilePlus,
   Search,
+  Trophy,
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { CandidateDetailPanel } from "@/components/fingerprint/CandidateDetailPanel";
 import { useToast } from "@/components/ui/toast";
 import {
   getMinutiaeForImage,
@@ -36,6 +38,10 @@ const MAX_BYTES = 10 * 1024 * 1024;
 
 const PALETTE_HIT = "#ffffff";
 const PALETTE_HIT_RING = "#22c55e";
+
+// Below these scores the perito should treat the match as suspect.
+const MATCH_THRESHOLD_GOOD = 0.6;
+const MATCH_THRESHOLD_FAIR = 0.3;
 
 export default function AnalisisPage() {
   const navigate = useNavigate();
@@ -217,12 +223,21 @@ export default function AnalisisPage() {
   const selectedCandidate: MatchCandidate | null =
     searchResult?.candidates[selectedIdx] ?? null;
 
+  // Stepper state — drives the always-visible WorkflowStepper
+  // 0=no image, 1=uploaded, 2=previewed, 3=searched (candidates available)
+  const currentStep: 0 | 1 | 2 | 3 = (() => {
+    if (searchResult) return 3;
+    if (preview) return 2;
+    if (probeDataUrl) return 1;
+    return 0;
+  })();
+
   useEffect(() => {
     if (!selectedCandidate) {
       setCandidateDataUrl(null);
       return;
     }
-    const captureId = selectedCandidate.match_trace[0]?.candidate_capture_id;
+    const captureId = selectedCandidate.supporting_pairs[0]?.candidate_capture_id;
     if (!captureId) {
       setCandidateDataUrl(null);
       return;
@@ -285,14 +300,18 @@ export default function AnalisisPage() {
 
       const matchedIndices = new Set<number>();
       if (selectedCandidate) {
-        for (const e of selectedCandidate.match_trace) {
-          matchedIndices.add(e.probe_cylinder_index);
+        for (const e of selectedCandidate.supporting_pairs) {
+          matchedIndices.add(e.probe_mi_idx);
+          matchedIndices.add(e.probe_mj_idx);
         }
       }
 
-      if (preview?.minutiae) {
-        for (let i = 0; i < preview.minutiae.length; i++) {
-          const m = preview.minutiae[i];
+      // Prefer search-pipeline minutiae (same coordinate space as matchedIndices).
+      // Fall back to preview minutiae when no search has been done.
+      const probeMinutiae = searchResult?.probe_minutiae ?? preview?.minutiae;
+      if (probeMinutiae) {
+        for (let i = 0; i < probeMinutiae.length; i++) {
+          const m = probeMinutiae[i];
           if (!m) continue;
           if (matchedIndices.has(i)) {
             drawDot(ctx, m.x, m.y, 7, PALETTE_HIT, PALETTE_HIT_RING, 2.5);
@@ -303,7 +322,7 @@ export default function AnalisisPage() {
       }
     };
     img.src = src;
-  }, [processedDataUrl, probeDataUrl, preview, selectedCandidate]);
+  }, [processedDataUrl, probeDataUrl, preview, searchResult, selectedCandidate]);
 
   // ============================================================
   // Canvas drawing: candidate image with matched minutiae
@@ -330,8 +349,8 @@ export default function AnalisisPage() {
       ctx.drawImage(img, 0, 0);
 
       if (selectedCandidate) {
-        const matched: MinutiaPoint[] = selectedCandidate.match_trace.map(
-          (e) => ({ x: e.candidate_x, y: e.candidate_y, angle: e.candidate_angle, type: 2 }),
+        const matched: MinutiaPoint[] = selectedCandidate.supporting_pairs.map(
+          (e) => ({ x: e.candidate_mi_x * img.naturalWidth, y: e.candidate_mi_y * img.naturalHeight, angle: e.candidate_mi_angle, type: 2 }),
         );
         for (const m of matched) {
           drawDot(ctx, m.x, m.y, 7, PALETTE_HIT, PALETTE_HIT_RING, 2.5);
@@ -371,40 +390,26 @@ export default function AnalisisPage() {
         </header>
 
         {/* ============================================================ */}
-        {/* If no image yet, show the upload zone                          */}
+        {/* WorkflowStepper — always visible. Hosts step 1's dropzone or  */}
+        {/* the workbench once an image is loaded.                         */}
         {/* ============================================================ */}
-        {!probeDataUrl && (
-          <Card
-            className="border-2 border-dashed border-border hover:border-primary/50 transition-colors cursor-pointer"
-            onClick={() => document.getElementById("file-input")?.click()}
-          >
-            <CardContent className="flex flex-col items-center justify-center py-16">
-              <Upload className="w-12 h-12 mb-3 text-muted-foreground opacity-50" />
-              <h2 className="text-lg font-semibold mb-1">Subí la huella latente</h2>
-              <p className="text-sm text-muted-foreground">
-                BMP, PNG o JPEG. Máx 10MB.
-              </p>
-              <input
-                id="file-input"
-                type="file"
-                className="hidden"
-                accept="image/*"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) handleFile(f);
-                }}
-              />
-            </CardContent>
-          </Card>
-        )}
-
-        {/* ============================================================ */}
-        {/* The image is loaded: show the workbench                          */}
-        {/* ============================================================ */}
-        {probeDataUrl && (
-          <>
+        <WorkflowStepper
+          current={currentStep}
+          previewRunning={previewMutation.isPending}
+          searchRunning={searchMutation.isPending}
+          minutiae={preview?.minutiae.length ?? 0}
+          candidateCount={searchResult?.candidates.length ?? 0}
+          queryTimeMs={searchResult?.query_time_ms}
+        >
+          {!probeDataUrl ? (
+            <UploadDropzone
+              onFile={handleFile}
+              running={previewMutation.isPending}
+            />
+          ) : (
+            <>
             {/* Top bar: actions + status */}
-            <div className="flex flex-wrap items-center gap-2 p-3 bg-card border border-border rounded-lg">
+            <div className="flex flex-wrap items-center gap-2 p-3 bg-card border border-border rounded-lg mb-3">
               <Button
                 size="sm"
                 onClick={handleSearch}
@@ -535,7 +540,7 @@ export default function AnalisisPage() {
                           Candidato · {selectedCandidate.full_name ?? selectedCandidate.external_id}
                         </span>
                         <span className="text-primary font-bold">
-                          {Math.round(selectedCandidate.total_score * 100)}%
+                          {Math.round((selectedCandidate.score ?? 0) * 100)}%
                         </span>
                       </>
                     ) : searchResult && searchResult.candidates.length === 0 ? (
@@ -564,78 +569,144 @@ export default function AnalisisPage() {
               </Card>
             </div>
 
-            {/* Candidates strip */}
+            {/* Top-10 candidate list (always shown when results arrive) */}
             {searchResult && searchResult.candidates.length > 0 && (
               <Card className="border-border/60">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm uppercase tracking-wider text-muted-foreground">
-                    Candidatos ({searchResult.candidates.length})
+                  <CardTitle className="text-sm uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                    <Trophy className="w-3.5 h-3.5" />
+                    Top {searchResult.candidates.length} — click para comparar
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="p-3">
-                  <div className="flex flex-wrap gap-2">
+                <CardContent className="p-0">
+                  <ul className="divide-y divide-border/40 max-h-[480px] overflow-y-auto">
                     {searchResult.candidates.map((c, i) => {
                       const isSelected = i === selectedIdx;
-                      const label = c.full_name ?? c.external_id ?? c.person_id.slice(0, 8);
+                      const label =
+                        c.full_name ?? c.external_id ?? c.person_id.slice(0, 8);
+                      const scoreInfo = scoreColor(c.score ?? 0);
+                      const barColor = scoreInfo.text.includes("green")
+                        ? "#22c55e"
+                        : scoreInfo.text.includes("yellow")
+                        ? "#eab308"
+                        : "#ef4444";
                       return (
-                        <button
-                          key={c.person_id}
-                          onClick={() => setSelectedIdx(i)}
-                          className={`
-                            px-3 py-2 rounded border text-left transition-all
-                            ${isSelected
-                              ? "border-primary bg-primary/10 ring-1 ring-primary"
-                              : "border-border hover:border-primary/50 bg-card/50"
-                            }
-                          `}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground font-mono">#{i + 1}</span>
-                            <span className="text-sm font-medium">{label}</span>
+                        <li key={c.person_id}>
+                          <button
+                            onClick={() => setSelectedIdx(i)}
+                            className={cn(
+                              "w-full text-left px-3 py-2.5 transition-all flex items-center gap-3",
+                              "hover:bg-muted/40",
+                              isSelected &&
+                                "bg-primary/10 border-l-2 border-l-primary",
+                            )}
+                          >
                             <span
-                              className="text-sm font-bold"
-                              style={{
-                                color:
-                                  c.total_score >= 0.8
-                                    ? "#22c55e"
-                                    : c.total_score >= 0.5
-                                    ? "#eab308"
-                                    : "#9ca3af",
-                              }}
+                              className={cn(
+                                "flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-mono font-bold",
+                                isSelected
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-muted text-muted-foreground",
+                              )}
                             >
-                              {Math.round(c.total_score * 100)}%
+                              {i + 1}
                             </span>
-                          </div>
-                          <div className="text-[10px] text-muted-foreground">
-                            {c.hits} cilindros matched
-                          </div>
-                        </button>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={cn(
+                                    "text-sm truncate",
+                                    isSelected
+                                      ? "font-bold"
+                                      : "font-medium",
+                                  )}
+                                >
+                                  {label}
+                                </span>
+                                <span
+                                  className={cn(
+                                    "text-[10px] uppercase tracking-wider font-bold",
+                                    scoreInfo.text,
+                                  )}
+                                >
+                                  {scoreInfo.label}
+                                </span>
+                                {isSelected && (
+                                  <span className="ml-auto text-[10px] uppercase tracking-wider font-bold text-primary flex items-center gap-1">
+                                    <Search className="w-3 h-3" />
+                                    Comparando
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-3 text-[11px] text-muted-foreground mt-0.5 font-mono">
+                                <span
+                                  className={cn("font-bold", scoreInfo.text)}
+                                >
+                                  {Math.round((c.score ?? 0) * 100)}%
+                                </span>
+                                <span>{c.peak_votes} pares</span>
+                                <span>
+                                  {c.supporting_pairs.length} match
+                                </span>
+                              </div>
+                              <div className="mt-1.5 h-1 bg-muted/60 rounded overflow-hidden">
+                                <div
+                                  className="h-full transition-all"
+                                  style={{
+                                    width: `${Math.min((c.score ?? 0) * 100, 100)}%`,
+                                    backgroundColor: barColor,
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </button>
+                        </li>
                       );
                     })}
-                  </div>
-
-                  {selectedCandidate && (
-                    <div className="mt-3 flex items-center gap-2 pt-3 border-t border-border/40">
-                      <span className="text-xs text-muted-foreground">
-                        Match trace: <span className="font-mono text-foreground">{selectedCandidate.match_trace.length}</span> pares
-                      </span>
-                      <div className="ml-auto flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleOpenCreateCase(selectedCandidate)}
-                        >
-                          <FilePlus className="w-3.5 h-3.5 mr-1.5" />
-                          Crear caso
-                        </Button>
-                      </div>
-                    </div>
-                  )}
+                  </ul>
                 </CardContent>
               </Card>
             )}
-          </>
-        )}
+
+            {/* Detail panel for selected candidate */}
+            {selectedCandidate && (
+              <div className="mt-3 space-y-3">
+                <div className="flex items-center gap-2 p-3 bg-card border border-border rounded-lg">
+                  <Search className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-medium">Modo comparación activo</span>
+                  <span className="text-xs text-muted-foreground">
+                    #{selectedIdx + 1} · {selectedCandidate.full_name ?? selectedCandidate.external_id}
+                  </span>
+                  <div className="ml-auto flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleOpenCreateCase(selectedCandidate)}
+                    >
+                      <FilePlus className="w-3.5 h-3.5 mr-1.5" />
+                      Crear caso
+                    </Button>
+                  </div>
+                </div>
+                <CandidateDetailPanel
+                  candidate={selectedCandidate}
+                  probeImageUrl={processedDataUrl ?? probeDataUrl}
+                  probeMinutiae={
+                    searchResult?.probe_minutiae.map((m) => ({
+                      x: m.x,
+                      y: m.y,
+                      angle: m.angle,
+                      type: m.type,
+                    })) ?? []
+                  }
+                  candidateImageUrl={candidateDataUrl}
+                  onDismiss={() => setSelectedIdx(0)}
+                />
+              </div>
+            )}
+            </>
+          )}
+        </WorkflowStepper>
 
         {/* Create-case modal */}
         {showCreateCase && selectedCandidate && (
@@ -734,4 +805,262 @@ function drawDot(
   ctx.strokeStyle = ringColor;
   ctx.lineWidth = ringWidth;
   ctx.stroke();
+}
+
+// ============================================================
+// scoreColor — color classes by threshold (used by Top-10 list)
+// ============================================================
+function scoreColor(score: number): {
+  bg: string;
+  text: string;
+  ring: string;
+  label: string;
+} {
+  if (score >= MATCH_THRESHOLD_GOOD) {
+    return {
+      bg: "bg-green-500/15",
+      text: "text-green-500",
+      ring: "ring-green-500/40",
+      label: "Coincidencia alta",
+    };
+  }
+  if (score >= MATCH_THRESHOLD_FAIR) {
+    return {
+      bg: "bg-yellow-500/15",
+      text: "text-yellow-500",
+      ring: "ring-yellow-500/40",
+      label: "Coincidencia media",
+    };
+  }
+  return {
+    bg: "bg-red-500/15",
+    text: "text-red-500",
+    ring: "ring-red-500/40",
+    label: "Coincidencia baja",
+  };
+}
+
+// ============================================================
+// Workflow — the Stepper-as-frame component
+// ============================================================
+// Always visible at the top of /analisis. Hosts:
+//   1. Progress bar (fills as steps complete)
+//   2. 4 step indicators (Subir → Extraer → Buscar → Resultado)
+//   3. Body slot — the current step's content (dropzone or workbench)
+
+interface WorkflowStepperProps {
+  current: 0 | 1 | 2 | 3;
+  previewRunning: boolean;
+  searchRunning: boolean;
+  minutiae: number;
+  candidateCount: number;
+  queryTimeMs: number | undefined;
+  children: React.ReactNode;
+}
+
+function WorkflowStepper({
+  current,
+  previewRunning,
+  searchRunning,
+  minutiae,
+  candidateCount,
+  queryTimeMs,
+  children,
+}: WorkflowStepperProps): React.JSX.Element {
+  const steps: Array<{
+    n: 1 | 2 | 3 | 4;
+    label: string;
+    icon: React.ReactNode;
+    status: string;
+    running: boolean;
+  }> = [
+    {
+      n: 1,
+      label: "Subir",
+      icon: <Upload className="w-4 h-4" />,
+      status: current >= 1 ? "Imagen cargada" : "Esperando archivo",
+      running: false,
+    },
+    {
+      n: 2,
+      label: "Extraer",
+      icon: <Fingerprint className="w-4 h-4" />,
+      status: previewRunning
+        ? "Procesando Gabor + minucias…"
+        : minutiae > 0
+        ? `${minutiae} minucias detectadas`
+        : current < 1
+        ? "Esperando imagen"
+        : "Listo para procesar",
+      running: previewRunning,
+    },
+    {
+      n: 3,
+      label: "Buscar",
+      icon: <Search className="w-4 h-4" />,
+      status: searchRunning
+        ? "KNN sobre Qdrant…"
+        : queryTimeMs !== undefined
+        ? `${candidateCount} candidato${candidateCount !== 1 ? "s" : ""} · ${queryTimeMs}ms`
+        : current < 2
+        ? "Esperando extracción"
+        : "Listo para buscar",
+      running: searchRunning,
+    },
+    {
+      n: 4,
+      label: "Resultado",
+      icon: <CheckCircle2 className="w-4 h-4" />,
+      status:
+        current >= 3
+          ? "Comparación activa"
+          : current === 2
+          ? "Selecciona un candidato"
+          : "Pendiente",
+      running: false,
+    },
+  ];
+
+  const progressPct = (current / 4) * 100;
+
+  return (
+    <Card className="overflow-hidden border-border/60">
+      {/* Progress bar */}
+      <div className="h-1.5 bg-muted overflow-hidden">
+        <div
+          className={cn(
+            "h-full transition-all duration-700 ease-out",
+            previewRunning || searchRunning
+              ? "bg-primary/60 animate-pulse"
+              : "bg-primary",
+          )}
+          style={{ width: `${progressPct}%` }}
+        />
+      </div>
+
+      {/* Step indicators */}
+      <div className="flex items-stretch p-2 bg-card">
+        {steps.map((s, i) => {
+          const done = current >= s.n;
+          const active = current === s.n - 1;
+          const isLast = i === steps.length - 1;
+          return (
+            <div key={s.n} className="flex items-stretch flex-1 min-w-0">
+              <div
+                className={cn(
+                  "flex items-center gap-3 flex-1 min-w-0 px-3 py-2 rounded transition-all",
+                  done && "bg-primary/10",
+                  active && !done && "bg-primary/5 ring-1 ring-primary/40",
+                )}
+              >
+                <div
+                  className={cn(
+                    "flex items-center justify-center w-9 h-9 rounded-full border-2 transition-all flex-shrink-0",
+                    done && "bg-primary border-primary text-primary-foreground shadow-sm",
+                    active &&
+                      !done &&
+                      "border-primary text-primary shadow-md shadow-primary/30",
+                    !active && !done && "border-border text-muted-foreground",
+                    active && !done && s.running && "animate-pulse",
+                  )}
+                >
+                  {done ? (
+                    <CheckCircle2 className="w-5 h-5" />
+                  ) : s.running ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    s.icon
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-[10px] font-mono text-muted-foreground">
+                      {String(s.n).padStart(2, "0")}
+                    </span>
+                    <span
+                      className={cn(
+                        "text-sm font-semibold truncate",
+                        done && "text-primary",
+                        active && !done && "text-foreground",
+                        !active && !done && "text-muted-foreground",
+                      )}
+                    >
+                      {s.label}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground truncate">
+                    {s.status}
+                  </div>
+                </div>
+              </div>
+              {!isLast && (
+                <div
+                  className={cn(
+                    "w-1 self-stretch mx-0.5 transition-colors rounded",
+                    current > s.n ? "bg-primary" : "bg-border",
+                  )}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Body slot */}
+      <div className="p-4 bg-background/30">{children}</div>
+    </Card>
+  );
+}
+
+// ============================================================
+// UploadDropzone — step 1's body
+// ============================================================
+
+interface UploadDropzoneProps {
+  onFile: (file: File) => void;
+  running?: boolean;
+}
+
+function UploadDropzone({
+  onFile,
+  running = false,
+}: UploadDropzoneProps): React.JSX.Element {
+  return (
+    <label
+      className={cn(
+        "block cursor-pointer transition-all",
+        running && "opacity-50 pointer-events-none",
+      )}
+    >
+      <div
+        className={cn(
+          "border-2 border-dashed rounded-lg p-8 transition-all",
+          "border-border hover:border-primary hover:bg-primary/5",
+        )}
+      >
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+            <Upload className="w-8 h-8 text-primary" />
+          </div>
+          <h2 className="text-lg font-semibold mb-1">
+            Subí la huella latente
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Arrastrá una imagen o hacé click para seleccionar.
+            <br />
+            BMP, PNG o JPEG. Máx 10MB.
+          </p>
+        </div>
+      </div>
+      <input
+        type="file"
+        className="hidden"
+        accept="image/*"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onFile(f);
+        }}
+      />
+    </label>
+  );
 }

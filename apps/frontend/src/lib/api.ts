@@ -91,49 +91,44 @@ export interface MinutiaPoint {
   type: number; // 0=termination, 1=bifurcation, 2=unknown
 }
 
-/** Lightweight minutia descriptor returned in /matching/search response (Phase 23). */
-export interface MinutiaSummary {
-  x: number;
-  y: number;
-  angle: number;
-  type: number;
+/** A single supporting pair from pair-based matching (Phase 24). */
+export interface SupportingPair {
+  probe_pair_index: number;
+  probe_mi_idx: number;
+  probe_mj_idx: number;
+  probe_mi_x: number;
+  probe_mi_y: number;
+  candidate_mi_x: number;
+  candidate_mi_y: number;
+  candidate_mi_angle: number;
+  candidate_mj_x: number;
+  candidate_mj_y: number;
+  candidate_mj_angle: number;
+  similarity: number;
 }
 
-/**
- * A single (probe_cylinder, candidate_cylinder) match pair from the
- * MCC cylinder-level search. Surfaced per candidate so the frontend
- * can render connecting lines between the two synchronized canvases.
- */
-export interface MatchTraceEntry {
-  probe_cylinder_index: number;
-  probe_x: number;
-  probe_y: number;
-  probe_angle: number;
-  candidate_capture_id: string;
-  candidate_fingerprint_id: string;
-  candidate_x: number;
-  candidate_y: number;
-  candidate_angle: number;
-  similarity: number; // [0, 1]
-}
-
-/** A single ranked match candidate (Phase 23). */
+/** A single ranked match candidate from pair-based matching (Phase 24). */
 export interface MatchCandidate {
   person_id: string;
-  total_score: number;
-  hits: number;
+  score: number;
+  peak_votes: number;
+  peak_transformation: {
+    dx: number;
+    dy: number;
+    dtheta: number;
+  };
+  supporting_pairs: SupportingPair[];
+  num_probe_pairs: number;
   full_name: string | null;
   external_id: string | null;
-  contributing_fingerprints: string[];
-  match_trace: MatchTraceEntry[];
 }
 
-/** Response of POST /api/v1/matching/search (Phase 23). */
+/** Response of POST /api/v1/matching/search (Phase 24). */
 export interface MatchSearchResponse {
   success: boolean;
   query_time_ms: number;
   total_candidates: number;
-  probe_minutiae: MinutiaSummary[];
+  probe_minutiae: MinutiaPoint[];
   candidates: MatchCandidate[];
 }
 

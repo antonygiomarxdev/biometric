@@ -15,9 +15,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_async_db
 from src.api.errors import NotFoundError
+from src.api.prefix import API_PREFIX
 from src.db.models import Case, Evidence
 from src.services.pdf_generator import pdf_generator_service
-from src.api.prefix import API_PREFIX
 
 logger = logging.getLogger(__name__)
 
@@ -51,8 +51,8 @@ async def generate_report(case_id: UUID, session: AsyncSession = Depends(get_asy
         )
 
     # ── retrieve evidence ────────────────────────────────────────
-    result = await session.execute(select(Evidence).where(Evidence.case_id == case_id))
-    evidences = result.scalars().all()
+    ev_result = await session.execute(select(Evidence).where(Evidence.case_id == case_id))
+    evidences: list[Evidence] = list(ev_result.scalars().all())
 
     # ── build case data dict for the template ────────────────────
     case_data = {

@@ -10,7 +10,12 @@
       "outputs": ["dist/**", ".next/**"]
     },
     "lint": {},
-    "test": {},
+    "typecheck": {
+      "dependsOn": ["lint"]
+    },
+    "test": {
+      "dependsOn": ["lint"]
+    },
     "clean": {
       "cache": false
     }

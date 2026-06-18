@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from typing import Final
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet
 
 from src.core.config import config
 
@@ -46,10 +46,11 @@ class EncryptionService:
     def __init__(self, key: str | None = None) -> None:
         resolved_key: str = key if key else config.storage_encryption_key
         if not resolved_key:
-            raise ValueError(
+            msg = (
                 "No encryption key provided.  Set the STORAGE_ENCRYPTION_KEY "
                 "environment variable or pass a key to the constructor."
             )
+            raise ValueError(msg)
         self._fernet: Final[Fernet] = Fernet(resolved_key.encode("ascii"))
 
     # ------------------------------------------------------------------

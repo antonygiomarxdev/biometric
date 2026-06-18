@@ -27,8 +27,6 @@ Usage::
 
 from __future__ import annotations
 
-from typing import List
-
 from pydantic import BaseModel, Field
 
 
@@ -81,7 +79,7 @@ class DictamenPericial(BaseModel):
             "análisis solicitado"
         ),
     )
-    hallazgos: List[Evidencia] = Field(
+    hallazgos: list[Evidencia] = Field(
         ...,
         description=(
             "Lista detallada de evidencias analizadas y hallazgos "

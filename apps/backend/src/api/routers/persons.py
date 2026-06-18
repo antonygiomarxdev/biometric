@@ -4,15 +4,19 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.ext.asyncio import AsyncSession
+
+if TYPE_CHECKING:
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_async_db
+from src.api.prefix import API_PREFIX
 from src.schemas.person_schema import PersonCreate, PersonResponse
 from src.services.person_service import PersonService
-from src.api.prefix import API_PREFIX
 
 log = logging.getLogger(__name__)
 
@@ -34,7 +38,7 @@ async def create_person(
     try:
         p = await svc.create_person(data)
     except ValueError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        raise HTTPException(status_code=409, detail=str(e)) from e
     return p
 
 

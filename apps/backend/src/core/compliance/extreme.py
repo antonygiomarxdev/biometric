@@ -12,8 +12,6 @@ import re
 from typing import Any
 
 from src.core.compliance.masking import DataMasker
-from src.core.compliance.strategy import IComplianceStrategy
-
 
 # Common PII patterns for redaction
 _PII_PATTERNS: list[re.Pattern[str]] = [

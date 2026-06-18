@@ -19,7 +19,6 @@ Available post-processors
 from __future__ import annotations
 
 import logging
-import math
 
 import cv2
 import numpy as np
@@ -81,11 +80,11 @@ class BorderMaskCleaner(IPipelineStep):
 
     def __init__(self, border_px: int = 25, roi_mode: str = "core") -> None:
         if roi_mode not in self.VALID_MODES:
-            raise ValueError(
-                f"BorderMaskCleaner: roi_mode must be one of {self.VALID_MODES}, got {roi_mode!r}"
-            )
+            msg = f"BorderMaskCleaner: roi_mode must be one of {self.VALID_MODES}, got {roi_mode!r}"
+            raise ValueError(msg)
         if border_px < 0:
-            raise ValueError(f"BorderMaskCleaner: border_px must be >= 0, got {border_px}")
+            msg = f"BorderMaskCleaner: border_px must be >= 0, got {border_px}"
+            raise ValueError(msg)
         self.border_px = border_px
         self.roi_mode = roi_mode
 
@@ -324,8 +323,8 @@ class EnsembleFusionFilter(IPipelineStep):
             if len(indices) < self.min_votes:
                 continue
             members = [all_points[i] for i in indices]
-            avg_x = int(round(sum(m.x for m in members) / len(members)))
-            avg_y = int(round(sum(m.y for m in members) / len(members)))
+            avg_x = round(sum(m.x for m in members) / len(members))
+            avg_y = round(sum(m.y for m in members) / len(members))
             type_votes: dict[MinutiaType, float] = {}
             for m in members:
                 type_votes[m.type] = type_votes.get(m.type, 0.0) + m.confidence

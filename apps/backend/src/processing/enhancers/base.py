@@ -1,13 +1,14 @@
 """
 Clase base y configuración para Enhancers.
 """
-from dataclasses import dataclass
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
 import numpy as np
 
 from src.core.config import config
 from src.core.interfaces import IEnhancer
+
 
 @dataclass
 class EnhancerConfig:
@@ -54,5 +55,5 @@ class BaseEnhancer(IEnhancer, ABC):
         self.config = config
 
     @abstractmethod
-    def enhance(self, img: np.ndarray, resize: bool = True) -> np.ndarray:
+    def enhance(self, img: np.ndarray, *, resize: bool = True) -> np.ndarray:
         pass

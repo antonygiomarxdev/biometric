@@ -19,11 +19,12 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from sqlalchemy.orm import Session
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 from src.db.repositories.audit_repository import AuditRepository
 
@@ -144,7 +145,7 @@ class AuditService:
             "payload": chain_payload,
             "previous_hash": previous_hash,
             "current_hash": current_hash,
-            "created_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
         })
 
         logger.info(

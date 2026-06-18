@@ -14,7 +14,6 @@ import logging
 from typing import TYPE_CHECKING
 
 import cv2
-import numpy as np
 
 from src.db.repositories.fingerprint_capture_repository import (
     FingerprintCaptureRepository,
@@ -128,6 +127,9 @@ class FingerprintEnrollmentService:
         await self._index_mcc(
             capture=capture, fingerprint=fp, image_bytes=image_bytes,
         )
+        await self._index_triplets(
+            capture=capture, fingerprint=fp, image_bytes=image_bytes,
+        )
 
         await self._session.refresh(capture)
         dev_log(
@@ -176,3 +178,40 @@ class FingerprintEnrollmentService:
             )
         except Exception as e:
             log.warning("MCC indexing failed for capture %s: %s", capture.id, e)
+
+    async def _index_triplets(
+        self,
+        capture: FingerprintCapture,
+        fingerprint: Fingerprint,
+        image_bytes: bytes,
+    ) -> None:
+        """Build and persist triplet features (Phase 25, Plan 25-02).
+
+        Best-effort alongside MCC indexing.
+        """
+        if self._mcc_service is None:
+            return
+        try:
+            person: Person | None = await self._session.get(
+                Person, fingerprint.person_id,
+            )
+            if person is None:
+                return
+            person_id = (
+                str(person.external_id) if person.external_id else str(person.id)
+            )
+            loop = asyncio.get_running_loop()
+            num_min, num_triplets = await loop.run_in_executor(
+                None,
+                self._mcc_service.enroll_triplets,
+                str(capture.id),
+                str(fingerprint.id),
+                person_id,
+                image_bytes,
+            )
+            log.info(
+                "Triplets indexed %d triplets (%d minutiae) for capture %s (person=%s)",
+                num_triplets, num_min, capture.id, person_id,
+            )
+        except Exception as e:
+            log.warning("Triplet indexing failed for capture %s: %s", capture.id, e)

@@ -10,10 +10,10 @@ All thresholds are dynamically scaled from the biological baseline of
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import cv2
 import numpy as np
-from scipy import ndimage
 
 from src.core.config import config
 from src.core.interfaces import IPipelineStep, PipelineContext
@@ -48,8 +48,8 @@ def _estimate_dpi_scale(
     """Compute DPI scaling factor relative to 500 DPI baseline.
 
     ridge_to_ridge = 0.47 mm (biological constant, Moore 1989 / Ashbaugh 1999)
-    At 500 DPI: 25.4 mm/in × 500 px/in = 19.685 px/mm
-    ridge_period_500 = 0.47 mm × 19.685 px/mm = 9.25 px
+    At 500 DPI: 25.4 mm/in x 500 px/in = 19.685 px/mm
+    ridge_period_500 = 0.47 mm x 19.685 px/mm = 9.25 px
 
     scale_factor = actual_ridge_period / 9.25
     """
@@ -77,7 +77,7 @@ def get_scaled_thresholds(
     """
     scale = _estimate_dpi_scale(median_period_px, freq_img)
     return {
-        key: max(1, int(round(val * scale)))
+        key: max(1, round(val * scale))
         for key, val in _THRESH_500.items()
     }
 
@@ -161,9 +161,7 @@ def clean_skeleton(
                        x_start:x_start + stats[label_id, 4]] == label_id
             ).astype(np.uint8)
 
-    skel = np.clip(skel, 0, 1).astype(np.uint8)
-
-    return skel
+    return np.clip(skel, 0, 1).astype(np.uint8)
 
 
 # ---------------------------------------------------------------------------
@@ -172,11 +170,11 @@ def clean_skeleton(
 
 
 def remove_spurs_from_minutiae(
-    minutiae: list[dict],
+    minutiae: list[dict[str, Any]],
     skeleton: np.ndarray,
     thresholds: dict[str, int] | None = None,
     freq_img: np.ndarray | None = None,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Remove spur (bifurcation + nearby ending) pairs from minutiae list.
 
     Operates on the minutiae metadata rather than the skeleton, and
@@ -231,10 +229,10 @@ def remove_spurs_from_minutiae(
 
 
 def remove_bridges_from_minutiae(
-    minutiae: list[dict],
+    minutiae: list[dict[str, Any]],
     thresholds: dict[str, int] | None = None,
     freq_img: np.ndarray | None = None,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Remove bridge (two close bifurcations) pairs."""
     if thresholds is None:
         thresholds = get_scaled_thresholds(freq_img=freq_img)

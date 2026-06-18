@@ -23,7 +23,7 @@ to ``BaseStrategy`` (no scrubbing), ensuring logging is never disrupted.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from src.core.compliance.strategy import IComplianceStrategy  # pragma: no cover
@@ -52,7 +52,7 @@ def _resolve_strategy() -> IComplianceStrategy:
         from src.core.compliance.factory import get_compliance_strategy_from_config
 
         # Lazy-import config here to avoid circular imports at module load time
-        from src.core.config import config  # type: ignore[import-untyped]
+        from src.core.config import config
 
         _RESOLVED_STRATEGY = get_compliance_strategy_from_config(config)
     except Exception:
@@ -218,7 +218,7 @@ def _update_handler_formatters(
         if isinstance(current, ComplianceLogFormatter):
             continue  # already using compliance formatter
 
-        fmt: str | None = current._fmt if current is not None else None  # type: ignore[attr-defined]
+        fmt: str | None = current._fmt if current is not None else None
         datefmt: str | None = current.datefmt if current is not None else None
 
         handler.setFormatter(

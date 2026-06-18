@@ -12,15 +12,20 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
+
+if TYPE_CHECKING:
+    import uuid
+    from datetime import datetime
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_async_db
-from src.services.decision_service import decision_service
 from src.api.prefix import API_PREFIX
+from src.services.decision_service import decision_service
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +103,7 @@ async def _require_examiner_role() -> None:
         if user.role != "Perito":
             raise HTTPException(status_code=403, detail="Perito role required")
     """
-    return None
+    return
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +123,7 @@ async def list_decisions(
     List examiner decisions with optional filters and pagination.
     """
     return await decision_service.list_decisions(
-        db,
+        session,
         skip=skip,
         limit=limit,
         case_id=case_id,
@@ -134,7 +139,7 @@ async def get_decision(
     """
     Retrieve a single decision by its UUID.
     """
-    return await decision_service.get_decision(db, decision_id)
+    return await decision_service.get_decision(session, decision_id)
 
 
 @router.post(
@@ -151,7 +156,7 @@ async def create_decision(
     Submit an examiner matching decision.
     """
     return await decision_service.record_verdict(
-        db,
+        session,
         case_id=body.case_id,
         evidence_id=body.evidence_id,
         verdict=body.verdict,

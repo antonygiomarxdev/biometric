@@ -7,9 +7,12 @@ SQLAlchemy query logic so the service layer never imports ``Evidence``,
 from __future__ import annotations
 
 import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import Evidence
 
@@ -18,18 +21,17 @@ class EvidenceRepository:
     """Async persistence gateway for the ``evidences`` table."""
 
     @staticmethod
-    async def list(
+    async def list_all(
         session: AsyncSession,
         *,
         skip: int = 0,
         limit: int = 20,
         case_id: uuid.UUID | None = None,
     ) -> list[Evidence]:
-        query = select(Evidence)
+        stmt = select(Evidence).offset(skip).limit(limit)
         if case_id is not None:
-            query = query.where(Evidence.case_id == case_id)
-        query = query.order_by(Evidence.created_at.desc()).offset(skip).limit(limit)
-        result = await session.execute(query)
+            stmt = stmt.where(Evidence.case_id == case_id)
+        result = await session.execute(stmt)
         return list(result.scalars().all())
 
     @staticmethod

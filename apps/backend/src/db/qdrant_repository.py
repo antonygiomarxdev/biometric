@@ -58,7 +58,7 @@ class QdrantRepository(ICoarseMatcher):
         host: str = _DEFAULT_HOST,
         port: int = _DEFAULT_PORT,
         collection: str = COLLECTION_NAME,
-    ) -> "QdrantRepository":
+    ) -> QdrantRepository:
         """Construct from a host/port pair (production convenience)."""
         return cls(QdrantClient(host=host, port=port), collection=collection)
 
@@ -125,17 +125,15 @@ class QdrantRepository(ICoarseMatcher):
     def _coerce_vector(embedding: np.ndarray | GraphEmbedding) -> list[float]:
         """Accept either a GraphEmbedding or a raw ndarray."""
         if isinstance(embedding, GraphEmbedding):
-            return embedding.to_vector().tolist()
+            return embedding.to_vector().tolist()  # type: ignore[no-any-return]
         if isinstance(embedding, np.ndarray):
             arr = embedding.astype(np.float32, copy=False)
             if arr.shape != (_VECTOR_DIM,):
-                raise ValueError(
-                    f"Embedding has shape {arr.shape}, expected ({_VECTOR_DIM},)"
-                )
-            return arr.tolist()
-        raise TypeError(
-            f"embedding must be GraphEmbedding or np.ndarray, got {type(embedding)}"
-        )
+                msg = f"Embedding has shape {arr.shape}, expected ({_VECTOR_DIM},)"
+                raise ValueError(msg)
+            return arr.tolist()  # type: ignore[no-any-return]
+        msg = f"embedding must be GraphEmbedding or np.ndarray, got {type(embedding)}"
+        raise TypeError(msg)
 
     # ------------------------------------------------------------------
     # Read

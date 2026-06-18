@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-import uuid
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+
+if TYPE_CHECKING:
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import RidgeGraph
 
@@ -25,7 +29,7 @@ class RidgeGraphRepository:
         region_h: int = 0,
         num_nodes: int = 0,
         num_edges: int = 0,
-        graph_data: dict | None = None,
+        graph_data: dict[str, Any] | None = None,
         core_x: int | None = None,
         core_y: int | None = None,
         delta_x: int | None = None,

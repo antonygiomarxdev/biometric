@@ -6,7 +6,7 @@ Pure business logic — no FastAPI imports.
 
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
@@ -52,7 +52,7 @@ def create_access_token(
     expires_delta: timedelta | None = None,
 ) -> str:
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (
+    expire = datetime.now(UTC) + (
         expires_delta
         or timedelta(minutes=config.jwt_access_token_expire_minutes)
     )

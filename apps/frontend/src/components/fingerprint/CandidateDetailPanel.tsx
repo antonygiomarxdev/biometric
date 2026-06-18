@@ -3,7 +3,6 @@ import { X, Search, Fingerprint as FingerprintIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MatchOverlay } from "@/components/fingerprint/MatchOverlay";
 import type { MatchCandidate, MinutiaPoint } from "@/lib/api";
 
 interface CandidateDetailPanelProps {
@@ -15,20 +14,14 @@ interface CandidateDetailPanelProps {
 }
 
 function pickTopFingerprintId(candidate: MatchCandidate): string | null {
-  if (candidate.contributing_fingerprints.length === 0) {
-    return candidate.match_trace[0]?.candidate_fingerprint_id ?? null;
-  }
   const counts = new Map<string, number>();
-  for (const e of candidate.match_trace) {
-    counts.set(
-      e.candidate_fingerprint_id,
-      (counts.get(e.candidate_fingerprint_id) ?? 0) + 1,
-    );
+  for (const p of candidate.supporting_pairs) {
+    const fid = p.candidate_fingerprint_id;
+    counts.set(fid, (counts.get(fid) ?? 0) + 1);
   }
   let bestId: string | null = null;
   let bestCount = -1;
-  for (const id of candidate.contributing_fingerprints) {
-    const c = counts.get(id) ?? 0;
+  for (const [id, c] of counts) {
     if (c > bestCount) {
       bestCount = c;
       bestId = id;
@@ -54,6 +47,11 @@ export function CandidateDetailPanel({
     candidate.external_id ??
     `Persona ${candidate.person_id.slice(0, 8)}`;
 
+  const uniqueFingerprints = useMemo(() => {
+    const s = new Set(candidate.supporting_pairs.map((p) => p.candidate_fingerprint_id));
+    return s.size;
+  }, [candidate]);
+
   return (
     <Card className="border-border/60">
       <CardHeader className="flex flex-row items-start justify-between gap-2">
@@ -62,12 +60,15 @@ export function CandidateDetailPanel({
             <FingerprintIcon className="w-4 h-4" />
             Detalle de coincidencia — {candidateLabel}
           </CardTitle>
-          {topFingerprintId && candidate.contributing_fingerprints.length > 1 && (
+          {topFingerprintId && uniqueFingerprints > 1 && (
             <p className="text-xs text-muted-foreground mt-1">
               Huella que más aportó:{" "}
               <span className="font-mono text-primary">{topFingerprintId}</span>
             </p>
           )}
+          <p className="text-xs text-muted-foreground mt-1">
+            {candidate.peak_votes} pares soportan la transformación dominante
+          </p>
         </div>
         <Button
           variant="ghost"
@@ -79,16 +80,7 @@ export function CandidateDetailPanel({
         </Button>
       </CardHeader>
       <CardContent className="space-y-6">
-        {candidateImageUrl ? (
-          <MatchOverlay
-            probeImageUrl={probeImageUrl}
-            probeMinutiae={probeMinutiae}
-            candidateImageUrl={candidateImageUrl}
-            candidateMinutiae={[]}
-            matchTrace={candidate.match_trace}
-            candidateLabel={candidateLabel}
-          />
-        ) : (
+        {!candidateImageUrl && (
           <Card className="border-border/40 bg-muted/10">
             <CardContent className="flex flex-col items-center justify-center py-8 text-muted-foreground">
               <Search className="w-10 h-10 mb-3 opacity-30" />
@@ -101,29 +93,28 @@ export function CandidateDetailPanel({
           </Card>
         )}
 
-        {/* Tabular trace */}
-        {candidate.match_trace.length === 0 ? (
+        {candidate.supporting_pairs.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-6 text-muted-foreground">
             <FingerprintIcon className="w-10 h-10 mb-2 opacity-20" />
-            <p className="text-sm font-medium">Sin traza de cilindros</p>
+            <p className="text-sm font-medium">Sin traza de pares</p>
             <p className="text-xs mt-1">
-              El candidato no aportó cilindros coincidentes.
+              El candidato no aportó pares coincidentes.
             </p>
           </div>
         ) : (
           <div>
             <h3 className="text-sm font-semibold tracking-tight mb-2">
-              Pares de cilindros coincidentes
+              Pares coincidentes
             </h3>
             <div className="rounded-lg border border-border overflow-hidden">
               <table className="w-full text-xs">
                 <thead className="bg-muted/30 text-muted-foreground uppercase tracking-wider">
                   <tr>
                     <th className="text-left px-3 py-2 font-medium">
-                      Cilindro probe
+                      Par probe
                     </th>
                     <th className="text-left px-3 py-2 font-medium">
-                      Cilindro candidato
+                      Huella candidata
                     </th>
                     <th className="text-right px-3 py-2 font-medium">
                       Similitud
@@ -131,33 +122,33 @@ export function CandidateDetailPanel({
                   </tr>
                 </thead>
                 <tbody className="font-mono">
-                  {candidate.match_trace.map((e, idx) => (
+                  {candidate.supporting_pairs.map((p, idx) => (
                     <tr
                       key={idx}
                       className="border-t border-border/60 hover:bg-muted/10"
                     >
                       <td className="px-3 py-1.5">
                         <Badge variant="outline" className="text-[10px]">
-                          #{e.probe_cylinder_index}
+                          #{p.probe_pair_index}
                         </Badge>
                       </td>
                       <td className="px-3 py-1.5 truncate max-w-[280px]">
-                        {e.candidate_fingerprint_id.slice(0, 8)}…
+                        {p.candidate_fingerprint_id.slice(0, 8)}…
                         <span className="text-muted-foreground/60">
-                          {" "}/ {e.candidate_capture_id.slice(0, 8)}
+                          {" "}/ {p.candidate_capture_id.slice(0, 8)}
                         </span>
                       </td>
                       <td className="px-3 py-1.5 text-right">
                         <span
                           className={
-                            e.similarity >= 0.8
+                            p.similarity >= 0.8
                               ? "text-green-500"
-                              : e.similarity >= 0.5
+                              : p.similarity >= 0.5
                                 ? "text-yellow-500"
                                 : "text-muted-foreground"
                           }
                         >
-                          {(e.similarity * 100).toFixed(1)}%
+                          {(p.similarity * 100).toFixed(1)}%
                         </span>
                       </td>
                     </tr>

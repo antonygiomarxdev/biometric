@@ -7,11 +7,10 @@ import logging
 import cv2
 import numpy as np
 from scipy import ndimage, signal
-from skimage.morphology import skeletonize
 
 from src.core.config import config
 from src.core.metrics import timed
-from src.processing.enhancers.base import BaseEnhancer, EnhancerConfig
+from src.processing.enhancers.base import BaseEnhancer
 
 logger = logging.getLogger("processing.enhancer")
 
@@ -19,7 +18,7 @@ logger = logging.getLogger("processing.enhancer")
 class CpuEnhancer(BaseEnhancer):
 
     @timed("cpu_enhance")
-    def enhance(self, img: np.ndarray, resize: bool = True) -> np.ndarray:
+    def enhance(self, img: np.ndarray, *, resize: bool = True) -> np.ndarray:
         logger.debug(
             f"Enhancement iniciado - shape: {img.shape}, dtype: {img.dtype}, min: {img.min()}, max: {img.max()}"
         )
@@ -77,9 +76,9 @@ class CpuEnhancer(BaseEnhancer):
         return (img - im_mean) / im_std
 
     def _ridge_orient(self, normim: np.ndarray) -> np.ndarray:
-        rows, cols = normim.shape
+        _ = normim.shape[0]
         # Gaussian gradients
-        sze = int(np.fix(6 * self.config.gradient_sigma))
+        sze = int(np.trunc(6 * self.config.gradient_sigma))
         if sze % 2 == 0:
             sze += 1
         gauss = cv2.getGaussianKernel(sze, self.config.gradient_sigma)
@@ -94,7 +93,7 @@ class CpuEnhancer(BaseEnhancer):
         Gxy = Gx * Gy
 
         # Smoothing
-        sze = int(np.fix(6 * self.config.block_sigma))
+        sze = int(np.trunc(6 * self.config.block_sigma))
         if sze % 2 == 0:
             sze += 1
         gauss = cv2.getGaussianKernel(sze, self.config.block_sigma)
@@ -109,7 +108,7 @@ class CpuEnhancer(BaseEnhancer):
         cos2theta = (Gxx - Gyy) / denom
 
         if self.config.orient_smooth_sigma:
-            sze = int(np.fix(6 * self.config.orient_smooth_sigma))
+            sze = int(np.trunc(6 * self.config.orient_smooth_sigma))
             if sze % 2 == 0:
                 sze += 1
             gauss = cv2.getGaussianKernel(sze, self.config.orient_smooth_sigma)
@@ -117,8 +116,7 @@ class CpuEnhancer(BaseEnhancer):
             sin2theta = ndimage.convolve(sin2theta, filter_gauss)
             cos2theta = ndimage.convolve(cos2theta, filter_gauss)
 
-        orientim = np.pi / 2 + np.arctan2(sin2theta, cos2theta) / 2
-        return orientim
+        return np.pi / 2 + np.arctan2(sin2theta, cos2theta) / 2
 
     def _ridge_freq(self, normim: np.ndarray, orientim: np.ndarray) -> float:
         """Estimates the average ridge frequency."""
@@ -152,7 +150,7 @@ class CpuEnhancer(BaseEnhancer):
         mean_freq = np.mean(non_zero_freqs)
         return float(mean_freq)
 
-    def _frequest(self, blkim, blkor, blk_size, wind_size, min_wave, max_wave):
+    def _frequest(self, blkim: np.ndarray, blkor: np.ndarray, blk_size: int, wind_size: int, min_wave: float, max_wave: float) -> float:
         # 1. Average block orientation
         cosorient = np.mean(np.cos(2 * blkor))
         sinorient = np.mean(np.sin(2 * blkor))
@@ -166,8 +164,8 @@ class CpuEnhancer(BaseEnhancer):
         )
 
         # 3. Crop to avoid rotation artifacts
-        cropsze = int(np.fix(blk_size / np.sqrt(2)))
-        offset = int(np.fix((blk_size - cropsze) / 2))
+        cropsze = int(np.trunc(blk_size / np.sqrt(2)))
+        offset = int(np.trunc((blk_size - cropsze) / 2))
         rotim = rotim[offset : offset + cropsze, offset : offset + cropsze]
 
         # 4. Projection on X axis (sum columns)
@@ -188,7 +186,7 @@ class CpuEnhancer(BaseEnhancer):
         # 6. Calculate average wavelength
         wave_length = (maxind[-1] - maxind[0]) / (cols_maxind - 1)
         if min_wave <= wave_length <= max_wave:
-            return 1.0 / wave_length
+            return 1.0 / wave_length  # type: ignore[no-any-return]
 
         return 0.0
 
@@ -208,7 +206,7 @@ class CpuEnhancer(BaseEnhancer):
             np.linspace(-sze, sze, 2 * sze + 1), np.linspace(-sze, sze, 2 * sze + 1)
         )
 
-        ref_filter = np.exp(-((x**2 / sigmax**2 + y**2 / sigmay**2))) * np.cos(
+        ref_filter = np.exp(-(x**2 / sigmax**2 + y**2 / sigmay**2)) * np.cos(
             2 * np.pi * freq * x
         )
 

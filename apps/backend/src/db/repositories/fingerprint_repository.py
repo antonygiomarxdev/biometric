@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+
+if TYPE_CHECKING:
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import Fingerprint
 
@@ -75,7 +79,7 @@ class FingerprintRepository:
         if f is None:
             return None
         f.capture_count = (f.capture_count or 0) + 1
-        f.last_captured_at = datetime.now(timezone.utc)
+        f.last_captured_at = datetime.now(UTC)
         if f.first_captured_at is None:
             f.first_captured_at = f.last_captured_at
         await session.commit()

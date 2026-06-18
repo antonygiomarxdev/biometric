@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import numpy as np
 
@@ -86,7 +86,7 @@ class MatchResult:
     cosine_distance: float
     combined_score: float
 
-    metadata: dict = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -233,7 +233,7 @@ class CoarseMatch:
     """A single candidate returned by the coarse matcher."""
     fingerprint_id: str
     score: float
-    metadata: dict = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)

@@ -23,8 +23,12 @@ lint: ## Ejecuta linter (backend)
 	cd apps/backend && uv run ruff check src/ tests/
 format: ## Formatea el código (backend)
 	cd apps/backend && uv run ruff format src/ tests/
-type-check: ## Verifica tipos con mypy (backend)
-	cd apps/backend && uv run mypy src/
+type-check: ## Verifica tipos con mypy + pyright (backend)
+	cd apps/backend && uv run mypy src/ && uv run pyright src/
+check: ## Lint + type-check + test (backend)
+	cd apps/backend && uv run ruff check src/ && uv run mypy src/ && uv run pyright src/ && uv run pytest
+install-hooks: ## Instala pre-commit hooks
+	cd apps/backend && uv tool install pre-commit && pre-commit install
 docker-up: ## Inicia todo el sistema en Docker (Backend + Frontend + DB + MinIO)
 	docker compose up
 docker-up-detached: ## Inicia todo el sistema en Docker en segundo plano

@@ -13,6 +13,7 @@ depend on positional magic indices.
 from __future__ import annotations
 
 from collections import Counter
+from typing import Any
 
 import numpy as np
 
@@ -33,7 +34,7 @@ def _safe_percentile(
 
 
 def _degree_ratios(
-    num_nodes: int, edges: list
+    num_nodes: int, edges: list[Any]
 ) -> tuple[float, float, float, float, float]:
     """Return the 5-bin degree histogram as a tuple of ratios (sums to 1.0).
 
