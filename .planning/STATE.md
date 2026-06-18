@@ -3,23 +3,23 @@ gsd_state_version: 1.0
 milestone: v2.0-alpha
 milestone_name: milestone
 current_phase: 25
-status: Phase 24 complete — Phase 25 planned (triplet-based matching)
-stopped_at: Phase 24 complete (pair-based prototype failed on real data) — ready for Phase 25
+status: Phase 25 executed — self-match PASS, crop match FAIL (requires Phase 26)
+stopped_at: Phase 25 execution complete (Plans 25-01, 25-02, 25-03 done; 25-04 deferred). Acceptance gate: self-match 5/5 PASS, 50%/25% crop FAIL. Diagnostic confirms KNN cannot recover triplets across crops. Phase 26 (OF Registration) required for partial/latente matches.
 last_updated: "2026-06-18T12:00:00.000Z"
 progress:
   total_phases: 25
   completed_phases: 22
   total_plans: 73
-  completed_plans: 33
-  percent: 45
+  completed_plans: 35
+  percent: 48
 ---
 
 # State: Biometric v2.0 Alpha
 
 **Last updated:** 2026-06-18
-**Current phase:** 25 (Triplet-Based Latent Matching — PLANNED)
+**Current phase:** 25 (Triplet-Based Latent Matching — EXECUTED, gate FAIL on crops)
 **Previous phase:** 24 (Pair-Based Matching — prototype, replaced)
-**Stopped at:** Phase 25 planned, ready for execution
+**Stopped at:** Phase 25 Plans 25-01, 25-02, 25-03 complete. Plan 25-04 deferred. **Phase 26 (OF Registration) needed to pass the crop acceptance gate.**
 
 ## Project Reference
 
@@ -51,7 +51,8 @@ See: `.planning/PROJECT.md`
 | 22. Reconocimiento Facial | ⏳ Pendiente |
 | 23. Frontend — Flujo Forense Unificado | ✅ COMPLETED |
 | 24. Pair-Based Matching Pipeline v2 | ✅ COMPLETED (prototype, replaced) |
-| 25. Triplet-Based Latent Matching | 📋 PLANNED (4 plans) |
+| 25. Triplet-Based Latent Matching | ⚠ EXECUTED (self-match OK, crop FAIL — see findings) |
+| 26. Orientation Field Registration | 📋 PLANNED (required for crop/latente matches) |
 
 ## Accumulated Context
 
@@ -73,27 +74,41 @@ limitations discovered during testing:
 **Decision (per Phase 25):** Replace pair-based with triplet-based matching
 + growing algorithm. ADR 010 documents the rationale.
 
-### Phase 25 — Triplet-Based Matching (Planned)
+### Phase 25 — Triplet-Based Matching (Executed, gate partial)
 
 | Plan | Title | Status |
 |------|-------|--------|
-| 25-01 | Quality scoring + triplet extraction | Planned |
-| 25-02 | Triplet storage + search in Qdrant | Planned |
-| 25-03 | Growing algorithm + validation | Planned |
-| 25-04 | Frontend + No-Legacy cleanup | Planned |
+| 25-01 | Quality scoring + triplet extraction | ✅ Complete |
+| 25-02 | Triplet storage + search in Qdrant | ✅ Complete |
+| 25-03 | Growing algorithm + validation | ✅ Complete |
+| 25-04 | Frontend + No-Legacy cleanup | ⏸ Deferred (until Phase 26 scope settled) |
 
-**Target metrics:**
-- Self-match: 5/5 (100%) at score > 0.5
-- 50% center crop: 4/5 (80%) at score > 0.4
-- 25% corner crop: 3/5 (60%) at score > 0.3
-- Altered-Easy: SOC_0100 at top-1 with score > 0.5
-- Search latency: < 500ms for 10 enrolled persons
-- Visualization: dots on REAL matched minutiae, not random indices
+**Plan 25-03 acceptance gate (scripts/e2e_triplet_benchmark.py):**
+- Self-match: **5/5 PASS** (score 0.995, 200/200 confirmed)
+- 50% center crop: **0/5 FAIL** (wrong person, score 0.02)
+- 25% corner crop: **0/5 FAIL** (no candidates or wrong person)
+- OVERALL: **FAIL**
+
+**Diagnostic findings (scripts/diag_self_crop_match.py):**
+- 6-D triplet descriptor is invariant to rotation/translation/scale, **NOT to crop**
+- KNN top-5 per triplet returns hits dominated by wrong persons with
+  similarity 0.93-0.99 when probe is a crop of the enrolled image
+- Local-invariant matching is insufficient for partial / latente matches
+- **Phase 26 (OF Registration) required** — global orientation field
+  filter before growing will reject candidates whose global OF doesn't
+  match the probe's OF
+
+**Score refactor (D-09, D-10):**
+- `_compute_score = ratio × smooth × similarity_mean` (multiplicative)
+- `MIN_CONFIRMING_TRIPLETS = 3` (was 2)
+- 156/156 unit tests pass, pyright 0 errors
+
+**Search latency:** 12-15s per self-match (target was <500ms). Deferred.
 
 **See:**
 - `.planning/phases/25-triplet-matching/25-CONTEXT.md` — full context
+- `.planning/phases/25-triplet-matching/SUMMARY.md` — execution results
 - `.planning/adr/010-triplet-matching.md` — decision rationale
-- `.planning/ROADMAP.md` — updated with Phase 25 details
 
 ### Previous Decisions
 
