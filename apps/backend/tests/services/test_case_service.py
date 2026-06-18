@@ -3,7 +3,7 @@ Isolated unit tests for :class:`~src.services.case_service.CaseService`.
 
 Uses mock repositories — no real database required.
 Does NOT import from ``src.db.models`` to avoid triggering
-the pgvector → numpy import chain in environments without a compatible
+the Qdrant → numpy import chain in environments without a compatible
 numpy build.
 """
 

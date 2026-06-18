@@ -165,7 +165,7 @@ pip install albumentations
                              ▼
          ┌───────────────────────────────────────────┐
          │     MatchingService (UNCHANGED)            │
-         │     → pgvector HNSW search                 │
+         │     → Qdrant HNSW search                 │
          └───────────────────────────────────────────┘
 
                     Model Loading (startup):

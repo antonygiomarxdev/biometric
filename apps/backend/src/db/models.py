@@ -6,15 +6,17 @@ Per D-07: All primary keys use UUIDv7 (time-ordered) via uuid6.uuid7().
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Any
 
+import uuid6
 from sqlalchemy import (
-    Column,
     DateTime,
     Float,
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -22,8 +24,6 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-
-import uuid6
 
 
 class Base(DeclarativeBase):
@@ -37,7 +37,7 @@ def uuid7() -> uuid.UUID:
 
 def utcnow() -> datetime:
     """Return current UTC datetime for column defaults."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Case(Base):
@@ -106,7 +106,7 @@ class Evidence(Base):
     )
     image_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     num_minutiae: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    minutiae_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    minutiae_data: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
@@ -256,6 +256,9 @@ class FingerprintCapture(Base):
     )
     num_minutiae: Mapped[int | None] = mapped_column(Integer, nullable=True)
     num_graphs: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    enhanced_image: Mapped[bytes | None] = mapped_column(
+        LargeBinary, nullable=True,
+    )
     is_reference: Mapped[bool] = mapped_column(nullable=False, default=False)
     is_exemplar: Mapped[bool] = mapped_column(nullable=False, default=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -302,7 +305,7 @@ class RidgeGraph(Base):
     region_h: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     num_nodes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     num_edges: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    graph_data: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    graph_data: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     core_x: Mapped[int | None] = mapped_column(Integer, nullable=True)
     core_y: Mapped[int | None] = mapped_column(Integer, nullable=True)
     delta_x: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -395,7 +398,7 @@ class AuditLog(Base):
     action: Mapped[str] = mapped_column(
         String(20), nullable=False
     )  # INSERT / UPDATE / DELETE
-    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     previous_hash: Mapped[str | None] = mapped_column(
         String(64), nullable=True
     )

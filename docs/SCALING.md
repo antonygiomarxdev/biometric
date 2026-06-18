@@ -4,16 +4,16 @@
 
 | Fase | Arquitectura | Huellas | Búsquedas/seg | Latencia P99 |
 |------|-------------|---------|---------------|--------------|
-| MVP | pgvector single-node | 100K-1M | 50-100 | <100ms |
-| Escala Media | pgvector + sharding | 1M-10M | 500+ | <150ms |
-| Escala Grande | pgvector + Citus | 10M-100M | 2K+ | <200ms |
+| MVP | Qdrant single-node | 100K-1M | 50-100 | <100ms |
+| Escala Media | Qdrant + sharding | 1M-10M | 500+ | <150ms |
+| Escala Grande | Qdrant + Citus | 10M-100M | 2K+ | <200ms |
 | Escala Masiva | Milvus/Qdrant | 100M-1B+ | 10K+ | <50ms |
 
 ## Fase 1: MVP Single-Node (Actual)
 
 ### Configuración
 ```sql
--- Extensión pgvector
+-- Extensión Qdrant
 CREATE EXTENSION vector;
 
 -- Índice IVFFlat
@@ -160,7 +160,7 @@ SELECT create_distributed_table(
 
 ### Cuándo migrar
 - >50M vectores
-- Latencia P99 >200ms con pgvector
+- Latencia P99 >200ms con Qdrant
 - Necesitas GPU acceleration
 - Búsquedas >10K/segundo
 
@@ -291,7 +291,7 @@ alerts:
 
 ## Recomendaciones Finales
 
-1. **No optimizar prematuramente**: Empezar con pgvector single-node
+1. **No optimizar prematuramente**: Empezar con Qdrant single-node
 2. **Medir constantemente**: Métricas son críticas para decidir cuándo escalar
 3. **Planear con anticipación**: Migración toma 2-3 meses
 4. **Validar en producción**: Tests de carga no replican comportamiento real

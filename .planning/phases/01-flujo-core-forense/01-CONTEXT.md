@@ -22,7 +22,7 @@ Implementar el flujo forense completo end-to-end (MVP Vertical): El perito crea 
 ### Base de Datos y Migraciones
 - **D-06:** **Migraciones:** Uso estricto de **Alembic** (nunca `create_all`).
 - **D-07:** **Primary Keys:** **UUIDv7** (time-ordered) para evitar fragmentación de índices y facilitar particionado futuro. Utilizar `uuid6` backport o equivalente.
-- **D-08:** **Índice Vectorial:** Usar **HNSW** de `pgvector` desde el día 1, abandonando IVFFlat para evitar degradación de recall con nuevas inserciones.
+- **D-08:** **Índice Vectorial:** Usar **HNSW** de `Qdrant` desde el día 1, abandonando IVFFlat para evitar degradación de recall con nuevas inserciones.
 - **D-09:** **Auditoría:** Cadena de hashes para inmutabilidad (`hash_actual = sha256(hash_anterior + payload)`). Implementada **a nivel aplicación en una transacción serializable con `SELECT FOR UPDATE`**, no como trigger de SQL, para facilitar el testing.
 - **D-10:** **Seed Data:** Roles, tipos de delitos, y usuarios base inyectados mediante una migración de Alembic inicial (ej. `002_seed_data.py`).
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 from datetime import timedelta
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -20,10 +21,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_async_db, get_current_user
-from src.services.auth_service import create_access_token, verify_password
+from src.api.prefix import API_PREFIX
 from src.core.config import config
 from src.db.models import User
-from src.api.prefix import API_PREFIX
+from src.services.auth_service import create_access_token, verify_password
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ router = APIRouter(
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     session: AsyncSession = Depends(get_async_db),
-) -> dict:
+) -> dict[str, Any]:
     """
     Authenticate a user and return a JWT access token.
     """
@@ -97,7 +98,7 @@ async def login(
 @router.get("/me")
 async def read_current_user(
     current_user: User = Depends(get_current_user),
-) -> dict:
+) -> dict[str, Any]:
     """
     Return the profile of the currently authenticated user.
 

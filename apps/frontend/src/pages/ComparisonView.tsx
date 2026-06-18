@@ -23,7 +23,9 @@ import {
   searchMatching,
   createDecision,
 } from "@/lib/api";
-import type { EvidenceResponse, MatchCandidate } from "@/lib/api";
+import type { EvidenceResponse, MatchCandidate, MinutiaPoint } from "@/lib/api";
+import { CandidateCard } from "@/components/fingerprint/CandidateCard";
+import { CandidateDetailPanel } from "@/components/fingerprint/CandidateDetailPanel";
 
 type Verdict = "Identificación" | "Exclusión" | "Inconcluso";
 
@@ -75,77 +77,6 @@ function EmptyLatentPanel({ onUpload }: { onUpload: () => void }) {
   );
 }
 
-function CandidateCard({
-  candidate,
-  rank,
-  isSelected,
-  onSelect,
-}: {
-  candidate: MatchCandidate;
-  rank: number;
-  isSelected: boolean;
-  onSelect: () => void;
-}) {
-  const scorePercent = (candidate.score * 100).toFixed(1);
-
-  return (
-    <div
-      className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-        isSelected
-          ? "border-primary bg-primary/5"
-          : "border-border hover:border-primary/50 hover:bg-muted/30"
-      }`}
-      onClick={onSelect}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onSelect();
-        }
-      }}
-      tabIndex={0}
-      role="button"
-      aria-selected={isSelected}
-      aria-label={`Candidate ${rank}: ${candidate.name}`}
-    >
-      <div className="flex items-start gap-3">
-        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary text-sm font-bold shrink-0">
-          {rank === 1 ? (
-            <Star className="w-4 h-4 fill-primary text-primary" />
-          ) : (
-            rank
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="font-medium text-sm truncate">{candidate.name}</p>
-          <p className="text-xs text-muted-foreground font-mono truncate">
-            {candidate.document}
-          </p>
-          <div className="flex items-center gap-2 mt-1.5">
-            <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full ${
-                  candidate.score >= 0.8
-                    ? "bg-green-500"
-                    : candidate.score >= 0.5
-                      ? "bg-yellow-500"
-                      : "bg-muted-foreground/30"
-                }`}
-                style={{ width: `${Math.min(Number(scorePercent), 100)}%` }}
-              />
-            </div>
-            <span className="text-xs font-mono text-muted-foreground shrink-0">
-              {scorePercent}%
-            </span>
-          </div>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Distancia L2: {candidate.l2_distance.toFixed(4)}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function ComparisonView() {
   const { caseId } = useParams<{ caseId: string }>();
   const navigate = useNavigate();
@@ -157,6 +88,7 @@ export default function ComparisonView() {
   const [latentFile, setLatentFile] = useState<File | null>(null);
   const [candidates, setCandidates] = useState<MatchCandidate[]>([]);
   const [selectedCandidate, setSelectedCandidate] = useState<MatchCandidate | null>(null);
+  const [probeMinutiae, setProbeMinutiae] = useState<MinutiaPoint[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedVerdict, setSubmittedVerdict] = useState<Verdict | null>(null);
@@ -215,6 +147,7 @@ export default function ComparisonView() {
         setLatentFile(file);
         setCandidates([]);
         setSelectedCandidate(null);
+        setProbeMinutiae([]);
         setSubmittedVerdict(null);
       };
       reader.readAsDataURL(file);
@@ -242,11 +175,12 @@ export default function ComparisonView() {
 
       if (result.candidates.length > 0) {
         setCandidates(result.candidates);
+        setProbeMinutiae(result.probe_minutiae);
         setSelectedCandidate(result.candidates[0]);
         addToast({
           type: "success",
           title: "Búsqueda completada",
-          description: `${result.total} candidato${result.total !== 1 ? "s" : ""} encontrado${result.total !== 1 ? "s" : ""}`,
+          description: `${result.total_candidates} candidato${result.total_candidates !== 1 ? "s" : ""} encontrado${result.total_candidates !== 1 ? "s" : ""}`,
           duration: 3000,
         });
       } else {
@@ -320,6 +254,7 @@ export default function ComparisonView() {
         setLatentFile(null);
         setCandidates([]);
         setSelectedCandidate(null);
+        setProbeMinutiae([]);
         setSubmittedVerdict(null);
       }
     },
@@ -386,140 +321,148 @@ export default function ComparisonView() {
           </div>
         </header>
 
-        {/* Side-by-side comparison */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left panel: Latent fingerprint */}
-          <section>
-            <Card className="border-border/60">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Fingerprint className="w-4 h-4" />
-                  Huella Latente
-                </CardTitle>
-                <CardDescription>
-                  Evidencia recolectada en la escena del caso
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {latentPreview ? (
-                  <div className="space-y-4">
-                    <div className="bg-muted/20 rounded-lg overflow-hidden border border-border flex items-center justify-center min-h-[350px]">
-                      <img
-                        src={latentPreview}
-                        alt="Latent fingerprint preview"
-                        className="max-w-full max-h-[450px] object-contain"
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleFileUpload}
-                      >
-                        <Upload className="w-3.5 h-3.5 mr-1.5" />
-                        Cambiar imagen
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={handleSearch}
-                        disabled={isSearching || !latentFile}
-                      >
-                        {isSearching ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                            Buscando...
-                          </>
-                        ) : (
-                          <>
-                            <Fingerprint className="w-3.5 h-3.5 mr-1.5" />
-                            Buscar coincidencias
-                          </>
-                        )}
-                      </Button>
-                    </div>
+        {/* Latent fingerprint panel (full width) */}
+        <section>
+          <Card className="border-border/60">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Fingerprint className="w-4 h-4" />
+                Huella Latente
+              </CardTitle>
+              <CardDescription>
+                Evidencia recolectada en la escena del caso
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {latentPreview ? (
+                <div className="space-y-4">
+                  <div className="bg-muted/20 rounded-lg overflow-hidden border border-border flex items-center justify-center min-h-[350px]">
+                    <img
+                      src={latentPreview}
+                      alt="Latent fingerprint preview"
+                      className="max-w-full max-h-[450px] object-contain"
+                    />
                   </div>
-                ) : (
-                  <EmptyLatentPanel onUpload={handleFileUpload} />
-                )}
-
-                {/* Hidden file input */}
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  className="hidden"
-                  accept="image/*"
-                  onChange={handleFileChange}
-                />
-
-                {/* Existing evidence gallery */}
-                {evidenceList && evidenceList.items.length > 0 && !latentPreview && (
-                  <div className="mt-4 pt-4 border-t border-border">
-                    <p className="text-xs text-muted-foreground mb-2">
-                      Evidencia existente del caso:
-                    </p>
-                    <div className="space-y-1">
-                      {evidenceList.items.map((ev) => (
-                        <Button
-                          key={ev.id}
-                          variant="ghost"
-                          size="sm"
-                          className="w-full justify-start text-xs"
-                          onClick={() => handleUseEvidence(ev)}
-                        >
-                          <Fingerprint className="w-3 h-3 mr-2" />
-                          {ev.fingerprint_id}
-                        </Button>
-                      ))}
-                    </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleFileUpload}
+                    >
+                      <Upload className="w-3.5 h-3.5 mr-1.5" />
+                      Cambiar imagen
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={handleSearch}
+                      disabled={isSearching || !latentFile}
+                    >
+                      {isSearching ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                          Buscando...
+                        </>
+                      ) : (
+                        <>
+                          <Fingerprint className="w-3.5 h-3.5 mr-1.5" />
+                          Buscar coincidencias
+                        </>
+                      )}
+                    </Button>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </section>
+                </div>
+              ) : (
+                <EmptyLatentPanel onUpload={handleFileUpload} />
+              )}
 
-          {/* Right panel: Candidates */}
-          <section>
-            <Card className="border-border/60 h-full">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Star className="w-4 h-4" />
-                  Candidatos (Top-K)
-                </CardTitle>
-                <CardDescription>
-                  {candidates.length > 0
-                    ? `${candidates.length} posibles coincidencias ordenadas por similitud`
-                    : "Sube una huella latente y busca coincidencias"}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {isSearching ? (
-                  <LoadingPanel label="Buscando en base de datos AFIS..." />
-                ) : candidates.length > 0 ? (
-                  <div className="space-y-3">
-                    {candidates.map((candidate, index) => (
-                      <CandidateCard
-                        key={candidate.person_id}
-                        candidate={candidate}
-                        rank={index + 1}
-                        isSelected={selectedCandidate?.person_id === candidate.person_id}
-                        onSelect={() => setSelectedCandidate(candidate)}
-                      />
+              {/* Hidden file input */}
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept="image/*"
+                onChange={handleFileChange}
+              />
+
+              {/* Existing evidence gallery */}
+              {evidenceList && evidenceList.items.length > 0 && !latentPreview && (
+                <div className="mt-4 pt-4 border-t border-border">
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Evidencia existente del caso:
+                  </p>
+                  <div className="space-y-1">
+                    {evidenceList.items.map((ev) => (
+                      <Button
+                        key={ev.id}
+                        variant="ghost"
+                        size="sm"
+                        className="w-full justify-start text-xs"
+                        onClick={() => handleUseEvidence(ev)}
+                      >
+                        <Fingerprint className="w-3 h-3 mr-2" />
+                        {ev.fingerprint_id}
+                      </Button>
                     ))}
                   </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-full min-h-[350px] text-muted-foreground">
-                    <Fingerprint className="w-12 h-12 mb-3 opacity-20" />
-                    <p className="text-sm">
-                      {latentPreview
-                        ? "Presiona 'Buscar coincidencias' para comenzar"
-                        : "Selecciona o sube una huella latente"}
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </section>
-        </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* Candidate list (full width below latent panel) */}
+        <section>
+          <Card className="border-border/60">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Star className="w-4 h-4" />
+                Candidatos (Top-K)
+              </CardTitle>
+              <CardDescription>
+                {candidates.length > 0
+                  ? `${candidates.length} posibles coincidencias ordenadas por similitud`
+                  : "Sube una huella latente y busca coincidencias"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isSearching ? (
+                <LoadingPanel label="Buscando en base de datos AFIS..." />
+              ) : candidates.length > 0 ? (
+                <div className="space-y-3">
+                  {candidates.map((candidate, index) => (
+                    <CandidateCard
+                      key={candidate.person_id}
+                      candidate={candidate}
+                      rank={index + 1}
+                      isSelected={selectedCandidate?.person_id === candidate.person_id}
+                      onSelect={() => setSelectedCandidate(candidate)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-muted-foreground">
+                  <Fingerprint className="w-12 h-12 mb-3 opacity-20" />
+                  <p className="text-sm">
+                    {latentPreview
+                      ? "Presiona 'Buscar coincidencias' para comenzar"
+                      : "Selecciona o sube una huella latente"}
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* Candidate detail panel (full width, mounts when a card is selected) */}
+        {selectedCandidate && (
+          <CandidateDetailPanel
+            candidate={selectedCandidate}
+            probeImageUrl={latentPreview ?? ""}
+            probeMinutiae={probeMinutiae}
+            candidateImageUrl={null}
+            onDismiss={() => setSelectedCandidate(null)}
+          />
+        )}
 
         {/* Action buttons */}
         {selectedCandidate && (
@@ -530,10 +473,10 @@ export default function ComparisonView() {
                   <p className="text-sm text-muted-foreground">
                     Candidato seleccionado:{" "}
                     <span className="font-semibold text-foreground">
-                      {selectedCandidate.name}
+                      {selectedCandidate.full_name ?? `Persona ${selectedCandidate.person_id.slice(0, 8)}`}
                     </span>
                     <span className="font-mono ml-1">
-                      ({selectedCandidate.document})
+                      ({selectedCandidate.external_id ?? selectedCandidate.person_id})
                     </span>
                   </p>
                 </div>

@@ -4,12 +4,12 @@
 **Fecha:** 2025-06-12
 **Contexto:** Sistema AFIS gubernamental con workload asimétrico (90%+ lecturas, escrituras batch). Necesita vectores, auditoría inmutable, y datos relacionales.
 
-**Decisión:** PostgreSQL single con pgvector, MinIO para imágenes, Redis para cache/cola.
+**Decisión:** PostgreSQL single con Qdrant, MinIO para imágenes, Redis para cache/cola.
 
 ## Esquema
 
 ```
-PostgreSQL (single + pgvector)
+PostgreSQL (single + Qdrant)
   ├── fingerprints (relacional: metadata, minucias JSONB)
   ├── fingerprint_vectors (HNSW index, 256d)
   ├── audit_logs (partitioned by month, hash chain append-only)
@@ -34,7 +34,7 @@ Redis → Cache de resultados frecuentes + cola Celery para async
 
 1. **Workload asimétrico:** AFIS es read-heavy (identificaciones continuas) vs write-light (registros batch). Las réplicas de lectura escalan horizontalmente con alta eficacia.
 
-2. **pgvector integrado:** Relaciones directas entre fingerprints y vectores sin movimientos entre servicios. Transacciones ACID entre metadata y embedding.
+2. **Qdrant integrado:** Relaciones directas entre fingerprints y vectores sin movimientos entre servicios. Transacciones ACID entre metadata y embedding.
 
 3. **HNSW sobre IVFFlat:** O(log n) vs O(n). Sin degradación con inserts. Más RAM pero 10x más rápido en búsqueda.
 

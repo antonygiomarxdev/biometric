@@ -312,7 +312,7 @@ uv pip install -e .
 
 - [FastAPI Docs](https://fastapi.tiangolo.com/)
 - [SQLAlchemy Docs](https://docs.sqlalchemy.org/)
-- [pgvector Docs](https://github.com/pgvector/pgvector)
+- [Qdrant Docs](https://github.com/Qdrant/Qdrant)
 - [pytest Docs](https://docs.pytest.org/)
 
 ## Preguntas

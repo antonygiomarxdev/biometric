@@ -59,6 +59,6 @@ Uso de `dataclasses(frozen=True)` para evitar efectos secundarios y garantizar t
 - **Modo GPU**: Usa procesamiento secuencial (o batch real) para maximizar el throughput de la tarjeta gráfica sin overhead de contexto.
 
 ### 4. Matching Híbrido (`src/storage/repository.py`)
-Combina la velocidad de `pgvector` (índice IVFFlat L2) con la precisión de la distancia Coseno.
+Combina la velocidad de `Qdrant` (índice IVFFlat L2) con la precisión de la distancia Coseno.
 - **Fase 1**: Recuperación rápida de candidatos.
 - **Fase 2**: Re-ranking en memoria usando `score = 0.7*L2_score + 0.3*Cosine_score`.

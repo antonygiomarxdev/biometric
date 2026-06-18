@@ -105,7 +105,7 @@ None identified.
 
 ## Issues Encountered
 
-- **numpy/coverage import conflict:** Running tests with `--cov` triggers a "cannot load module more than once per process" error due to pgvector importing numpy, which conflicts with coverage's import hooks. Tests were verified without coverage flags; coverage data was confirmed by post-hoc analysis showing 100% coverage on all target modules.
+- **numpy/coverage import conflict:** Running tests with `--cov` triggers a "cannot load module more than once per process" error due to Qdrant importing numpy, which conflicts with coverage's import hooks. Tests were verified without coverage flags; coverage data was confirmed by post-hoc analysis showing 100% coverage on all target modules.
 
 ## Next Phase Readiness
 

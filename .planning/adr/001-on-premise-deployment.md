@@ -7,7 +7,7 @@
 **Decisión:** Toda la infraestructura corre 100% on-premise. Sin dependencia de cloud público.
 
 **Consecuencias:**
-- PostgreSQL + pgvector reemplazan cualquier vector DB externa (Pinecone, Weaviate)
+- PostgreSQL + Qdrant reemplazan cualquier vector DB externa (Pinecone, Weaviate)
 - MinIO reemplaza S3 para almacenamiento de imágenes
 - Backup/restore debe ser robusto (no hay managed services)
 - Capacitación del equipo de infraestructura del gobierno

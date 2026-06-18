@@ -29,7 +29,7 @@ Automated Fingerprint Identification System. Government-grade AFIS must:
   - Could wrap via subprocess or JNI
 
 #### 2. Vector/Embedding-Based (Current Approach)
-- **pgvector L2 + cosine reranking:** What's currently implemented
+- **Qdrant L2 + cosine reranking:** What's currently implemented
   - Converts minutiae to fixed-size embedding (256-dim)
   - Fast candidate retrieval via IVFFlat index
   - Reranks top-K with weighted hybrid score
@@ -84,7 +84,7 @@ NIST benchmarks report FNMR at specific FMR points (e.g., FMR=1e-4).
 5. Document findings and recommend path forward
 
 ### Decision Framework
-| Criteria | Current (pgvector) | NBIS (BOZORTH3) | Deep Learning |
+| Criteria | Current (Qdrant) | NBIS (BOZORTH3) | Deep Learning |
 |----------|-------------------|-----------------|---------------|
 | Forensic Standard | No | Yes | No |
 | Python-native | Yes | No (C wrapper) | Yes |

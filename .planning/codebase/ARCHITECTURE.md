@@ -48,7 +48,7 @@ Backend (FastAPI)
 ```
 Image Upload → Decode (cv2) → Enhance (GPU/CPU) → Skeletonize →
 Crossing Number Detection → Filter → Normalize →
-Vector Embedding → Store/Search (pgvector)
+Vector Embedding → Store/Search (Qdrant)
 ```
 
 ### Identification Flow
@@ -59,7 +59,7 @@ Vector Embedding → Store/Search (pgvector)
 5. Minutiae extraction via Crossing Number algorithm
 6. Normalization and consensus filtering
 7. Vector embedding generation
-8. pgvector L2 search for top-K candidates
+8. Qdrant L2 search for top-K candidates
 9. Hybrid reranking (L2 + cosine weighted)
 10. Return match result
 
@@ -77,7 +77,7 @@ BiometricProvider abstract base class allows adding new modalities without modif
 
 ### Hybrid Matching
 Two-phase matching:
-1. Fast candidate retrieval via pgvector IVFFlat (L2 distance)
+1. Fast candidate retrieval via Qdrant IVFFlat (L2 distance)
 2. In-memory reranking: score = 0.7 * L2_score + 0.3 * cosine_score
 
 ### GPU/CPU Transparency

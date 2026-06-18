@@ -6,7 +6,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import ClassVar, List, NewType, Optional, Tuple
+from typing import ClassVar
+
 import numpy as np
 
 # Tipos primitivos para claridad
@@ -41,7 +42,7 @@ class MinutiaCandidate:
     confidence: Confidence
     origin: AlgorithmOrigin
 
-    def to_vector_part(self) -> List[float]:
+    def to_vector_part(self) -> list[float]:
         """Serializa la minucia para el vector final."""
         return [float(self.type.value), float(self.x), float(self.y), self.angle]
 
@@ -52,12 +53,12 @@ class NormalizedFingerprint:
     Las coordenadas son relativas al centroide o sistema canónico.
     """
     id: str
-    minutiae: List[MinutiaCandidate]
+    minutiae: list[MinutiaCandidate]
     width: int
     height: int
-    image: Optional[np.ndarray] = field(default=None, repr=False)
+    image: np.ndarray | None = field(default=None, repr=False)
     ridge_graph: RidgeGraph | None = None
-    
+
     @property
     def vector(self) -> np.ndarray:
         """Genera el vector plano normalizado."""
@@ -76,7 +77,7 @@ Minutiae = MinutiaCandidate
 class MatchResult:
     """Resultado detallado de la comparación."""
     matched: bool
-    person_id: Optional[str]
+    person_id: str | None
     score: float  # Combined score
     confidence: float
 
@@ -143,19 +144,6 @@ class RidgeGraph:
 
     def is_empty(self) -> bool:
         return self.num_nodes == 0
-
-
-@dataclass(frozen=True, slots=True)
-class TripletVector:
-    """
-    A local invariant structure (RAG chunk) representing a Delaunay triangle
-    of three minutiae points.
-
-    - `features`: Invariant vector (side lengths + angles + types) for KNN search.
-    - `weight`: Forensic importance weight (0.0 to 1.0). Higher = closer to Core.
-    """
-    features: List[float]
-    weight: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -249,22 +237,82 @@ class CoarseMatch:
 
 
 @dataclass(frozen=True, slots=True)
-class ChunkHit:
-    """A single chunk-level hit from Qdrant chunk search."""
+class MccCylinderHit:
+    """A single cylinder-level hit from Qdrant KNN search.
+
+    Returned per matched cylinder; aggregated into ``MccPersonHit``.
+    ``query_cylinder_index`` is the probe's cylinder index (loop index
+    from ``knn_search``, **not** a Qdrant payload field).
+    """
     person_id: str
     fingerprint_id: str
     capture_id: str
-    graph_id: str
-    chunk_type: str
-    weight: float
-    similarity: float
-    weighted_score: float
+    similarity: float  # cosine similarity in [0, 1]
+    query_cylinder_index: int = 0  # index into the query_vectors list passed to knn_search
+    candidate_x: int = 0
+    candidate_y: int = 0
+    candidate_angle: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
-class PersonHit:
-    """Aggregated person-level result from chunk search."""
+class MccPersonHit:
+    """Aggregated per-fingerprint match result.
+
+    ``total_score`` is the sum of cosine similarities across all matching
+    cylinders. When ``score_normalization == "fingerprint"`` (default), the
+    caller divides by the number of enrolled cylinders to remove population
+    bias.
+    """
     person_id: str
     total_score: float
     hits: int
     contributing_fingerprints: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class MccSearchHit:
+    """A single ranked match candidate from MCC search (Phase 21 / Phase 23).
+
+    ``match_trace`` is populated by :meth:`MccMatchingService.search`
+    with per-cylinder (probe ↔ candidate) pairs for frontend overlay
+    rendering.
+    """
+    person_id: str
+    total_score: float
+    hits: int
+    contributing_fingerprints: list[str]
+    match_trace: list[MatchTraceEntry] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class MinutiaSummary:
+    """Lightweight minutia descriptor returned in search responses (Phase 23).
+
+    Mirrors the public fields of :class:`MinutiaCandidate` without
+    carrying the full forensic metadata (confidence, origin) — those
+    are not needed by the UI for cylinder-level trace rendering.
+    """
+    x: int
+    y: int
+    angle: float
+    type: int  # 0=termination, 1=bifurcation, 2=unknown (mirrors MinutiaType.value)
+
+
+@dataclass(frozen=True, slots=True)
+class MatchTraceEntry:
+    """A single (probe_cylinder, candidate_cylinder) match pair (Phase 23).
+
+    Surfaced in the ``match_trace`` list of each ``MccSearchHit`` so
+    the frontend can render connecting lines between the two
+    synchronized canvases (D-04/D-05/D-06).
+    """
+    probe_cylinder_index: int       # index into probe.minutiae list
+    probe_x: int
+    probe_y: int
+    probe_angle: float
+    candidate_capture_id: str
+    candidate_fingerprint_id: str
+    candidate_x: int
+    candidate_y: int
+    candidate_angle: float
+    similarity: float               # cosine similarity in [0, 1]

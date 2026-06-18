@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+
+if TYPE_CHECKING:
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import FingerprintCapture
 
@@ -26,6 +30,7 @@ class FingerprintCaptureRepository:
         is_reference: bool = False,
         is_exemplar: bool = True,
         notes: str | None = None,
+        enhanced_image: bytes | None = None,
     ) -> FingerprintCapture:
         existing_count = await FingerprintCaptureRepository.count_by_fingerprint(
             session, fingerprint_id,
@@ -41,6 +46,7 @@ class FingerprintCaptureRepository:
             is_reference=is_reference,
             is_exemplar=is_exemplar,
             notes=notes,
+            enhanced_image=enhanced_image,
         )
         session.add(c)
         await session.commit()

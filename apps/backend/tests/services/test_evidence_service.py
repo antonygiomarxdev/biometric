@@ -3,7 +3,7 @@ Isolated unit tests for :class:`~src.services.evidence_service.EvidenceService`.
 
 Uses mock repositories and patches ``storage`` — no real database or
 MinIO required.  Does NOT import from ``src.db.models`` to avoid
-triggering the pgvector → numpy import chain.
+triggering the Qdrant → numpy import chain.
 """
 
 from __future__ import annotations

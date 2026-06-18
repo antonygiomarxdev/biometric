@@ -6,7 +6,7 @@ tags: [fastapi, matching-service, clean-architecture, refactor]
 
 requires:
   - phase: 01-flujo-core-forense
-    provides: FingerprintVector model, pgvector schema
+    provides: FingerprintVector model, Qdrant schema
 provides:
   - Anemic known-fingerprints router with zero DB logic
   - MatchingService.register_known() handling the full persistence pipeline

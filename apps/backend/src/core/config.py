@@ -263,6 +263,27 @@ class EnhancerDefaultsConfig:
 
 
 @dataclass(frozen=True)
+class MccMatchingConfig:
+    """Parameters for MCC cylinder matching (Phase 21).
+
+    Defaults mirror the spike results (12 sectors × 4 rings × 3 features = 144-D).
+    Override via env vars without code changes.
+    """
+    collection: str = field(
+        default_factory=lambda: os.getenv("MCC_COLLECTION", "mcc_cylinders")
+    )
+    vector_size: int = field(
+        default_factory=lambda: int(os.getenv("MCC_VECTOR_SIZE", "144"))
+    )
+    top_k_per_cylinder: int = field(
+        default_factory=lambda: int(os.getenv("MCC_TOP_K_PER_CYLINDER", "5"))
+    )
+    score_normalization: Literal["fingerprint", "global"] = field(
+        default_factory=lambda: os.getenv("MCC_SCORE_NORMALIZATION", "fingerprint")  # type: ignore[return-value]
+    )
+
+
+@dataclass(frozen=True)
 class Config:
     """Global application configuration (Immutable)."""
 
@@ -324,6 +345,7 @@ class Config:
     fusion: FusionConfig = field(default_factory=FusionConfig)
     extraction: ExtractionConfig = field(default_factory=ExtractionConfig)
     enhancer_defaults: EnhancerDefaultsConfig = field(default_factory=EnhancerDefaultsConfig)
+    matching: MccMatchingConfig = field(default_factory=MccMatchingConfig)
     
     # Logging & Metrics
     log_level: str = field(default_factory=lambda: os.getenv("LOG_LEVEL", "INFO").upper())

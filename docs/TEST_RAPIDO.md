@@ -37,7 +37,7 @@ Cuando ejecutes, verás:
 ### Opción 3 (Recomendada para primera vez)
 
 1. Extrae features de las primeras 100 huellas (configurable con `MAX_REGISTER`)
-2. Las indexa en PostgreSQL + pgvector
+2. Las indexa en PostgreSQL + Qdrant
 3. Te deja buscar interactivamente
 
 ### Modo Búsqueda Interactiva

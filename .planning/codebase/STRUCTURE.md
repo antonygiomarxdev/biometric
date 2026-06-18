@@ -29,7 +29,7 @@ biometric/
 │   │   │   └── storage/
 │   │   │       ├── database.py     # SQLAlchemy engine & session
 │   │   │       ├── repository.py   # CRUD operations
-│   │   │       ├── vector_index.py # pgvector similarity search
+│   │   │       ├── vector_index.py # Qdrant similarity search
 │   │   │       └── object_storage.py # MinIO operations
 │   │   ├── tests/
 │   │   │   ├── test_api_e2e.py
@@ -76,7 +76,7 @@ biometric/
 
 ### Backend (>100 lines)
 - src/api/rest.py: 806 lines — largest file, 8 endpoints + startup/shutdown
-- src/storage/vector_index.py: 308 lines — pgvector operations
+- src/storage/vector_index.py: 308 lines — Qdrant operations
 - src/services/fingerprint_service.py: 193 lines — pipeline orchestrator
 
 ### Frontend (>100 lines)

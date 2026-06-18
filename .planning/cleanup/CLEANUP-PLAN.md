@@ -24,7 +24,7 @@ Apply conventions from AGENTS.md retroactively: English-only code, proper typing
 - apps/backend/src/services/biometrics/providers/fingerprint.py
 
 ### Task 1.2 — Remove raw SQL migrations (replaced by Alembic)
-- apps/backend/migrations/001_init_pgvector.sql
+- apps/backend/migrations/001_init_Qdrant.sql
 - apps/backend/migrations/002_add_image_path.sql
 
 ### Task 1.3 — Remove orphaned root scripts
