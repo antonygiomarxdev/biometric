@@ -10,7 +10,12 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .triplet_alignment import AlignmentTransform, align_3pts, apply_transform
+from .triplet_alignment import (
+    MIN_ALIGNMENT_POINTS,
+    AlignmentTransform,
+    align_n_pts,
+    apply_transform,
+)
 
 
 @dataclass
@@ -115,10 +120,14 @@ class TripletValidator:
     def compute_transform(
         correspondences: list[TripletCorrespondence],
     ) -> AlignmentTransform:
-        """Compute the best similarity transform from multiple correspondences.
+        """Compute the best similarity transform from all correspondences.
 
-        Uses the first 3 point pairs (Procrustes) for a clean least-squares
-        solution.  If fewer than 3 correspondences are provided, returns
+        Each correspondence contributes 3 point pairs (one per triplet
+        vertex).  Procrustes least-squares over all available pairs gives
+        a more robust transform than 3-point alignment, especially as
+        the growing loop accumulates more confirmed matches.
+
+        If fewer than ``MIN_ALIGNMENT_POINTS`` pairs are available, returns
         the identity transform.
         """
         if not correspondences:
@@ -136,13 +145,12 @@ class TripletValidator:
                 probe_ang_list.append(float(corr.probe_angles[k]))
                 cand_ang_list.append(float(corr.candidate_angles[k]))
 
-        n = min(len(probe_pts_list), 3)
-        if n < 3:
+        if len(probe_pts_list) < MIN_ALIGNMENT_POINTS:
             return AlignmentTransform(scale=1.0, angle=0.0, dx=0.0, dy=0.0)
 
-        return align_3pts(
-            np.array(probe_pts_list[:n], dtype=np.float64),
-            np.array(cand_pts_list[:n], dtype=np.float64),
-            np.array(probe_ang_list[:n], dtype=np.float64),
-            np.array(cand_ang_list[:n], dtype=np.float64),
+        return align_n_pts(
+            np.array(probe_pts_list, dtype=np.float64),
+            np.array(cand_pts_list, dtype=np.float64),
+            np.array(probe_ang_list, dtype=np.float64),
+            np.array(cand_ang_list, dtype=np.float64),
         )

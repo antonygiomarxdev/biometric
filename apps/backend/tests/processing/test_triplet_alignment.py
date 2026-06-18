@@ -11,7 +11,7 @@ import math
 import numpy as np
 import pytest
 
-from src.processing.triplet_alignment import align_3pts, apply_transform
+from src.processing.triplet_alignment import align_3pts, align_n_pts, apply_transform
 
 
 @pytest.fixture
@@ -153,3 +153,124 @@ def test_wrong_shape() -> None:
             np.array([[0.2, 0.2], [0.3, 0.5]], dtype=np.float64),
             np.array([[0.2, 0.2], [0.3, 0.5]], dtype=np.float64),
         )
+
+
+# ---------------------------------------------------------------------------
+# align_n_pts — N-point Procrustes
+# ---------------------------------------------------------------------------
+
+
+def test_n_pts_identity() -> None:
+    """Identity transform with 6 identical point pairs."""
+    pts = np.array([
+        [0.1, 0.2], [0.3, 0.4], [0.5, 0.1],
+        [0.7, 0.6], [0.2, 0.8], [0.9, 0.3],
+    ], dtype=np.float64)
+    t = align_n_pts(pts, pts)
+    assert t.scale == pytest.approx(1.0, abs=1e-6)
+    assert t.angle == pytest.approx(0.0, abs=1e-6)
+    assert t.dx == pytest.approx(0.0, abs=1e-6)
+    assert t.dy == pytest.approx(0.0, abs=1e-6)
+
+
+def test_n_pts_translation() -> None:
+    """Translation with 5 corresponding pairs."""
+    base = np.array([
+        [0.1, 0.2], [0.3, 0.4], [0.5, 0.1], [0.7, 0.6], [0.2, 0.8],
+    ], dtype=np.float64)
+    dx, dy = 0.1, 0.05
+    shifted = base + np.array([dx, dy])
+
+    t = align_n_pts(base, shifted)
+    assert t.scale == pytest.approx(1.0, abs=1e-6)
+    assert t.angle == pytest.approx(0.0, abs=1e-6)
+    assert t.dx == pytest.approx(dx, abs=1e-6)
+    assert t.dy == pytest.approx(dy, abs=1e-6)
+
+    transformed = apply_transform(base, t)
+    np.testing.assert_allclose(transformed, shifted, atol=1e-6)
+
+
+def test_n_pts_combined_9_pairs() -> None:
+    """Scale + rotation + translation with 9 point pairs.
+
+    Validates that the least-squares solution over 9 pairs recovers
+    the original transform within numerical tolerance.
+    """
+    base = np.array([
+        [0.1, 0.2], [0.3, 0.4], [0.5, 0.1],
+        [0.7, 0.6], [0.2, 0.8], [0.4, 0.3],
+        [0.6, 0.5], [0.8, 0.2], [0.1, 0.5],
+    ], dtype=np.float64)
+    s = 1.5
+    angle = math.radians(20)
+    dx, dy = 0.05, 0.1
+    c, s_ = math.cos(angle), math.sin(angle)
+    R = np.array([[c, -s_], [s_, c]])
+    transformed_pts = s * (base @ R.T) + np.array([dx, dy])
+
+    t = align_n_pts(base, transformed_pts)
+    assert t.scale == pytest.approx(s, abs=1e-3)
+    assert t.angle == pytest.approx(angle, abs=1e-3)
+    assert t.dx == pytest.approx(dx, abs=1e-3)
+    assert t.dy == pytest.approx(dy, abs=1e-3)
+
+
+def test_n_pts_noisy_inliers() -> None:
+    """With noisy inliers, least-squares over 6 pairs is more robust than 3."""
+    base = np.array([
+        [0.1, 0.2], [0.3, 0.4], [0.5, 0.1],
+        [0.7, 0.6], [0.2, 0.8], [0.9, 0.3],
+    ], dtype=np.float64)
+    s = 1.2
+    angle = math.radians(15)
+    dx, dy = 0.03, 0.07
+    c, s_ = math.cos(angle), math.sin(angle)
+    R = np.array([[c, -s_], [s_, c]])
+
+    # Add Gaussian noise to the candidate points
+    rng = np.random.default_rng(42)
+    noise = rng.normal(0, 0.005, size=base.shape)
+    cand_noisy = s * (base @ R.T) + np.array([dx, dy]) + noise
+
+    t = align_n_pts(base, cand_noisy)
+    assert t.scale == pytest.approx(s, abs=0.05)
+    assert t.angle == pytest.approx(angle, abs=0.05)
+    assert t.dx == pytest.approx(dx, abs=0.02)
+    assert t.dy == pytest.approx(dy, abs=0.02)
+
+
+def test_n_pts_too_few_points() -> None:
+    """Fewer than 3 points raises ValueError."""
+    with pytest.raises(ValueError, match="at least 3"):
+        align_n_pts(
+            np.array([[0.2, 0.2], [0.3, 0.5]], dtype=np.float64),
+            np.array([[0.2, 0.2], [0.3, 0.5]], dtype=np.float64),
+        )
+
+
+def test_n_pts_shape_mismatch() -> None:
+    """Mismatched shapes between probe and cand raise ValueError."""
+    with pytest.raises(ValueError, match="Shape mismatch"):
+        align_n_pts(
+            np.array([[0.2, 0.2], [0.3, 0.5], [0.5, 0.3]], dtype=np.float64),
+            np.array([[0.2, 0.2], [0.3, 0.5]], dtype=np.float64),
+        )
+
+
+def test_align_3pts_delegates_to_n_pts() -> None:
+    """align_3pts returns the same result as align_n_pts with 3 pairs."""
+    triangle = np.array([[0.2, 0.2], [0.3, 0.5], [0.5, 0.3]], dtype=np.float64)
+    s = 1.3
+    angle = math.radians(10)
+    c, s_ = math.cos(angle), math.sin(angle)
+    R = np.array([[c, -s_], [s_, c]])
+    cand = s * (triangle @ R.T) + np.array([0.02, 0.04])
+
+    t3 = align_3pts(triangle, cand)
+    tn = align_n_pts(triangle, cand)
+
+    assert t3.scale == pytest.approx(tn.scale, abs=1e-9)
+    assert t3.angle == pytest.approx(tn.angle, abs=1e-9)
+    assert t3.dx == pytest.approx(tn.dx, abs=1e-9)
+    assert t3.dy == pytest.approx(tn.dy, abs=1e-9)
