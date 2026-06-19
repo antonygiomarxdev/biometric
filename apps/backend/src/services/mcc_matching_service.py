@@ -587,14 +587,26 @@ class MccMatchingService:
 
         # OF pre-filter (Phase 26) — drop hits whose enrolled OF is
         # inconsistent with the probe before running growing algorithm.
+        # The threshold is configurable: the default (0.50) was tuned
+        # for non-altered prints, but SOCOFing Altered-Easy/CR raises
+        # the OF RMS to 0.80-0.95 (rotation changes the field). Use
+        # MCC_OF_THRESHOLD=0.95 (or higher) when matching altered
+        # prints, or MCC_OF_THRESHOLD=0.50 for clean prints.
         if enrolled_ofs is not None:
             try:
+                import os as _os
                 from src.processing.of_filter import OFFilter
                 from src.processing.of_similarity import OFSimilarity
 
+                of_threshold = float(_os.getenv("MCC_OF_THRESHOLD", "0.50"))
                 probe_of = OFSimilarity.build(enhanced, block_size=16)
-                filter_ = OFFilter()
+                filter_ = OFFilter(threshold=of_threshold)
+                before_n = len(all_hits)
                 all_hits = filter_.filter_hits(probe_of, all_hits, enrolled_ofs)
+                logger.warning(
+                    "OF pre-filter: %d -> %d hits (threshold=%.2f)",
+                    before_n, len(all_hits), of_threshold,
+                )
             except Exception as exc:
                 logger.warning("OF filter failed (continuing without): %s", exc)
 
@@ -765,16 +777,16 @@ class MccMatchingService:
             denom = max(query_cylinder_count, 1)
             aligned_score = aligned_similarity / denom
 
-            # Combined score: alignment times similarity.
-            # A genuine match has BOTH strong aligned similarity AND a tall
-            # Hough peak (because many probe cylinders agree on a single
-            # transformation). A false positive has high similarity but
-            # votes scattered (low peak). A cropped latent has fewer
-            # cylinders, so peak is naturally lower — but for the genuine
-            # match it still dominates over a false-positive candidate
-            # with peak=1.
-            peak_factor = peak_votes / max(peak_votes + query_cylinder_count, 1)
-            score = aligned_score * peak_factor
+            # NIST-style score for latent matching: count of aligned
+            # cylinder matches (``len(working_hits)``) normalised to
+            # 0-1 by a saturation point. This matches what the user
+            # sees in the UI ("12 match") and aligns with NBIS
+            # Bozorth3's convention of reporting the size of the
+            # largest connected component. Using ``peak_votes`` (Hough
+            # bin votes) instead would give a different number than
+            # what the UI shows, which is confusing.
+            confidence_saturation = config.matching.confidence_saturation
+            score = min(1.0, len(working_hits) / confidence_saturation)
             contributing = sorted({h.fingerprint_id for h in top_hits})
 
             # Build match_trace in probe-cyl-index order for deterministic UI
@@ -813,7 +825,6 @@ class MccMatchingService:
                 person_id=person_id,
                 peak_votes=peak_votes,
                 aligned_score=round(aligned_score, 4),
-                peak_factor=round(peak_factor, 4),
                 score=round(score, 4),
                 hits=len(working_hits),
             )

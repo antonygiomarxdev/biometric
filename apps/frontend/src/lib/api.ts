@@ -91,22 +91,18 @@ export interface MinutiaPoint {
   type: number; // 0=termination, 1=bifurcation, 2=unknown
 }
 
-/** A single supporting pair from pair-based matching (Phase 24). */
+/** A single match from the search (one cylinder on each side). */
 export interface SupportingPair {
   probe_mi_idx: number;
-  probe_mj_idx: number;
   candidate_mi_x: number;
   candidate_mi_y: number;
   candidate_mi_angle: number;
-  candidate_mj_x: number;
-  candidate_mj_y: number;
-  candidate_mj_angle: number;
   candidate_fingerprint_id: string;
   candidate_capture_id: string;
   similarity: number;
 }
 
-/** A single ranked match candidate from pair-based matching (Phase 24). */
+/** A single ranked match candidate. */
 export interface MatchCandidate {
   person_id: string;
   score: number;
@@ -115,7 +111,7 @@ export interface MatchCandidate {
     dx: number;
     dy: number;
     dtheta: number;
-  };
+  } | null;
   supporting_pairs: SupportingPair[];
   num_probe_pairs: number;
   full_name: string | null;

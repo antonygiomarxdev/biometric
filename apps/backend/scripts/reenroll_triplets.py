@@ -131,7 +131,7 @@ async def _reenroll() -> None:
         image_bytes = img_path.read_bytes()
 
         loop = asyncio.get_running_loop()
-        num_min, num_trip = await loop.run_in_executor(
+        num_min, num_trip, of_result = await loop.run_in_executor(
             None,
             mcc_service.enroll_triplets,
             capture_id,
@@ -141,10 +141,40 @@ async def _reenroll() -> None:
         )
         total_minutiae += num_min
         total_triplets += num_trip
-        logger.info(
-            "  %s → %d minutiae, %d triplets (total: %d triplets)",
-            img_path.name, num_min, num_trip, total_triplets,
-        )
+
+        # Persist OF for the pre-filter (Phase 26). Without this, the
+        # search endpoint runs the growth algorithm without the OF
+        # filter, admitting spurious geometric matches.
+        if of_result is not None:
+            try:
+                from src.db.of_registry import OFRegistry
+                from src.processing.of_similarity import OFSimilarity
+                import numpy as np
+
+                ori_raw = of_result["ori"]
+                coh_raw = of_result["coh"]
+                ori_arr = np.array(list(ori_raw), dtype=np.float32)  # type: ignore[arg-type]
+                coh_arr = np.array(list(coh_raw), dtype=np.float32)  # type: ignore[arg-type]
+                of_obj = OFSimilarity(
+                    ori_arr, coh_arr,
+                    block_size=int(of_result["block_size"]),  # type: ignore[arg-type]
+                )
+                registry = OFRegistry(session)
+                await registry.save(str(fp.id), of_obj)
+                logger.info(
+                    "  %s → %d minutiae, %d triplets, OF persisted",
+                    img_path.name, num_min, num_trip,
+                )
+            except Exception as of_exc:
+                logger.warning(
+                    "  %s → OF persistence failed: %s",
+                    img_path.name, of_exc,
+                )
+        else:
+            logger.info(
+                "  %s → %d minutiae, %d triplets (no OF computed)",
+                img_path.name, num_min, num_trip,
+            )
 
     logger.info(
         "\nDone. Enrolled %d images → %d total minutiae, %d total triplets",
