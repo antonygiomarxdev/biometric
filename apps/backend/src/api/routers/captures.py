@@ -105,12 +105,10 @@ async def upload_capture(
 
 @router.get(
     API_PREFIX + "/captures/{capture_id}/image",
-    summary="Get the normalized fingerprint image from MinIO",
+    summary="Get the skeleton fingerprint image from MinIO",
     description=(
-        "Returns the normalized fingerprint image as image/png. "
-        "The image is stored in MinIO at enrollment. "
-        "Used by the comparison view in /analisis to display the candidate's "
-        "enrolled image side-by-side with the probe."
+        "Returns the thinned binary skeleton (256×256) as image/png. "
+        "Stored in MinIO at enrollment — single source of truth."
     ),
     responses={
         200: {"content": {"image/png": {}}, "description": "PNG bytes from MinIO"},
@@ -121,12 +119,13 @@ async def get_capture_image(
     capture_id: uuid.UUID,
     session: AsyncSession = Depends(get_async_db),
 ) -> Response:
-    """Serve the fingerprint image from MinIO."""
+    """Serve the skeleton fingerprint image from MinIO."""
     from src.services.fingerprint_storage import FingerprintStorage
 
     c = await FingerprintCaptureRepository.get_by_id(session, capture_id)
     if c is None:
         raise HTTPException(status_code=404, detail="Capture not found")
+
     png_bytes = FingerprintStorage.get_bytes(str(c.id))
     if png_bytes is None:
         raise HTTPException(

@@ -20,7 +20,6 @@ from sqlalchemy import select
 
 from src.api.dependencies import get_async_db, get_mcc_matching_service
 from src.api.prefix import API_PREFIX
-from src.core.config import config
 from src.db.models import Person
 from src.dev.logger import dev_log
 
@@ -134,6 +133,36 @@ async def search_latent(
         else:
             confidence = "baja"
 
+        # Find the most frequent capture_id from supporting_pairs
+        capture_ids: dict[str, int] = {}
+        for sp in supporting_pairs:
+            cid = str(sp.get("candidate_capture_id", ""))
+            capture_ids[cid] = capture_ids.get(cid, 0) + 1
+        best_capture_id = max(capture_ids, key=lambda k: capture_ids[k]) if capture_ids else None
+
+        candidate_minutiae: list[dict[str, float | int]] = []
+        if best_capture_id:
+            try:
+                cap_uuid = UUID(best_capture_id)
+                cap_entity = await session.get(FingerprintCapture, cap_uuid)
+                if cap_entity is not None:
+                    from src.db.repositories.capture_minutia_repository import (
+                        CaptureMinutiaRepository,
+                    )
+                    rows = await CaptureMinutiaRepository.list_for_capture(session, cap_uuid)
+                    # rows have x, y as normalized (0-1); convert to 256x256 pixel coords
+                    candidate_minutiae = [
+                        {
+                            "x": round(float(r.x) * 256),
+                            "y": round(float(r.y) * 256),
+                            "angle": float(r.angle),
+                            "type": int(r.type),
+                        }
+                        for r in rows
+                    ]
+            except (ValueError, TypeError):
+                pass
+
         candidates.append({
             "person_id": pid,
             "score": score,
@@ -143,6 +172,8 @@ async def search_latent(
             "full_name": full_name,
             "external_id": external_id,
             "confidence": confidence,
+            "capture_id": best_capture_id,
+            "candidate_minutiae": candidate_minutiae,
         })
 
     dev_log(

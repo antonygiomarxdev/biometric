@@ -102,31 +102,23 @@ class MccMatchingService:
         """Run the quality pipeline for preview purposes (no DB / no Qdrant I/O).
 
         Returns a dict with:
-          - ``minutiae``: list of dicts with x, y, angle, type
-          - ``enhanced_image``: the Gabor-filtered image as a numpy array
-            (350px-tall, uint8). Caller serializes to base64 PNG.
+          - ``minutiae``: list of dicts with x, y (256×256 pixel), angle, type
+          - ``skeleton``: the thinned binary skeleton as a 256×256 numpy array
+            (uint8). Caller serializes to base64 PNG.
         """
         result = self._run_quality_pipeline(image_bytes)
+        skeleton = result["skeleton"]
+        norm_minutiae = result["minutiae"]
         minutiae: list[dict[str, Any]] = [
-            {"x": int(m["x"]), "y": int(m["y"]), "angle": float(m["angle"]), "type": int(m["type"])}
-            for m in result["minutiae"]
+            {
+                "x": round(float(m["x"]) * 256),
+                "y": round(float(m["y"]) * 256),
+                "angle": float(m["angle"]),
+                "type": int(m["type"]),
+            }
+            for m in norm_minutiae
         ]
-        return {"minutiae": minutiae, "enhanced_image": result["enhanced_image"]}
-
-    def preview(self, image_bytes: bytes) -> dict[str, Any]:
-        """Run the quality pipeline for live preview purposes.
-
-        Returns a dict with:
-          - ``minutiae``: list of dicts with x, y, angle, type
-          - ``enhanced_image``: the Gabor-filtered image as a numpy array
-            (350px-tall, uint8). Caller serializes to base64 PNG.
-        """
-        result = self._run_quality_pipeline(image_bytes)
-        minutiae: list[dict[str, Any]] = [
-            {"x": int(m["x"]), "y": int(m["y"]), "angle": float(m["angle"]), "type": int(m["type"])}
-            for m in result["minutiae"]
-        ]
-        return {"minutiae": minutiae, "enhanced_image": result["enhanced_image"]}
+        return {"minutiae": minutiae, "skeleton": skeleton}
 
     def preview_thinning(self, image_bytes: bytes) -> dict[str, Any]:
         """Thinning + Crossing Number pipeline for preview.
@@ -262,19 +254,18 @@ class MccMatchingService:
         capture_id: str,
         fingerprint_id: str,
         person_id: str,
-        image_bytes: bytes,
+        norm_minutiae: list[dict],
     ) -> int:
-        """Quality pipeline → pair extraction → persist in Qdrant.
+        """Pair extraction from pre-computed minutiae → persist in Qdrant.
 
-        Returns the number of pairs inserted.
+        ``norm_minutiae`` must be the normalised (0-1) minutiae list from
+        the quality pipeline.  The caller (``FingerprintEnrollmentService``)
+        already ran the pipeline, so we avoid re-running it.
         """
         import time as _time
         from src.processing.pair_extractor import extract_pairs
 
         t0 = _time.monotonic()
-        result = self._run_quality_pipeline(image_bytes)
-        norm_minutiae = result["minutiae"]
-        t_pipeline = _time.monotonic()
 
         pairs = extract_pairs(norm_minutiae, min_quality=config.matching.min_pair_quality)
         t_pairs = _time.monotonic()
@@ -294,8 +285,7 @@ class MccMatchingService:
             minutiae=len(norm_minutiae),
             pairs=len(pairs),
             inserted=num_pairs,
-            pipeline_ms=round((t_pipeline - t0) * 1000, 1),
-            pairs_ms=round((t_pairs - t_pipeline) * 1000, 1),
+            extract_ms=round((t_pairs - t0) * 1000, 1),
             qdrant_ms=round((t_qdrant - t_pairs) * 1000, 1),
         )
         logger.info(
@@ -383,13 +373,13 @@ class MccMatchingService:
         t0 = _time.monotonic()
         result = self._run_quality_pipeline(image_bytes)
         norm_minutiae = result["minutiae"]
-        enhanced = result["enhanced_image"]
+        skeleton = result["skeleton"]
         t_pipeline = _time.monotonic()
 
         probe_pairs = extract_pairs(norm_minutiae, min_quality=config.matching.min_pair_quality)
         t_pairs = _time.monotonic()
 
-        pixel_minutiae = self._norm_to_pixel_coords(norm_minutiae, enhanced.shape)
+        pixel_minutiae = self._norm_to_pixel_coords(norm_minutiae, skeleton.shape)
 
         if not probe_pairs:
             return {"candidates": [], "probe_minutiae": pixel_minutiae}
@@ -433,20 +423,9 @@ class MccMatchingService:
             link_ms=round((t_link - t_link_start) * 1000, 1),
         )
 
-        # Convert candidate coordinates from normalized (0-1) to pixel
-        # coords of the probe's enhanced image. Both probe and candidate
-        # were normalized to 256x256, so the inverse transform using the
-        # probe's dimensions is approximately correct for visualization.
-        enhanced_shape = enhanced.shape
         def _to_pixel(nx: float, ny: float) -> tuple[int, int]:
-            h_enh, w_enh = enhanced_shape[:2]
-            sp = 256 / max(h_enh, w_enh)
-            new_w = int(round(w_enh * sp))
-            new_h = int(round(h_enh * sp))
-            x_off = (256 - new_w) // 2
-            y_off = (256 - new_h) // 2
-            px = int(round((nx * 256 - x_off) / sp))
-            py = int(round((ny * 256 - y_off) / sp))
+            px = int(round(nx * 256))
+            py = int(round(ny * 256))
             return px, py
 
         probe_pair_by_idx = {i: p for i, p in enumerate(probe_pairs)}

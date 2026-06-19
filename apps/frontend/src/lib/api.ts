@@ -91,14 +91,31 @@ export interface MinutiaPoint {
   type: number; // 0=termination, 1=bifurcation, 2=unknown
 }
 
-/** A single match from the search (one cylinder on each side). */
+/** A single match from the search (one pair on each side). */
 export interface SupportingPair {
   probe_mi_idx: number;
+  probe_mj_idx: number;
   candidate_mi_x: number;
   candidate_mi_y: number;
   candidate_mi_angle: number;
+  candidate_mj_x: number;
+  candidate_mj_y: number;
+  candidate_mj_angle: number;
   candidate_fingerprint_id: string;
   candidate_capture_id: string;
+  similarity: number;
+}
+
+/**
+ * One matched minutia pair used by the overlay rendering hook.
+ * Derived from SupportingPair + probeMinutiae at render time.
+ */
+export interface MatchTraceEntry {
+  probe_mi_idx: number;
+  probe_x: number;
+  probe_y: number;
+  candidate_x: number;
+  candidate_y: number;
   similarity: number;
 }
 
@@ -116,6 +133,9 @@ export interface MatchCandidate {
   num_probe_pairs: number;
   full_name: string | null;
   external_id: string | null;
+  confidence: string;
+  capture_id: string | null;
+  candidate_minutiae: MinutiaPoint[];
 }
 
 /** Response of POST /api/v1/matching/search (Phase 24). */
@@ -367,7 +387,7 @@ export function searchMatching(
   );
 }
 
-/** Fetch the Gabor-enhanced PNG bytes for an enrolled capture (Phase 23).
+/** Fetch the skeleton fingerprint image for an enrolled capture.
  *  Returns a blob URL ready to bind to <img src=...>. */
 export async function fetchCaptureImage(captureId: string): Promise<string> {
   const res = await fetch(`${API_BASE}/api/v1/captures/${captureId}/image`);

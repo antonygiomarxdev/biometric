@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -22,6 +22,8 @@ import {
   listEvidence,
   searchMatching,
   createDecision,
+  fetchCaptureImage,
+  getMinutiaeForImage,
 } from "@/lib/api";
 import type { EvidenceResponse, MatchCandidate, MinutiaPoint } from "@/lib/api";
 import { CandidateCard } from "@/components/fingerprint/CandidateCard";
@@ -85,13 +87,27 @@ export default function ComparisonView() {
 
   // State
   const [latentPreview, setLatentPreview] = useState<string | null>(null);
+  const [probeSkeletonUrl, setProbeSkeletonUrl] = useState<string | null>(null);
   const [latentFile, setLatentFile] = useState<File | null>(null);
   const [candidates, setCandidates] = useState<MatchCandidate[]>([]);
   const [selectedCandidate, setSelectedCandidate] = useState<MatchCandidate | null>(null);
+  const [candidateImageUrl, setCandidateImageUrl] = useState<string | null>(null);
   const [probeMinutiae, setProbeMinutiae] = useState<MinutiaPoint[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedVerdict, setSubmittedVerdict] = useState<Verdict | null>(null);
+
+  useEffect(() => {
+    if (!selectedCandidate?.capture_id) {
+      setCandidateImageUrl(null);
+      return;
+    }
+    let cancelled = false;
+    fetchCaptureImage(selectedCandidate.capture_id)
+      .then((url) => { if (!cancelled) setCandidateImageUrl(url); })
+      .catch(() => { if (!cancelled) setCandidateImageUrl(null); });
+    return () => { cancelled = true; };
+  }, [selectedCandidate?.capture_id]);
 
   // Fetch case details
   const {
@@ -148,9 +164,17 @@ export default function ComparisonView() {
         setCandidates([]);
         setSelectedCandidate(null);
         setProbeMinutiae([]);
+        setProbeSkeletonUrl(null);
         setSubmittedVerdict(null);
       };
       reader.readAsDataURL(file);
+
+      getMinutiaeForImage(file)
+        .then((preview) => {
+          const skeletonUrl = `data:image/png;base64,${preview.processed_image}`;
+          setProbeSkeletonUrl(skeletonUrl);
+        })
+        .catch(() => {});
     },
     [addToast],
   );
@@ -457,9 +481,9 @@ export default function ComparisonView() {
         {selectedCandidate && (
           <CandidateDetailPanel
             candidate={selectedCandidate}
-            probeImageUrl={latentPreview ?? ""}
+            probeImageUrl={probeSkeletonUrl ?? latentPreview ?? ""}
             probeMinutiae={probeMinutiae}
-            candidateImageUrl={null}
+            candidateImageUrl={candidateImageUrl}
             onDismiss={() => setSelectedCandidate(null)}
           />
         )}

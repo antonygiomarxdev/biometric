@@ -134,21 +134,21 @@ async def preview_fingerprint(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     minutiae_dicts: list[dict[str, Any]] = result["minutiae"]
-    enhanced = result["enhanced_image"]
-    if enhanced is None or enhanced.size == 0:
-        raise HTTPException(status_code=400, detail="Pipeline produced no enhanced image")
+    skeleton = result["skeleton"]
+    if skeleton is None or skeleton.size == 0:
+        raise HTTPException(status_code=400, detail="Pipeline produced no skeleton")
 
-    ok, buf = cv2.imencode(".png", enhanced)
+    ok, buf = cv2.imencode(".png", skeleton)
     if not ok:
-        raise HTTPException(status_code=400, detail="Failed to encode processed image")
+        raise HTTPException(status_code=400, detail="Failed to encode skeleton")
     b64_png = base64.b64encode(buf.tobytes()).decode("ascii")
 
-    h, w = enhanced.shape[:2]
+    h, w = skeleton.shape[:2]
     return FingerprintPreviewResponse(
         processed_image=b64_png,
         minutiae=[MinutiaPoint(**p) for p in minutiae_dicts],
         terminations=0,
         bifurcations=0,
         image_shape=[int(h), int(w)],
-        image_dtype=str(enhanced.dtype),
+        image_dtype=str(skeleton.dtype),
     )

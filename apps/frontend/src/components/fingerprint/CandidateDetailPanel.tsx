@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { MatchCandidate, MinutiaPoint } from "@/lib/api";
+import { MatchOverlay } from "@/components/fingerprint/MatchOverlay";
 
 interface CandidateDetailPanelProps {
   candidate: MatchCandidate;
@@ -80,7 +81,16 @@ export function CandidateDetailPanel({
         </Button>
       </CardHeader>
       <CardContent className="space-y-6">
-        {!candidateImageUrl && (
+        {candidateImageUrl && candidate.candidate_minutiae.length > 0 ? (
+          <MatchOverlay
+            probeImageUrl={probeImageUrl}
+            probeMinutiae={probeMinutiae}
+            candidateImageUrl={candidateImageUrl}
+            candidateMinutiae={candidate.candidate_minutiae}
+            supportingPairs={candidate.supporting_pairs}
+            candidateLabel={candidateLabel}
+          />
+        ) : (
           <Card className="border-border/40 bg-muted/10">
             <CardContent className="flex flex-col items-center justify-center py-8 text-muted-foreground">
               <Search className="w-10 h-10 mb-3 opacity-30" />

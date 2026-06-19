@@ -353,7 +353,7 @@ export default function AnalisisPage() {
 
       if (selectedCandidate) {
         const matched: MinutiaPoint[] = selectedCandidate.supporting_pairs.map(
-          (e) => ({ x: e.candidate_mi_x * img.naturalWidth, y: e.candidate_mi_y * img.naturalHeight, angle: e.candidate_mi_angle, type: 2 }),
+          (e) => ({ x: e.candidate_mi_x, y: e.candidate_mi_y, angle: e.candidate_mi_angle, type: 2 }),
         );
         for (const m of matched) {
           drawDot(ctx, m.x, m.y, 7, PALETTE_HIT, PALETTE_HIT_RING, 2.5);

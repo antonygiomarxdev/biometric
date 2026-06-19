@@ -142,8 +142,8 @@ export function useMatchCanvas(args: UseMatchCanvasArgs): UseMatchCanvasResult {
     const probeMatched = new Set<number>();
     const probePairColors = new Map<number, string>();
     args.matchTrace.forEach((entry, pairIndex) => {
-      probeMatched.add(entry.probe_cylinder_index);
-      probePairColors.set(entry.probe_cylinder_index, colorForIndex(pairIndex));
+      probeMatched.add(entry.probe_mi_idx);
+      probePairColors.set(entry.probe_mi_idx, colorForIndex(pairIndex));
     });
 
     let cancelled = false;

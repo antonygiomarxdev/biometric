@@ -1,45 +1,65 @@
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 import { Fingerprint } from "lucide-react";
-import { useMatchCanvas, type UseMatchCanvasArgs } from "@/hooks/useMatchCanvas";
+import { useMatchCanvas } from "@/hooks/useMatchCanvas";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import type { MinutiaPoint, SupportingPair, MatchTraceEntry } from "@/lib/api";
 
-interface MatchOverlayProps extends Omit<UseMatchCanvasArgs, "containerRef"> {
-  /** Display label for the candidate canvas caption (e.g. external_id or full_name). */
+interface MatchOverlayProps {
+  probeImageUrl: string;
+  probeMinutiae: MinutiaPoint[];
+  candidateImageUrl: string;
+  candidateMinutiae: MinutiaPoint[];
+  supportingPairs: SupportingPair[];
   candidateLabel: string;
+}
+
+function buildTrace(
+  probeMinutiae: MinutiaPoint[],
+  supportingPairs: SupportingPair[],
+): MatchTraceEntry[] {
+  return supportingPairs.map((sp) => {
+    const probeP = probeMinutiae[sp.probe_mi_idx];
+    return {
+      probe_mi_idx: sp.probe_mi_idx,
+      probe_x: probeP?.x ?? 0,
+      probe_y: probeP?.y ?? 0,
+      candidate_x: sp.candidate_mi_x,
+      candidate_y: sp.candidate_mi_y,
+      similarity: sp.similarity,
+    };
+  });
 }
 
 export function MatchOverlay(props: MatchOverlayProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const matchTrace = useMemo(
+    () => buildTrace(props.probeMinutiae, props.supportingPairs),
+    [props.probeMinutiae, props.supportingPairs],
+  );
+
   const { probeCanvasRef, candidateCanvasRef, svgRef } = useMatchCanvas({
     probeImageUrl: props.probeImageUrl,
     probeMinutiae: props.probeMinutiae,
     candidateImageUrl: props.candidateImageUrl,
     candidateMinutiae: props.candidateMinutiae,
-    matchTrace: props.matchTrace,
+    matchTrace,
     containerRef,
   });
 
-  const matchedCount = props.matchTrace.length;
+  const matchedCount = matchTrace.length;
   const avgSimilarity =
     matchedCount > 0
-      ? props.matchTrace.reduce((s, e) => s + e.similarity, 0) / matchedCount
+      ? matchTrace.reduce((s, e) => s + e.similarity, 0) / matchedCount
       : 0;
   const probeMinCount = props.probeMinutiae.length;
 
   return (
     <Card className="border-border/60 bg-card/50 overflow-hidden">
       <CardContent className="p-0">
-        <div
-          ref={containerRef}
-          className="relative"
-        >
-          {/* Stats badge — top center, between the two canvas captions */}
+        <div ref={containerRef} className="relative">
           <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
-            <Badge
-              variant="secondary"
-              className="font-mono text-[10px] gap-2"
-            >
+            <Badge variant="secondary" className="font-mono text-[10px] gap-2">
               <span>Pares matched: {matchedCount}</span>
               {matchedCount > 0 && (
                 <>
@@ -50,7 +70,6 @@ export function MatchOverlay(props: MatchOverlayProps) {
             </Badge>
           </div>
 
-          {/* Two canvases side by side */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4">
             <div>
               <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">
@@ -78,20 +97,18 @@ export function MatchOverlay(props: MatchOverlayProps) {
             </div>
           </div>
 
-          {/* SVG line overlay layer — pointer-events-none so it doesn't block future click handlers */}
           <svg
             ref={svgRef}
             aria-hidden="true"
             className="absolute inset-0 w-full h-full pointer-events-none"
           />
 
-          {/* Empty state when no trace */}
           {matchedCount === 0 && (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground pointer-events-none">
               <Fingerprint className="w-12 h-12 mb-3 opacity-20" />
-              <p className="text-sm font-medium">Sin traza de cilindros</p>
+              <p className="text-sm font-medium">Sin traza de pares</p>
               <p className="text-xs mt-1">
-                El candidato no aportó cilindros coincidentes.
+                El candidato no aportó pares coincidentes.
               </p>
             </div>
           )}

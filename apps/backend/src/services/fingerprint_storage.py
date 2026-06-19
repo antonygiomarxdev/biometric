@@ -1,9 +1,8 @@
-"""Fingerprint storage service — MinIO wrapper for normalized PNGs.
+"""Fingerprint storage service — MinIO wrapper for skeleton PNGs.
 
-At enrollment, the normalized 256×256 Gabor-enhanced image is uploaded
-to MinIO at ``captures/{capture_id}.png`` inside the configured bucket.
-The old ``FingerprintCapture.enhanced_image`` bytea column is gone;
-this is the single source of truth for fingerprint images.
+At enrollment, the thinned binary skeleton (256×256) is uploaded to MinIO
+at ``captures/{capture_id}.png`` inside the configured bucket.  This is
+the single image source of truth — no separate enhanced/normalised copy.
 """
 from __future__ import annotations
 
@@ -17,7 +16,7 @@ OBJECT_PREFIX = "captures"
 
 
 class FingerprintStorage:
-    """MinIO-backed storage for fingerprint images."""
+    """MinIO-backed storage for fingerprint skeleton images."""
 
     @staticmethod
     def _key(capture_id: str) -> str:

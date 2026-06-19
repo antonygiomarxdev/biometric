@@ -59,7 +59,7 @@ def extract(image_path: str) -> None:
         mcc = MccMatchingService()
         result = mcc.preview(image_bytes)
         click.echo(f"\nOK Minutiae extracted: {len(result['minutiae'])}")
-        click.echo(f"  Enhanced image shape: {result['enhanced_image'].shape}")
+        click.echo(f"  Skeleton shape: {result['skeleton'].shape}")
     except Exception as e:
         click.echo(f"ERROR: {e}", err=True)
         sys.exit(1)

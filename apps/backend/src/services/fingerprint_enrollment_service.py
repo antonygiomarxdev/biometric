@@ -78,21 +78,21 @@ class FingerprintEnrollmentService:
                 log.warning("Quality pipeline failed during enroll: %s", exc)
 
         minutiae_list: list[dict] = []
-        normalized_png: bytes | None = None
+        skeleton_png: bytes | None = None
         if pipeline:
-            norm_img = pipeline.get("normalized")
+            skel_img = pipeline.get("skeleton")
             minutiae_list = pipeline.get("minutiae", [])
-            if norm_img is not None:
+            if skel_img is not None:
                 import cv2
-                ok, buf = cv2.imencode(".png", norm_img)
+                ok, buf = cv2.imencode(".png", skel_img)
                 if ok:
-                    normalized_png = buf.tobytes()
+                    skeleton_png = buf.tobytes()
 
         dev_log(
             "enroll.pipeline",
             fingerprint_id=str(fingerprint_id),
             minutiae=len(minutiae_list),
-            has_normalized=normalized_png is not None,
+            has_skeleton=skeleton_png is not None,
             pipeline_ms=round((_time.monotonic() - t0) * 1000, 1),
         )
 
@@ -109,10 +109,10 @@ class FingerprintEnrollmentService:
             notes=notes,
         )
 
-        # Upload to MinIO
+        # Upload skeleton to MinIO
         object_key: str | None = None
-        if normalized_png is not None:
-            object_key = FingerprintStorage.upload(str(capture.id), normalized_png)
+        if skeleton_png is not None:
+            object_key = FingerprintStorage.upload(str(capture.id), skeleton_png)
             if object_key is not None:
                 await FingerprintCaptureRepository.update(
                     self._session, capture.id,
@@ -140,7 +140,7 @@ class FingerprintEnrollmentService:
         )
         await FingerprintRepository.increment_capture_count(self._session, fingerprint_id)
 
-        # Index pairs in Qdrant
+        # Index pairs in Qdrant (reuses pre-computed minutiae, no 2nd pipeline run)
         if self._mcc_service is not None and minutiae_list:
             try:
                 loop = asyncio.get_running_loop()
@@ -149,8 +149,8 @@ class FingerprintEnrollmentService:
                     self._mcc_service.enroll_pairs,
                     str(capture.id),
                     str(fp.id),
-                    str(fp.person_id),  # UUID (stable, matches benchmark)
-                    image_bytes,
+                    str(fp.person_id),
+                    minutiae_list,
                 )
                 log.info("Pairs indexed %d for capture %s", n, capture.id)
             except Exception as exc:
