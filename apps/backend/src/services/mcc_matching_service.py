@@ -260,7 +260,7 @@ class MccMatchingService:
         norm_minutiae = result["minutiae"]
         t_pipeline = _time.monotonic()
 
-        pairs = extract_pairs(norm_minutiae)
+        pairs = extract_pairs(norm_minutiae, min_quality=config.matching.min_pair_quality)
         t_pairs = _time.monotonic()
 
         num_pairs = self._pair_repo.bulk_insert_pairs(
@@ -304,9 +304,62 @@ class MccMatchingService:
         Bozorth3 linking groups geometrically compatible matches per
         candidate person and scores by largest connected component size.
 
+        Supports multi-orientation probing: if the env var
+        ``MCC_MULTI_ORIENT`` is set, the probe is matched at 0°, 30°, 60°,
+        and 90° rotations, and the best result is returned.
+
         Returns a dict with ``candidates`` and ``probe_minutiae`` keys
         matching the frontend's ``SearchByPairsResult`` shape.
         """
+        import os
+        from concurrent.futures import ThreadPoolExecutor
+        import time as _time
+
+        # Multi-orientation probing: try 4 rotations in parallel
+        # Each orientation is independent, so ThreadPool gives ~4x speedup.
+        multi_orient = os.getenv("MCC_MULTI_ORIENT", "0") == "1"
+        angles = [0, 30, 60, 90] if multi_orient else [0]
+
+        def _rotated_image(angle: int) -> bytes:
+            """Return image bytes rotated by *angle* degrees."""
+            if angle == 0:
+                return image_bytes
+            import cv2
+            import numpy as np
+            nparr = np.frombuffer(image_bytes, np.uint8)
+            src = cv2.imdecode(nparr, cv2.IMREAD_GRAYSCALE)
+            h, w = src.shape[:2]
+            m = cv2.getRotationMatrix2D((w / 2, h / 2), angle, 1.0)
+            rotated = cv2.warpAffine(src, m, (w, h), borderValue=0)
+            ok, buf = cv2.imencode(".bmp", rotated)
+            return buf.tobytes() if ok else image_bytes
+
+        images = {angle: _rotated_image(angle) for angle in angles}
+        with ThreadPoolExecutor(max_workers=len(angles)) as pool:
+            results = list(pool.map(
+                lambda a: self._search_one_orient(images[a], top_k, knn_per_pair),
+                angles,
+            ))
+
+        best_result: SearchByPairsResult | None = None
+        best_score = -1.0
+        for result in results:
+            if result["candidates"]:
+                top_score = result["candidates"][0]["score"]
+                if top_score > best_score:
+                    best_result = result
+                    best_score = top_score
+
+        final = best_result if best_result is not None else results[0]
+        return final  # type: ignore[return-value]
+
+    def _search_one_orient(
+        self,
+        image_bytes: bytes,
+        top_k: int = 10,
+        knn_per_pair: int = 10,
+    ) -> SearchByPairsResult:
+        """Single-orientation search (internal, used by multi-orientation wrapper)."""
         import time as _time
         from src.processing.bozorth3_linker import Bozorth3Linker
         from src.processing.pair_extractor import extract_pairs, pair_to_vector
@@ -317,7 +370,7 @@ class MccMatchingService:
         enhanced = result["enhanced_image"]
         t_pipeline = _time.monotonic()
 
-        probe_pairs = extract_pairs(norm_minutiae)
+        probe_pairs = extract_pairs(norm_minutiae, min_quality=config.matching.min_pair_quality)
         t_pairs = _time.monotonic()
 
         pixel_minutiae = self._norm_to_pixel_coords(norm_minutiae, enhanced.shape)

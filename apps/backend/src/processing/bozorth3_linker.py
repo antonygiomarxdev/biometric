@@ -96,6 +96,26 @@ class Bozorth3Linker:
                 result["person_id"] = person_id
                 results.append(result)
 
+        # Rank-based score: each candidate's score is its discrimination
+        # ratio against the strongest OTHER candidate. This normalises
+        # for probe size (crops, latents have fewer pairs).
+        #   score_i = votes_i / (votes_i + max_{j != i}(votes_j))
+        if len(results) > 1:
+            for r in results:
+                n = r["validated_count"]
+                best_fp = max(
+                    (or_["validated_count"] for or_ in results if or_ is not r),
+                    default=0,
+                )
+                if n + best_fp > 0:
+                    r["score"] = round(n / (n + best_fp), 4)
+                else:
+                    r["score"] = 0.0
+        elif len(results) == 1:
+            # Single candidate: absolute score vs saturation
+            n = results[0]["validated_count"]
+            results[0]["score"] = min(1.0, n / max(self._saturation, 1))
+
         results.sort(key=lambda r: float(r["score"]), reverse=True)
         return results[:top_k]
 

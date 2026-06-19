@@ -15,11 +15,16 @@ import math
 def extract_pairs(
     minutiae: list[dict],
     max_pairs: int = 500,
+    min_quality: float = 0.3,
 ) -> list[dict]:
-    """Enumerate all (mi, mj) pairs from *minutiae*.
+    """Enumerate all (mi, mj) pairs from *minutiae*, filtering by quality.
+
+    Only pairs where BOTH minutiae have ``quality >= min_quality`` are
+    kept. This removes noise-noise pairs from dirty/smudged regions
+    and improves the signal-to-noise ratio for the linker.
 
     Each returned dict has:
-      - ``i``, ``j``: indices into the original minutiae list
+      - ``i``, ``j``: indices into the original minutiae list (pre-filter)
       - ``mi_x``, ``mi_y``, ``mi_angle``: first minutia (normalised)
       - ``mj_x``, ``mj_y``, ``mj_angle``: second minutia (normalised)
       - ``dx``: mj.x - mi.x
@@ -29,24 +34,29 @@ def extract_pairs(
       - ``type_pair``: encodes (mi.type, mj.type) as a small int
 
     The output is capped to *max_pairs* by uniform random sampling
-    when M*(M-1)/2 exceeds the limit.
+    when the number of valid pairs exceeds the limit.
 
     Coordinates are expected to be already normalised to [0, 1]
     (e.g., x / 256, y / 256).
     """
-    m = len(minutiae)
+    # Filter low-quality minutiae first (noise reduction)
+    high_quality = [
+        m for m in minutiae
+        if float(m.get("quality", 1.0)) >= min_quality
+    ]
+    m = len(high_quality)
     if m < 2:
         return []
 
     all_pairs: list[dict] = []
     for i in range(m):
-        mi = minutiae[i]
+        mi = high_quality[i]
         mix = float(mi["x"])
         miy = float(mi["y"])
         mi_angle = float(mi["angle"])
         mi_type = int(mi.get("type", 2))
         for j in range(i + 1, m):
-            mj = minutiae[j]
+            mj = high_quality[j]
             dx = float(mj["x"]) - mix
             dy = float(mj["y"]) - miy
             raw_dtheta = float(mj["angle"]) - mi_angle
@@ -72,7 +82,6 @@ def extract_pairs(
 
     total = len(all_pairs)
     if total > max_pairs:
-        # Uniform sampling — keep evenly spaced pairs across the enumeration
         step = total / max_pairs
         sampled = [all_pairs[int(round(i * step)) % total] for i in range(max_pairs)]
         return sampled

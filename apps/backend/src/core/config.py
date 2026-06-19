@@ -270,6 +270,13 @@ class MccMatchingConfig:
     pairs is the only matcher. See ``docs/adr/009-remove-cylinders.md``
     for the decision.
     """
+    # Minimum quality score for pair extraction (Phase 27). Pairs where
+    # either minutia has ``quality < min_pair_quality`` are skipped,
+    # reducing noise from dirty/smudged regions. 0.3 = moderate quality.
+    min_pair_quality: float = field(
+        default_factory=lambda: float(os.getenv("MCC_MIN_PAIR_QUALITY", "0.1"))
+    )
+
     # Bozorth3 linker tolerances (Phase 27, Plan 27-01). Calibrated on
     # SOCOFing Altered-Easy CR for 5 subjects (100% top-1 accuracy).
     # 0.02 in normalised coords ≈ 5px at 256×256 (NBIS reference: 12px).

@@ -77,11 +77,8 @@ async def search_latent(
         for m in result["probe_minutiae"]
     ]
 
-    confidence_threshold = config.matching.confidence_threshold
     candidates: list[dict[str, Any]] = []
     for hit in result["candidates"]:
-        if float(hit["score"]) < confidence_threshold:
-            continue
         pid = hit["person_id"]
         try:
             person_uuid = UUID(pid)
@@ -129,14 +126,23 @@ async def search_latent(
             else:
                 sp["candidate_capture_id"] = person_capture_id or tc
 
+        score = float(hit["score"])
+        if score >= 0.7:
+            confidence = "alta"
+        elif score >= 0.4:
+            confidence = "media"
+        else:
+            confidence = "baja"
+
         candidates.append({
             "person_id": pid,
-            "score": float(hit["score"]),
+            "score": score,
             "peak_votes": int(hit["peak_votes"]),
             "supporting_pairs": supporting_pairs,
             "num_probe_pairs": int(hit.get("num_probe_pairs", 0)),
             "full_name": full_name,
             "external_id": external_id,
+            "confidence": confidence,
         })
 
     dev_log(
