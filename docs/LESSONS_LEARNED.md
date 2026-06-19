@@ -303,6 +303,32 @@ After the debugging session, the system ended up in this configuration:
 - `apps/backend/scripts/reenroll_triplets.py` — kept original
   (does not persist OF). The fix-persisting-OF version was at
   `/tmp/reenroll_with_of.py` and is not checked in.
+- `scripts/benchmark_cylinders.py` — baseline benchmark
+  (5 subjects, SOCOFing Altered-Easy): **95% top-1, 100% on
+  CR/Obl/Real, 80% on Zcut**. Avg latency 14s per query.
+
+## Scale Implications (CRITICAL)
+
+The target production scale is **millions of enrolled subjects**.
+NIST MCC cylinders + Hough voting are **not viable at that
+scale**:
+
+| | Per 1M subjects | Per query |
+|---|---|---|
+| NIST cylinders (current) | 250 GB vectors | 30-70 min (O(N×M)) |
+| NIST Bozorth3 pairs | 10 GB vectors | 1-5 s (KNN + linking) |
+| Deep learning | 7 GB vectors | 100-500 ms (GPU KNN) |
+
+The cylinder matcher is fine for the dev environment (≤5000
+subjects) and a useful reference implementation, but **Bozorth3
+pair matching is a prerequisite for production scale**. This is
+documented in `.planning/phases/27-match-algorithm-convergence/27-PLAN.md`.
+
+**Action item**: Phase 27-01 (Bozorth3 pairs) is on the critical
+path. Phase 27-04 (switching the default from cylinders to pairs)
+must follow immediately. The 95% accuracy benchmark with 5 subjects
+**does not extrapolate** to 1M subjects without the algorithmic
+change.
 
 ## What To Do Next
 
