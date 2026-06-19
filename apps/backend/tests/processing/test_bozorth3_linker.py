@@ -128,18 +128,20 @@ class TestBozorth3Linker:
             _make_probe_pair(4, 5, 0.2, 0.8, 0.0, 0.4, 1.0, 0.1),
         ]
         hits = [
-            # person_A: 2 compatible hits (score = 2/10 = 0.2)
+            # person_A: 2 compatible hits
             _make_hit(0, "person_A", 0.15, 0.12, 0.02, 0.35, 0.32, 0.12),
             _make_hit(1, "person_A", 0.55, 0.52, 0.02, 0.75, 0.72, 0.12),
-            # person_B: 1 hit only (score = 1/10 = 0.1)
+            # person_B: 1 hit only
             _make_hit(2, "person_B", 0.25, 0.85, 0.03, 0.45, 1.05, 0.13),
         ]
         results = linker.link(probe, hits)
         assert len(results) == 2
         assert results[0]["person_id"] == "person_A"
-        assert results[0]["score"] == 0.2
+        # Rank-based: 2/(2+1) = 0.667
+        assert results[0]["score"] == round(2 / 3, 4)
         assert results[1]["person_id"] == "person_B"
-        assert results[1]["score"] == 0.1
+        # Rank-based: 1/(1+2) = 0.333
+        assert results[1]["score"] == round(1 / 3, 4)
 
     def test_top_k_limits_results(self) -> None:
         """top_k parameter limits the number of returned candidates."""

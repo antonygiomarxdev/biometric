@@ -114,7 +114,7 @@ class Bozorth3Linker:
         elif len(results) == 1:
             # Single candidate: absolute score vs saturation
             n = results[0]["validated_count"]
-            results[0]["score"] = min(1.0, n / max(self._saturation, 1))
+            results[0]["score"] = round(min(1.0, n / max(self._saturation, 1)), 4)
 
         results.sort(key=lambda r: float(r["score"]), reverse=True)
         return results[:top_k]

@@ -105,38 +105,36 @@ async def upload_capture(
 
 @router.get(
     API_PREFIX + "/captures/{capture_id}/image",
-    summary="Get the Gabor-enhanced PNG bytes for a capture (Phase 23)",
+    summary="Get the normalized fingerprint image from MinIO",
     description=(
-        "Returns the persisted Gabor-enhanced image as image/png. "
+        "Returns the normalized fingerprint image as image/png. "
+        "The image is stored in MinIO at enrollment. "
         "Used by the comparison view in /analisis to display the candidate's "
         "enrolled image side-by-side with the probe."
     ),
     responses={
-        200: {"content": {"image/png": {}}, "description": "Enhanced PNG bytes"},
-        404: {"description": "Capture not found"},
-        503: {"description": "Capture has no persisted enhanced image"},
+        200: {"content": {"image/png": {}}, "description": "PNG bytes from MinIO"},
+        404: {"description": "Capture not found or image missing in MinIO"},
     },
 )
 async def get_capture_image(
     capture_id: uuid.UUID,
     session: AsyncSession = Depends(get_async_db),
 ) -> Response:
-    """Serve the Gabor-enhanced PNG bytes for visual comparison.
+    """Serve the fingerprint image from MinIO."""
+    from src.services.fingerprint_storage import FingerprintStorage
 
-    The enhanced image is persisted during enrollment (Phase 23
-    amendment, migration 0006). If the capture was created before the
-    amendment ran, the column is NULL and we return 503.
-    """
     c = await FingerprintCaptureRepository.get_by_id(session, capture_id)
     if c is None:
         raise HTTPException(status_code=404, detail="Capture not found")
-    if c.enhanced_image is None:
+    png_bytes = FingerprintStorage.get_bytes(str(c.id))
+    if png_bytes is None:
         raise HTTPException(
-            status_code=503,
-            detail="Capture has no persisted enhanced image; re-enroll required",
+            status_code=404,
+            detail=f"Image not in MinIO for capture {capture_id}; re-enroll required",
         )
     return Response(
-        content=c.enhanced_image,
+        content=png_bytes,
         media_type="image/png",
         headers={"Cache-Control": "public, max-age=3600"},
     )

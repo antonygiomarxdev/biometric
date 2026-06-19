@@ -16,7 +16,6 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
-    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -256,9 +255,6 @@ class FingerprintCapture(Base):
     )
     num_minutiae: Mapped[int | None] = mapped_column(Integer, nullable=True)
     num_graphs: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    enhanced_image: Mapped[bytes | None] = mapped_column(
-        LargeBinary, nullable=True,
-    )
     is_reference: Mapped[bool] = mapped_column(nullable=False, default=False)
     is_exemplar: Mapped[bool] = mapped_column(nullable=False, default=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -283,6 +279,50 @@ class FingerprintCapture(Base):
         return (
             f"<FingerprintCapture(id={self.id}, "
             f"fingerprint_id={self.fingerprint_id}, idx={self.capture_index})>"
+        )
+
+
+class CaptureMinutia(Base):
+    __tablename__ = "capture_minutiae"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid7,
+        server_default=text("gen_random_uuid()"),
+    )
+    capture_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("fingerprint_captures.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    person_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("persons.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    minutia_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    x: Mapped[float] = mapped_column(Float, nullable=False)
+    y: Mapped[float] = mapped_column(Float, nullable=False)
+    angle: Mapped[float] = mapped_column(Float, nullable=False)
+    type: Mapped[int] = mapped_column(Integer, nullable=False)
+    quality: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    algo_version: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="pairs-v1",
+    )
+    extracted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "capture_id", "minutia_index", name="uq_capture_minutia",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<CaptureMinutia(capture_id={self.capture_id}, "
+            f"idx={self.minutia_index}, type={self.type}, q={self.quality:.2f})>"
         )
 
 
