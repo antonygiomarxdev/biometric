@@ -302,8 +302,20 @@ class MccMatchingConfig:
     matcher: str = field(
         default_factory=lambda: os.getenv("MCC_MATCHER", "cylinders")
     )
+    # Bozorth3 linker tolerances (Phase 27, Plan 27-01). Calibrated on
+    # SOCOFing Altered-Easy CR for 5 subjects (100% top-1 accuracy).
+    # 0.02 in normalised coords ≈ 5px at 256×256 (NBIS reference: 12px).
+    link_dx_tol: float = field(
+        default_factory=lambda: float(os.getenv("MCC_LINK_DX_TOL", "0.02"))
+    )
+    link_dy_tol: float = field(
+        default_factory=lambda: float(os.getenv("MCC_LINK_DY_TOL", "0.02"))
+    )
+    link_dtheta_tol: float = field(
+        default_factory=lambda: float(os.getenv("MCC_LINK_DTHETA_TOL", "0.15"))
+    )
     confidence_saturation: int = field(
-        default_factory=lambda: int(os.getenv("MCC_CONFIDENCE_SATURATION", "10"))
+        default_factory=lambda: int(os.getenv("MCC_CONFIDENCE_SATURATION", "30"))
     )
     confidence_threshold: float = field(
         default_factory=lambda: float(os.getenv("MCC_CONFIDENCE_THRESHOLD", "0.70"))

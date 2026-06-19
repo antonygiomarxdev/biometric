@@ -792,6 +792,9 @@ class MccMatchingService:
         # Bozorth3 linking
         t_link_start = _time.monotonic()
         linker = Bozorth3Linker(
+            dx_tol=config.matching.link_dx_tol,
+            dy_tol=config.matching.link_dy_tol,
+            dtheta_tol=config.matching.link_dtheta_tol,
             saturation=config.matching.confidence_saturation,
         )
         link_results = linker.link(probe_pairs, all_hits, top_k=top_k)
