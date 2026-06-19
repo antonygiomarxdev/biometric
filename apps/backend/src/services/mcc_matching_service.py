@@ -433,6 +433,22 @@ class MccMatchingService:
             link_ms=round((t_link - t_link_start) * 1000, 1),
         )
 
+        # Convert candidate coordinates from normalized (0-1) to pixel
+        # coords of the probe's enhanced image. Both probe and candidate
+        # were normalized to 256x256, so the inverse transform using the
+        # probe's dimensions is approximately correct for visualization.
+        enhanced_shape = enhanced.shape
+        def _to_pixel(nx: float, ny: float) -> tuple[int, int]:
+            h_enh, w_enh = enhanced_shape[:2]
+            sp = 256 / max(h_enh, w_enh)
+            new_w = int(round(w_enh * sp))
+            new_h = int(round(h_enh * sp))
+            x_off = (256 - new_w) // 2
+            y_off = (256 - new_h) // 2
+            px = int(round((nx * 256 - x_off) / sp))
+            py = int(round((ny * 256 - y_off) / sp))
+            return px, py
+
         probe_pair_by_idx = {i: p for i, p in enumerate(probe_pairs)}
         candidates: list[dict] = []
         for lr in link_results:
@@ -442,14 +458,16 @@ class MccMatchingService:
                 pp = probe_pair_by_idx.get(h["query_pair_index"])
                 if pp is None:
                     continue
+                cx, cy = _to_pixel(float(h["mi_x"]), float(h["mi_y"]))
+                cjx, cjy = _to_pixel(float(h["mj_x"]), float(h["mj_y"]))
                 supporting_pairs.append({
                     "probe_mi_idx": pp["i"],
                     "probe_mj_idx": pp["j"],
-                    "candidate_mi_x": float(h["mi_x"]),
-                    "candidate_mi_y": float(h["mi_y"]),
+                    "candidate_mi_x": cx,
+                    "candidate_mi_y": cy,
                     "candidate_mi_angle": float(h["mi_angle"]),
-                    "candidate_mj_x": float(h["mj_x"]),
-                    "candidate_mj_y": float(h["mj_y"]),
+                    "candidate_mj_x": cjx,
+                    "candidate_mj_y": cjy,
                     "candidate_mj_angle": float(h["mj_angle"]),
                     "candidate_fingerprint_id": str(h["fingerprint_id"]),
                     "candidate_capture_id": str(h["capture_id"]),
