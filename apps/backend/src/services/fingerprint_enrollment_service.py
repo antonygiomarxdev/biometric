@@ -143,21 +143,16 @@ class FingerprintEnrollmentService:
         # Index pairs in Qdrant
         if self._mcc_service is not None and minutiae_list:
             try:
-                person = await self._session.get(Person, fp.person_id)
-                if person is not None:
-                    person_id = (
-                        str(person.external_id) if person.external_id else str(person.id)
-                    )
-                    loop = asyncio.get_running_loop()
-                    n = await loop.run_in_executor(
-                        None,
-                        self._mcc_service.enroll_pairs,
-                        str(capture.id),
-                        str(fp.id),
-                        person_id,
-                        image_bytes,
-                    )
-                    log.info("Pairs indexed %d for capture %s", n, capture.id)
+                loop = asyncio.get_running_loop()
+                n = await loop.run_in_executor(
+                    None,
+                    self._mcc_service.enroll_pairs,
+                    str(capture.id),
+                    str(fp.id),
+                    str(fp.person_id),  # UUID (stable, matches benchmark)
+                    image_bytes,
+                )
+                log.info("Pairs indexed %d for capture %s", n, capture.id)
             except Exception as exc:
                 log.warning("Pair indexing failed for capture %s: %s", capture.id, exc)
 

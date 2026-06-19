@@ -248,6 +248,7 @@ class MccMatchingService:
         return {
             "minutiae": norm_minutiae,
             "enhanced_image": enhanced,
+            "normalized": normalized,  # 256x256 Gabor-enhanced (for MinIO storage)
             "skeleton": skeleton,
             "normalized_shape": normalized_shape,
         }
