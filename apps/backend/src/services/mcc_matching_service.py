@@ -679,6 +679,169 @@ class MccMatchingService:
         return {"candidates": candidates, "probe_minutiae": pixel_minutiae}
 
     # ------------------------------------------------------------------
+    # Pair-based enrollment (Phase 27, Plan 27-01)
+    # ------------------------------------------------------------------
+
+    def enroll_pairs(
+        self,
+        capture_id: str,
+        fingerprint_id: str,
+        person_id: str,
+        image_bytes: bytes,
+    ) -> int:
+        """Quality pipeline → pair extraction → persist in Qdrant.
+
+        Returns the number of pairs inserted.
+        """
+        import time as _time
+        from src.processing.pair_extractor import extract_pairs
+
+        t0 = _time.monotonic()
+        result = self._run_quality_pipeline(image_bytes)
+        norm_minutiae = result["minutiae"]
+        t_pipeline = _time.monotonic()
+
+        pairs = extract_pairs(norm_minutiae)
+        t_pairs = _time.monotonic()
+
+        num_pairs = self._mcc_repo.bulk_insert_pairs(
+            person_id=person_id,
+            fingerprint_id=fingerprint_id,
+            capture_id=capture_id,
+            pair_dicts=pairs,
+        )
+        t_qdrant = _time.monotonic()
+
+        dev_log(
+            "mcc.enroll_pairs",
+            capture_id=capture_id,
+            person_id=person_id,
+            minutiae=len(norm_minutiae),
+            pairs=len(pairs),
+            inserted=num_pairs,
+            pipeline_ms=round((t_pipeline - t0) * 1000, 1),
+            pairs_ms=round((t_pairs - t_pipeline) * 1000, 1),
+            qdrant_ms=round((t_qdrant - t_pairs) * 1000, 1),
+        )
+        logger.info(
+            "Enrolled pairs: capture %s, %d pairs for %s",
+            capture_id, num_pairs, person_id,
+        )
+        return num_pairs
+
+    # ------------------------------------------------------------------
+    # Pair-based search (Phase 27, Plan 27-01)
+    # ------------------------------------------------------------------
+
+    def search_by_pairs(
+        self,
+        image_bytes: bytes,
+        top_k: int = 10,
+        knn_per_pair: int = 10,
+    ) -> SearchByPairsResult:
+        """Search using NIST Bozorth3-style pair linking.
+
+        For each probe pair, KNN search the ``pair_features`` collection.
+        Bozorth3 linking groups geometrically compatible matches per
+        candidate person and scores by largest connected component size.
+
+        Returns a dict with ``candidates`` and ``probe_minutiae`` keys
+        matching the frontend's ``SearchByPairsResult`` shape.
+        """
+        import time as _time
+        from src.processing.bozorth3_linker import Bozorth3Linker
+        from src.processing.pair_extractor import extract_pairs, pair_to_vector
+
+        t0 = _time.monotonic()
+        result = self._run_quality_pipeline(image_bytes)
+        norm_minutiae = result["minutiae"]
+        skeleton = result["skeleton"]
+        normalized_shape = result["normalized_shape"]
+        enhanced = result["enhanced_image"]
+        t_pipeline = _time.monotonic()
+
+        probe_pairs = extract_pairs(norm_minutiae)
+        t_pairs = _time.monotonic()
+
+        pixel_minutiae = self._norm_to_pixel_coords(norm_minutiae, enhanced.shape)
+
+        if not probe_pairs:
+            return {"candidates": [], "probe_minutiae": pixel_minutiae}
+
+        query_vectors = [pair_to_vector(p) for p in probe_pairs]
+        t_vectors = _time.monotonic()
+
+        all_hits = self._mcc_repo.knn_search_pairs(
+            query_vectors, top_k_per_vector=knn_per_pair,
+        )
+        t_knn = _time.monotonic()
+
+        dev_log(
+            "mcc.search.pair_knn",
+            probe_pairs=len(probe_pairs),
+            raw_hits=len(all_hits),
+            pipeline_ms=round((t_pipeline - t0) * 1000, 1),
+            pairs_ms=round((t_pairs - t_pipeline) * 1000, 1),
+            vectors_ms=round((t_vectors - t_pairs) * 1000, 1),
+            knn_ms=round((t_knn - t_vectors) * 1000, 1),
+        )
+
+        if not all_hits:
+            return {"candidates": [], "probe_minutiae": pixel_minutiae}
+
+        # Bozorth3 linking
+        t_link_start = _time.monotonic()
+        linker = Bozorth3Linker(
+            saturation=config.matching.confidence_saturation,
+        )
+        link_results = linker.link(probe_pairs, all_hits, top_k=top_k)
+        t_link = _time.monotonic()
+
+        dev_log(
+            "mcc.search.linking",
+            persons=len(link_results),
+            top_score=link_results[0]["score"] if link_results else 0.0,
+            top_person=link_results[0]["person_id"] if link_results else None,
+            link_ms=round((t_link - t_link_start) * 1000, 1),
+        )
+
+        # Build response
+        probe_pair_by_idx = {i: p for i, p in enumerate(probe_pairs)}
+        candidates: list[dict] = []
+        for lr in link_results:
+            person_hits = lr["supporting_pairs"]
+            supporting_pairs: list[dict] = []
+            for h in person_hits:
+                pp = probe_pair_by_idx.get(h["query_pair_index"])
+                if pp is None:
+                    continue
+                supporting_pairs.append({
+                    "probe_mi_idx": pp["i"],
+                    "probe_mj_idx": pp["j"],
+                    "candidate_mi_x": float(h["mi_x"]),
+                    "candidate_mi_y": float(h["mi_y"]),
+                    "candidate_mi_angle": float(h["mi_angle"]),
+                    "candidate_mj_x": float(h["mj_x"]),
+                    "candidate_mj_y": float(h["mj_y"]),
+                    "candidate_mj_angle": float(h["mj_angle"]),
+                    "candidate_fingerprint_id": str(h["fingerprint_id"]),
+                    "candidate_capture_id": str(h["capture_id"]),
+                    "similarity": float(h["similarity"]),
+                })
+
+            candidates.append({
+                "person_id": lr["person_id"],
+                "score": lr["score"],
+                "peak_votes": lr["validated_count"],
+                "num_probe_pairs": len(probe_pairs),
+                "supporting_pairs": supporting_pairs,
+                "full_name": None,
+                "external_id": None,
+            })
+
+        return {"candidates": candidates, "probe_minutiae": pixel_minutiae}
+
+    # ------------------------------------------------------------------
     # Search
     # ------------------------------------------------------------------
 

@@ -264,7 +264,7 @@ class EnhancerDefaultsConfig:
 
 @dataclass(frozen=True)
 class MccMatchingConfig:
-    """Parameters for MCC cylinder matching (Phase 21).
+    """Parameters for MCC / Bozorth3 matching (Phase 21 / Phase 27).
 
     Defaults mirror the spike results (12 sectors x 4 rings x 3 features = 144-D).
     Override via env vars without code changes.
@@ -278,23 +278,12 @@ class MccMatchingConfig:
     top_k_per_cylinder: int = field(
         default_factory=lambda: int(os.getenv("MCC_TOP_K_PER_CYLINDER", "20"))
     )
-    # Similarity threshold for the exhaustive all-pairs matcher. Pairs
-    # below this cosine are dropped before Hough voting. Higher values
-    # produce cleaner votes but may discard valid matches for noisy
-    # cropped latents. 0.5 is a safe starting point for SOCOFing.
     exhaustive_sim_threshold: float = field(
         default_factory=lambda: float(os.getenv("MCC_EXHAUSTIVE_SIM_THRESHOLD", "0.5"))
     )
     score_normalization: Literal["query", "fingerprint", "global"] = field(
-        default_factory=lambda: os.getenv("MCC_SCORE_NORMALIZATION", "query")  # type: ignore[arg-type,return-value]
+        default_factory=lambda: os.getenv("MCC_SCORE_NORMALIZATION", "query")
     )
-    # Hough voting for global geometric alignment (Phase 23, latent support).
-    # Each cylinder match votes for the rigid transformation (Δx, Δy, Δθ)
-    # that aligns the probe minutia to the candidate minutia. Only matches
-    # near the dominant peak are kept, removing spatially inconsistent votes.
-    # Bin sizes are intentionally wider than strict: SOCOFing minutiae are
-    # at 96-103px scale, so 16px / 10° / ±2 bins collects more genuine
-    # matches without admitting random ones (which spread across many bins).
     hough_dx_bin: int = field(
         default_factory=lambda: int(os.getenv("MCC_HOUGH_DX_BIN", "16"))
     )
@@ -310,18 +299,12 @@ class MccMatchingConfig:
     hough_min_support: int = field(
         default_factory=lambda: int(os.getenv("MCC_HOUGH_MIN_SUPPORT", "5"))
     )
-    # NIST-style score saturation for latent matching (NBIS Bozorth3
-    # convention). ``peak_votes / saturation`` becomes the per-candidate
-    # confidence (0-1). Override via ``MCC_CONFIDENCE_SATURATION``.
-    # 10 linked minutiae pairs ≈ strong latent match in NIST practice.
+    matcher: str = field(
+        default_factory=lambda: os.getenv("MCC_MATCHER", "cylinders")
+    )
     confidence_saturation: int = field(
         default_factory=lambda: int(os.getenv("MCC_CONFIDENCE_SATURATION", "10"))
     )
-    # Filter candidates below this score from the response. Default
-    # 0.70 is the "possible match" floor — anything below is treated
-    # as noise and not surfaced to the perito. The frontend
-    # further labels candidates above this as "media" (70-90%) or
-    # "alta" (>=90%). Override via ``MCC_CONFIDENCE_THRESHOLD``.
     confidence_threshold: float = field(
         default_factory=lambda: float(os.getenv("MCC_CONFIDENCE_THRESHOLD", "0.70"))
     )
