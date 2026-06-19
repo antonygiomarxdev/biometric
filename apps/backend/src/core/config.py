@@ -300,7 +300,7 @@ class MccMatchingConfig:
         default_factory=lambda: int(os.getenv("MCC_HOUGH_MIN_SUPPORT", "5"))
     )
     matcher: str = field(
-        default_factory=lambda: os.getenv("MCC_MATCHER", "cylinders")
+        default_factory=lambda: os.getenv("MCC_MATCHER", "pairs")
     )
     # Bozorth3 linker tolerances (Phase 27, Plan 27-01). Calibrated on
     # SOCOFing Altered-Easy CR for 5 subjects (100% top-1 accuracy).
