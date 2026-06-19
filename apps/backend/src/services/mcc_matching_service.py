@@ -113,6 +113,21 @@ class MccMatchingService:
         ]
         return {"minutiae": minutiae, "enhanced_image": result["enhanced_image"]}
 
+    def preview(self, image_bytes: bytes) -> dict[str, Any]:
+        """Run the quality pipeline for live preview purposes.
+
+        Returns a dict with:
+          - ``minutiae``: list of dicts with x, y, angle, type
+          - ``enhanced_image``: the Gabor-filtered image as a numpy array
+            (350px-tall, uint8). Caller serializes to base64 PNG.
+        """
+        result = self._run_quality_pipeline(image_bytes)
+        minutiae: list[dict[str, Any]] = [
+            {"x": int(m["x"]), "y": int(m["y"]), "angle": float(m["angle"]), "type": int(m["type"])}
+            for m in result["minutiae"]
+        ]
+        return {"minutiae": minutiae, "enhanced_image": result["enhanced_image"]}
+
     def preview_thinning(self, image_bytes: bytes) -> dict[str, Any]:
         """Thinning + Crossing Number pipeline for preview.
 
