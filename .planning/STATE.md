@@ -162,3 +162,35 @@ limitations discovered during testing:
   pair-based code will be deleted in Plan 25-04.
 - Multi-scale Gabor bank and latent-specific enhancement are deferred to
   Phase 26+ (post Phase 25 execution).
+
+### Phase 28 — MinIO Migration + Minutiae-as-Data (Planned)
+
+**Driver:** Storage architecture issue. Fingerprint images are stored
+as bytea in PostgreSQL (`FingerprintCapture.enhanced_image`).
+This is the wrong place for images — expensive, slow to serve, and
+conflates raw and derived data.
+
+**Solution:** Decouple storage layers.
+- MinIO bucket `fingerprints/captures/{id}.png` (normalized 256x256)
+- PG `capture_minutiae` table (structured minutia data with hash)
+- Render on demand with minutiae overlay
+
+**No legacy:** `enhanced_image` column dropped in same migration.
+Existing enrollments discarded. Re-enroll from SOCOFING sources
+after deploy. Per user: "nada de legacy".
+
+**Calibration result (Phase 27):** NIST Bozorth3 pairs matcher
+achieves 100% top-1 on SOCOFING Altered-Easy (20/20 probes) with
+calibrated tolerances. Ready for production use.
+
+**Scope:**
+- Migration: drop `enhanced_image`, create `capture_minutiae`
+- Service: `FingerprintStorage` (MinIO wrapper)
+- Repository: `CaptureMinutiaRepository` (PG CRUD)
+- Refactor: enrollment flow + image endpoint
+- Cleanup: remove all `enhanced_image` references
+- Verify: benchmark still passes after re-enrollment
+
+**See:**
+- `.planning/phases/28-minio-migration/28-CONTEXT.md`
+- `.planning/phases/28-minio-migration/28-PLAN.md`
