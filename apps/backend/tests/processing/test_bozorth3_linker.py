@@ -81,7 +81,8 @@ class TestBozorth3Linker:
         assert len(results) == 1
         assert results[0]["person_id"] == "person_A"
         assert results[0]["validated_count"] == 1
-        assert results[0]["score"] == 0.1  # 1/10
+        # Default saturation=30 → score = 1/30 ≈ 0.0333
+        assert results[0]["score"] == round(1 / 30, 4)
 
     def test_two_compatible_hits(self) -> None:
         """Two hits with similar transformations should be linked."""

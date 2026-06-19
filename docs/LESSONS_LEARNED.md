@@ -365,3 +365,30 @@ change.
    Phase 21 (NIST cylinders) for stated performance reasons, but the
    new code is not battle-tested. The right approach would have been
    to A/B test on real data before deprecating the working matcher.
+
+## Phase 27: Triplet matcher eliminated (research dead code)
+
+The triplet matcher (Phase 25) was **research that never reached
+production**. It was carried in the codebase for 3 phases (25, 26, 27)
+even though it was replaced by NIST cylinders in commit `00266ff`.
+
+**Why it was killed:**
+- 6-D descriptor per triplet + "growing algorithm" instead of Hough voting
+- Multiple unfixable bugs (supporting_triplets vs supporting_pairs, validated_hits
+  vs raw hits, unstable score formula)
+- Never called by the API after cylinders replaced it
+- ~400 LOC of dead code in `mcc_matching_service.py` and `qdrant_mcc_repository.py`
+- 4 source files (`triplet_extractor.py`, `growing_matcher.py`, `triplet_alignment.py`,
+  `triplet_validator.py`) + 3 test files + 1 broken script (`reenroll_triplets.py`
+  had a `from src.db.database import get_db` that doesn't exist since before Phase 27)
+
+**What replaced it (Phase 27-01):**
+- **NIST Bozorth3 pair matching** — 5-D per pair + KNN + Union-Find linking
+- 100% top-1 on SOCOFing Altered-Easy (5 subjects, 20 probes)
+- Calibrated: dx_tol=0.02, dy_tol=0.02, dtheta_tol=0.15, saturation=30
+- `MCC_MATCHER=pairs` for production, `MCC_MATCHER=cylinders` for dev/small
+- See `docs/adr/008-matchers-cylinders-vs-pairs.md` for the full decision
+
+**Lesson learned:** Don't keep research code around hoping it'll be useful
+later. Delete it. Carrying it confuses the next developer and risks
+unintended re-use.

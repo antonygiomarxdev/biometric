@@ -330,8 +330,8 @@ class FingerprintOFIndex(Base):
     """Orientation field index for the OF pre-filter (Phase 26).
 
     Stores the 16×16 OF and coherence matrices keyed by ``fingerprint_id``
-    so that ``search_by_triplets`` can reject candidates whose global OF
-    is inconsistent with the probe.
+    so that the search can reject candidates whose global OF is
+    inconsistent with the probe.
     """
 
     __tablename__ = "fingerprint_of_index"
