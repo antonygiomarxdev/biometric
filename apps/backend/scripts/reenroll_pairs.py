@@ -19,7 +19,7 @@ from pathlib import Path
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from src.core.config import config
-from src.db.qdrant_mcc_repository import QdrantMccRepository, PAIR_COLLECTION_NAME
+from src.db.qdrant_pair_repository import QdrantPairRepository, PAIR_COLLECTION_NAME
 from src.db.repositories.fingerprint_repository import FingerprintRepository
 from src.db.repositories.person_repository import PersonRepository
 from src.services.mcc_matching_service import MccMatchingService
@@ -51,7 +51,7 @@ def _parse_socofing_filename(stem: str) -> dict:
 
 async def _reenroll() -> None:
     mcc_service = MccMatchingService()
-    repo = QdrantMccRepository.from_host()
+    repo = QdrantPairRepository.from_host()
 
     collections = repo._client.get_collections().collections
     existing = [c.name for c in collections]

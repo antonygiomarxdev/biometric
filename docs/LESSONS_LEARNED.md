@@ -392,3 +392,45 @@ even though it was replaced by NIST cylinders in commit `00266ff`.
 **Lesson learned:** Don't keep research code around hoping it'll be useful
 later. Delete it. Carrying it confuses the next developer and risks
 unintended re-use.
+
+## Phase 27: Cylinder matcher eliminated (dev = prod)
+
+After ADR-009, the cylinder matcher was **completely removed** from
+the codebase. The system now has only **one matcher**: NIST Bozorth3
+pairs. See `docs/adr/009-remove-cylinders.md`.
+
+**Why it was killed (after ADR-008 said it could stay for dev):**
+- Dev and prod used different algorithms
+- Tests in dev didn't reflect production behavior
+- Two matchers meant two sets of bugs, two optimization paths,
+  two code review areas
+- NIST Bozorth3 pairs (100% top-1) is at least as accurate as
+  cylinders (95% top-1) AND scales to production
+- The only reason to keep cylinders was "dev convenience" — but
+  the convenience was illusory (diverges from prod)
+
+**What was removed (~600 LOC):**
+- `MccMatchingService.enroll()`, `search()`, `_build_cylinders()`,
+  `_exhaustive_match()`, `_hough_align_hits()`, `_count_enrolled_by_person()`
+- `QdrantMccRepository.bulk_insert_cylinders()`, `knn_search()`,
+  `scroll_all_cylinders()`, `aggregate_scores_by_person()`
+- `MccCylinderHit`, `MccPersonHit`, `MccSearchHit`, `MinutiaSummary`,
+  `MatchTraceEntry` types
+- `IMccMatcher` protocol
+- 9 config fields (cylinders, hough, vector_size, etc.)
+- 3 scripts (`benchmark_cylinders.py`, `reenroll_cylinders.py`,
+  `benchmark_phase21_mcc.py`)
+- `mcc_cylinders` Qdrant collection
+- 7 test files (obsolete, replaced or removed)
+
+**What remains (~400 LOC):**
+- `MccMatchingService.enroll_pairs()`, `search_by_pairs()`, `preview()`
+- `QdrantPairRepository` (single repository, single collection)
+- 5 config fields (linker tolerances + confidence threshold)
+- `pair_features` Qdrant collection (5-D vectors, HNSW)
+- `Bozorth3Linker` (NIST Bozorth3 algorithm)
+
+**Lesson learned:** Don't keep "dev-only" algorithms in production
+code. If dev and prod use different code, dev testing is meaningless.
+Either ship the simpler one to prod, or have dev use the same one
+as prod. The latter is almost always the right answer.

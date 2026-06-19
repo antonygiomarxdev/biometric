@@ -141,12 +141,12 @@ def test_init_accepts_mcc_service() -> None:
 
 
 @pytest.mark.asyncio
-async def test_index_mcc_invokes_enroll_with_image_bytes() -> None:
-    """_index_mcc should call MccMatchingService.enroll with correct params."""
+async def test_index_pairs_invokes_enroll_pairs_with_image_bytes() -> None:
+    """_index_pairs should call MccMatchingService.enroll_pairs with correct params."""
     calls = []
 
     class _FakeSvc:
-        def enroll(self, capture_id, fingerprint_id, person_id, image_bytes):
+        def enroll_pairs(self, capture_id, fingerprint_id, person_id, image_bytes):
             calls.append({
                 "capture_id": capture_id,
                 "fingerprint_id": fingerprint_id,
@@ -171,7 +171,7 @@ async def test_index_mcc_invokes_enroll_with_image_bytes() -> None:
     fingerprint.id = "fp-1"
     fingerprint.person_id = "person-1"
 
-    await svc._index_mcc(
+    await svc._index_pairs(
         capture=capture,
         fingerprint=fingerprint,
         image_bytes=b"test-image-bytes",

@@ -3,7 +3,7 @@
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Literal  # noqa: F401  (kept for backwards-compat)
 
 from pydantic import SecretStr
 
@@ -264,44 +264,12 @@ class EnhancerDefaultsConfig:
 
 @dataclass(frozen=True)
 class MccMatchingConfig:
-    """Parameters for MCC / Bozorth3 matching (Phase 21 / Phase 27).
+    """Parameters for NIST Bozorth3 pair matching (Phase 27).
 
-    Defaults mirror the spike results (12 sectors x 4 rings x 3 features = 144-D).
-    Override via env vars without code changes.
+    Cylinders (Phase 21) and triplets (Phase 25) have been removed —
+    pairs is the only matcher. See ``docs/adr/009-remove-cylinders.md``
+    for the decision.
     """
-    collection: str = field(
-        default_factory=lambda: os.getenv("MCC_COLLECTION", "mcc_cylinders")
-    )
-    vector_size: int = field(
-        default_factory=lambda: int(os.getenv("MCC_VECTOR_SIZE", "144"))
-    )
-    top_k_per_cylinder: int = field(
-        default_factory=lambda: int(os.getenv("MCC_TOP_K_PER_CYLINDER", "20"))
-    )
-    exhaustive_sim_threshold: float = field(
-        default_factory=lambda: float(os.getenv("MCC_EXHAUSTIVE_SIM_THRESHOLD", "0.5"))
-    )
-    score_normalization: Literal["query", "fingerprint", "global"] = field(
-        default_factory=lambda: os.getenv("MCC_SCORE_NORMALIZATION", "query")
-    )
-    hough_dx_bin: int = field(
-        default_factory=lambda: int(os.getenv("MCC_HOUGH_DX_BIN", "16"))
-    )
-    hough_dy_bin: int = field(
-        default_factory=lambda: int(os.getenv("MCC_HOUGH_DY_BIN", "16"))
-    )
-    hough_dtheta_bin_deg: float = field(
-        default_factory=lambda: float(os.getenv("MCC_HOUGH_DTHETA_BIN_DEG", "10"))
-    )
-    hough_peak_tolerance_bins: int = field(
-        default_factory=lambda: int(os.getenv("MCC_HOUGH_PEAK_TOLERANCE_BINS", "2"))
-    )
-    hough_min_support: int = field(
-        default_factory=lambda: int(os.getenv("MCC_HOUGH_MIN_SUPPORT", "5"))
-    )
-    matcher: str = field(
-        default_factory=lambda: os.getenv("MCC_MATCHER", "pairs")
-    )
     # Bozorth3 linker tolerances (Phase 27, Plan 27-01). Calibrated on
     # SOCOFing Altered-Easy CR for 5 subjects (100% top-1 accuracy).
     # 0.02 in normalised coords ≈ 5px at 256×256 (NBIS reference: 12px).

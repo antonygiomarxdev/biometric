@@ -350,22 +350,22 @@ class TestEnhancerDefaultsConfig:
 
 
 class TestMccMatchingConfigDefaults:
-    """MccMatchingConfig defaults match the spike results."""
+    """MccMatchingConfig defaults for the NIST Bozorth3 pair matcher (Phase 27)."""
 
     def test_defaults(self) -> None:
         cfg = MccMatchingConfig()
-        assert cfg.collection == "mcc_cylinders"
-        assert cfg.vector_size == 144
-        assert cfg.top_k_per_cylinder == 5
-        assert cfg.score_normalization == "fingerprint"
+        assert cfg.link_dx_tol == 0.02
+        assert cfg.link_dy_tol == 0.02
+        assert cfg.link_dtheta_tol == 0.15
+        assert cfg.confidence_saturation == 30
+        assert cfg.confidence_threshold == 0.70
 
     def test_top_level_config_exposes_mcc(self) -> None:
         cfg = Config()
         assert isinstance(cfg.matching, MccMatchingConfig)
-        assert cfg.matching.collection == "mcc_cylinders"
-        assert cfg.matching.vector_size == 144
-        assert cfg.matching.top_k_per_cylinder == 5
-        assert cfg.matching.score_normalization == "fingerprint"
+        assert cfg.matching.link_dx_tol == 0.02
+        assert cfg.matching.link_dy_tol == 0.02
+        assert cfg.matching.link_dtheta_tol == 0.15
 
 
 class TestMccMatchingConfigFromEnv:
@@ -374,10 +374,11 @@ class TestMccMatchingConfigFromEnv:
     @pytest.fixture(autouse=True)
     def _set_env(self) -> Any:
         env_vars = {
-            "MCC_COLLECTION": "test_mcc",
-            "MCC_VECTOR_SIZE": "256",
-            "MCC_TOP_K_PER_CYLINDER": "10",
-            "MCC_SCORE_NORMALIZATION": "global",
+            "MCC_LINK_DX_TOL": "0.05",
+            "MCC_LINK_DY_TOL": "0.05",
+            "MCC_LINK_DTHETA_TOL": "0.5",
+            "MCC_CONFIDENCE_SATURATION": "50",
+            "MCC_CONFIDENCE_THRESHOLD": "0.85",
         }
         for k, v in env_vars.items():
             os.environ[k] = v
@@ -387,12 +388,13 @@ class TestMccMatchingConfigFromEnv:
 
     def test_overrides(self) -> None:
         cfg = MccMatchingConfig()
-        assert cfg.collection == "test_mcc"
-        assert cfg.vector_size == 256
-        assert cfg.top_k_per_cylinder == 10
-        assert cfg.score_normalization == "global"
+        assert cfg.link_dx_tol == 0.05
+        assert cfg.link_dy_tol == 0.05
+        assert cfg.link_dtheta_tol == 0.5
+        assert cfg.confidence_saturation == 50
+        assert cfg.confidence_threshold == 0.85
 
     def test_mcc_config_via_config_class_monkeypatch(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("MCC_COLLECTION", "via_config_test")
+        monkeypatch.setenv("MCC_LINK_DX_TOL", "0.99")
         cfg = Config()
-        assert cfg.matching.collection == "via_config_test"
+        assert cfg.matching.link_dx_tol == 0.99

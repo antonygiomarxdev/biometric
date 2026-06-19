@@ -18,8 +18,7 @@ if TYPE_CHECKING:
     from src.core.types import (
         CoarseMatch,
         MatchResult,
-        MccCylinderHit,
-        MccPersonHit,
+
         MinutiaCandidate,
         NormalizedFingerprint,
         RidgeGraph,
@@ -212,53 +211,9 @@ class IFineMatcher(Protocol):
         ...
 
 
-class IMccMatcher(Protocol):
-    """Port for MCC cylinder matchers (Phase 21).
-
-    Unlike the legacy Delaunay-triplet chunk matcher, this port stores
-    and searches L2-normalized cylinder descriptors (default 144-D) directly via
-    cosine KNN. Aggregation is normalized per-fingerprint (not per-person)
-    to remove bias from enrollees with more minutiae.
-    """
-
-    def ensure_collection(self) -> None:
-        """Create the backing collection if it does not exist."""
-        ...
-
-    def bulk_insert_cylinders(
-        self,
-        person_id: str,
-        fingerprint_id: str,
-        capture_id: str,
-        vectors: list[np.ndarray],
-    ) -> int:
-        """Insert N cylinder vectors for one fingerprint enrollment.
-
-        Returns the count of vectors actually inserted.
-        """
-        ...
-
-    def knn_search(
-        self,
-        query_vectors: list[np.ndarray],
-        top_k_per_vector: int = 5,
-    ) -> list[MccCylinderHit]:
-        """For each query cylinder, return top-K similar cylinders."""
-        ...
-
-    def aggregate_scores_by_person(
-        self,
-        hits: list[MccCylinderHit],
-        query_cylinder_count: int,
-        enrolled_counts: dict[str, int] | None = None,
-    ) -> list[MccPersonHit]:
-        """Group cylinder hits by person, normalize by query cylinder count.
-
-        ``enrolled_counts[person_id]`` is the number of cylinders stored for
-        that person; used as the denominator for per-fingerprint normalization.
-        """
-        ...
-
-    def delete_by_person(self, person_id: str) -> int:
-        """Remove all cylinders for a person. Returns count."""
-        ...
+# NOTE: IMccMatcher (cylinder matcher port) was removed in Phase 27 along
+# with the cylinder matcher. The pair repository (QdrantPairRepository) is
+# used directly by MccMatchingService — it has a single, focused API
+# (ensure_collection, bulk_insert_pairs, knn_search_pairs, etc.) and
+# does not need a separate Protocol abstraction. See
+# docs/adr/009-remove-cylinders.md.

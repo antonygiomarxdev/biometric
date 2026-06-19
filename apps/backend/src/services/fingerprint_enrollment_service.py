@@ -124,7 +124,7 @@ class FingerprintEnrollmentService:
 
         await FingerprintRepository.increment_capture_count(self._session, fingerprint_id)
 
-        await self._index_mcc(
+        await self._index_pairs(
             capture=capture, fingerprint=fp, image_bytes=image_bytes,
         )
 
@@ -138,16 +138,15 @@ class FingerprintEnrollmentService:
         )
         return capture, graphs
 
-    async def _index_mcc(
+    async def _index_pairs(
         self,
         capture: FingerprintCapture,
         fingerprint: Fingerprint,
         image_bytes: bytes,
     ) -> None:
-        """Build and persist MCC cylinder descriptors (Phase 21).
+        """Build and persist NIST Bozorth3 pair features (Phase 27).
 
-        Kept best-effort: failures are logged and do not abort enrollment.
-        Dual-writes alongside the deprecated Delaunay _index_external.
+        Best-effort: failures are logged and do not abort enrollment.
         """
         if self._mcc_service is None:
             return
@@ -163,16 +162,16 @@ class FingerprintEnrollmentService:
             loop = asyncio.get_running_loop()
             n = await loop.run_in_executor(
                 None,
-                self._mcc_service.enroll,
+                self._mcc_service.enroll_pairs,
                 str(capture.id),
                 str(fingerprint.id),
                 person_id,
                 image_bytes,
             )
             log.info(
-                "MCC indexed %d cylinders for capture %s (person=%s)",
+                "Pairs indexed %d pairs for capture %s (person=%s)",
                 n, capture.id, person_id,
             )
         except Exception as e:
-            log.warning("MCC indexing failed for capture %s: %s", capture.id, e)
+            log.warning("Pair indexing failed for capture %s: %s", capture.id, e)
 

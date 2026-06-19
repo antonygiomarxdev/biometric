@@ -1,15 +1,14 @@
-"""E2E test: MCC matching round-trip on a real Qdrant server (Phase 21)."""
+"""E2E test: NIST Bozorth3 pair matching round-trip on a real Qdrant server (Phase 27)."""
 from __future__ import annotations
 
 import time
 from typing import Iterator
 
-import numpy as np
 import pytest
 from qdrant_client import QdrantClient
 from testcontainers.qdrant import QdrantContainer
 
-from src.db.qdrant_mcc_repository import QdrantMccRepository
+from src.db.qdrant_pair_repository import QdrantPairRepository
 
 
 @pytest.fixture(scope="module")
@@ -29,66 +28,58 @@ def client(qdrant_server: tuple[str, int]) -> Iterator[QdrantClient]:
 
 
 @pytest.fixture
-def repo(client: QdrantClient) -> QdrantMccRepository:
-    collection = "test_e2e_mcc"
-    r = QdrantMccRepository(client, collection=collection, vector_size=144)
-    r.ensure_collection()
+def repo(client: QdrantClient) -> QdrantPairRepository:
+    collection = "test_e2e_pairs"
+    r = QdrantPairRepository(client)
     r._client.delete_collection(collection_name=collection)
     r.ensure_collection()
     return r
 
 
-def test_enroll_and_search_round_trip(repo: QdrantMccRepository) -> None:
-    rng = np.random.default_rng(42)
-    enrolled: list[tuple[str, np.ndarray]] = []
+def _make_pair(i: int, j: int, dx: float = 0.1, dy: float = 0.2, dtheta: float = 0.3, distance: float = 0.5) -> dict:
+    return {
+        "i": i,
+        "j": j,
+        "mi_x": 0.1, "mi_y": 0.2, "mi_angle": 0.0,
+        "mj_x": 0.3, "mj_y": 0.4, "mj_angle": 0.1,
+        "dx": dx, "dy": dy, "dtheta": dtheta, "distance": distance,
+        "type_pair": 11,
+    }
+
+
+def test_enroll_and_search_round_trip(repo: QdrantPairRepository) -> None:
+    """Enroll pairs for 3 persons, then KNN-search and verify hits."""
+    n_per = 10
     for person_id in range(3):
-        base = rng.standard_normal(144).astype(np.float32)
-        base /= np.linalg.norm(base)
-        cylinders = []
-        for _ in range(10):
-            noise = rng.standard_normal(144).astype(np.float32) * 0.05
-            v = base + noise
-            v /= np.linalg.norm(v)
-            cylinders.append(v)
-        n = repo.bulk_insert_cylinders(
+        pairs = [_make_pair(i, i + 1, dx=0.1 * person_id) for i in range(n_per)]
+        n = repo.bulk_insert_pairs(
             person_id=f"p{person_id}",
             fingerprint_id=f"f{person_id}",
             capture_id=f"c{person_id}",
-            vectors=cylinders,
+            pair_dicts=pairs,
         )
-        assert n == 10
-        enrolled.append((f"p{person_id}", base))
+        assert n == n_per
 
-    query_vecs = [enrolled[0][1]]
-    hits = repo.knn_search(query_vecs, top_k_per_vector=5)
+    query = [_make_pair(0, 1, dx=0.0)]
+    hits = repo.knn_search_pairs(query, top_k_per_vector=5)
     assert hits, "Expected at least one hit"
-
-    persons = repo.aggregate_scores_by_person(
-        hits,
-        enrolled_counts={"p0": 10, "p1": 10, "p2": 10},
-    )
-    assert persons, "Expected at least one person hit"
-    assert persons[0].person_id == "p0"
+    assert all("person_id" in h for h in hits)
 
 
-def test_search_throughput_under_one_second(repo: QdrantMccRepository) -> None:
-    rng = np.random.default_rng(7)
+def test_search_throughput_under_one_second(repo: QdrantPairRepository) -> None:
+    """Enroll many pairs and verify KNN search is fast."""
     for person_id in range(10):
-        cylinders = []
-        for _ in range(20):
-            v = rng.standard_normal(144).astype(np.float32)
-            v /= np.linalg.norm(v)
-            cylinders.append(v)
-        repo.bulk_insert_cylinders(
+        pairs = [_make_pair(i, i + 1) for i in range(50)]
+        repo.bulk_insert_pairs(
             person_id=f"p{person_id}",
             fingerprint_id=f"f{person_id}",
             capture_id=f"c{person_id}",
-            vectors=cylinders,
+            pair_dicts=pairs,
         )
 
-    query = [rng.standard_normal(144).astype(np.float32) for _ in range(5)]
+    query = [_make_pair(0, 1) for _ in range(5)]
     t0 = time.monotonic()
-    hits = repo.knn_search(query, top_k_per_vector=5)
+    hits = repo.knn_search_pairs(query, top_k_per_vector=10)
     elapsed = time.monotonic() - t0
 
     assert hits

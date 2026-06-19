@@ -413,7 +413,7 @@ def test_get_mcc_matching_service_returns_singleton() -> None:
 
     mock_repo = MagicMock()
     with patch(
-        "src.db.qdrant_mcc_repository.QdrantMccRepository.from_host",
+        "src.db.qdrant_pair_repository.QdrantPairRepository.from_host",
         return_value=mock_repo,
     ):
         dependencies._mcc_matching_service = None
