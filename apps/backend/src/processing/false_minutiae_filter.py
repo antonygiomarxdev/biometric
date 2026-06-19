@@ -13,7 +13,12 @@ import math
 # ---------------------------------------------------------------------------
 # Default thresholds (chosen for 256×256 normalised images)
 # ---------------------------------------------------------------------------
-BORDER_MARGIN = 8
+# BORDER_MARGIN: 8 was too narrow for real-world latent prints where the
+# thinning step produces spurious minutiae along the image edge. 25 px
+# in 256×256 = ~10% of the canvas, enough to filter border artifacts
+# without losing real ridge structure (which is typically 20+ px from
+# the edge after enhancement + normalization).
+BORDER_MARGIN = 25
 MIN_PAIR_DIST = 8
 ISOLATION_RADIUS = 20
 
