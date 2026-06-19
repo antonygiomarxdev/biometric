@@ -1,7 +1,7 @@
-"""3-point alignment for fingerprint matching.
+"""Point-based alignment for fingerprint matching.
 
 Computes a similarity transform (scale + rotation + translation) from
-3 corresponding minutia pairs between probe and candidate fingerprints.
+N corresponding minutia pairs between probe and candidate fingerprints.
 
 Reference: NIST NBIS Bozorth3, Jain et al. (1997).
 """
@@ -19,6 +19,9 @@ import numpy as np
 # Numerical epsilon to prevent division by zero in Procrustes trace
 NUMERICAL_EPSILON: float = 1e-10
 
+# Minimum number of point pairs required for Procrustes analysis
+MIN_ALIGNMENT_POINTS: int = 3
+
 
 @dataclass
 class AlignmentTransform:
@@ -30,39 +33,16 @@ class AlignmentTransform:
     dy: float
 
 
-def align_3pts(
+def _procrustes_transform(
     probe_pts: np.ndarray,
     cand_pts: np.ndarray,
     probe_angles: np.ndarray | None = None,
     cand_angles: np.ndarray | None = None,
 ) -> AlignmentTransform:
-    """Compute the similarity transform mapping *probe_pts* to *cand_pts*.
+    """Core Procrustes solver for any N >= MIN_ALIGNMENT_POINTS.
 
-    Uses the two most distant points for the initial estimate, then
-    refines with all three via least squares (Procrustes).
-
-    Parameters
-    ----------
-    probe_pts:
-        ``(3, 2)`` array of probe minutia positions (normalised 0-1).
-    cand_pts:
-        ``(3, 2)`` array of candidate minutia positions (normalised 0-1).
-    probe_angles, cand_angles:
-        Optional ``(3,)`` arrays of minutia angles in radians.  If provided,
-        the rotation is constrained by the angle deltas as well.
-
-    Returns
-    -------
-    AlignmentTransform with:
-        - *scale*: isotropic scale factor
-        - *angle*: rotation in radians
-        - *dx*, *dy*: translation components
+    All caller-facing functions validate the shape and dispatch here.
     """
-    if probe_pts.shape != (3, 2) or cand_pts.shape != (3, 2):
-        msg = f"Expected (3, 2) arrays, got probe {probe_pts.shape}, cand {cand_pts.shape}"
-        raise ValueError(msg)
-
-    # Compute similarity transform via Procrustes analysis (all 3 points)
     p_mean = np.mean(probe_pts, axis=0)
     q_mean = np.mean(cand_pts, axis=0)
     p_centered = probe_pts - p_mean
@@ -89,7 +69,7 @@ def align_3pts(
     # Constrain by angle deltas if provided
     if probe_angles is not None and cand_angles is not None:
         angle_deltas: list[float] = []
-        for k in range(3):
+        for k in range(len(probe_angles)):
             d = float(cand_angles[k] - probe_angles[k])
             while d > np.pi:
                 d -= 2 * np.pi
@@ -107,6 +87,76 @@ def align_3pts(
         dx=refined_dx,
         dy=refined_dy,
     )
+
+
+def align_n_pts(
+    probe_pts: np.ndarray,
+    cand_pts: np.ndarray,
+    probe_angles: np.ndarray | None = None,
+    cand_angles: np.ndarray | None = None,
+) -> AlignmentTransform:
+    """Compute the similarity transform mapping *probe_pts* to *cand_pts*.
+
+    Uses Procrustes analysis on all ``N >= 3`` corresponding point pairs.
+    With more than 3 points the solution is least-squares — robust to
+    noisy correspondences in the growing algorithm.
+
+    Parameters
+    ----------
+    probe_pts:
+        ``(N, 2)`` array of probe minutia positions (normalised 0-1).
+    cand_pts:
+        ``(N, 2)`` array of candidate minutia positions (normalised 0-1).
+    probe_angles, cand_angles:
+        Optional ``(N,)`` arrays of minutia angles in radians.  If
+        provided, the rotation is constrained by the angle deltas
+        (mean of wrapped differences).
+
+    Returns
+    -------
+    AlignmentTransform with:
+        - *scale*: isotropic scale factor
+        - *angle*: rotation in radians
+        - *dx*, *dy*: translation components
+
+    Raises
+    ------
+    ValueError:
+        If *probe_pts* and *cand_pts* don't have the same shape, are not
+        2-D, or have fewer than ``MIN_ALIGNMENT_POINTS`` rows.
+    """
+    if probe_pts.shape != cand_pts.shape:
+        msg = f"Shape mismatch: probe {probe_pts.shape} vs cand {cand_pts.shape}"
+        raise ValueError(msg)
+    if probe_pts.ndim != 2 or probe_pts.shape[1] != 2:
+        msg = f"Expected (N, 2) arrays, got {probe_pts.shape}"
+        raise ValueError(msg)
+    if probe_pts.shape[0] < MIN_ALIGNMENT_POINTS:
+        msg = (
+            f"Need at least {MIN_ALIGNMENT_POINTS} point pairs, got "
+            f"{probe_pts.shape[0]}"
+        )
+        raise ValueError(msg)
+
+    return _procrustes_transform(probe_pts, cand_pts, probe_angles, cand_angles)
+
+
+def align_3pts(
+    probe_pts: np.ndarray,
+    cand_pts: np.ndarray,
+    probe_angles: np.ndarray | None = None,
+    cand_angles: np.ndarray | None = None,
+) -> AlignmentTransform:
+    """Compute the similarity transform from exactly 3 point pairs.
+
+    Thin wrapper over :func:`align_n_pts` for backward compatibility.
+    Prefer :func:`align_n_pts` when more than 3 pairs are available —
+    the least-squares solution is more robust.
+    """
+    if probe_pts.shape != (3, 2) or cand_pts.shape != (3, 2):
+        msg = f"Expected (3, 2) arrays, got probe {probe_pts.shape}, cand {cand_pts.shape}"
+        raise ValueError(msg)
+    return _procrustes_transform(probe_pts, cand_pts, probe_angles, cand_angles)
 
 
 def apply_transform(

@@ -12,7 +12,7 @@ Reference: NIST NBIS Bozorth3.
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .triplet_alignment import AlignmentTransform
 from .triplet_validator import TripletCorrespondence, TripletValidator, extract_correspondence
@@ -25,7 +25,7 @@ from .triplet_validator import TripletCorrespondence, TripletValidator, extract_
 VALIDATION_TOLERANCE: float = 0.05
 
 # Minimum number of confirming triplet matches to accept a candidate
-MIN_CONFIRMING_TRIPLETS: int = 2
+MIN_CONFIRMING_TRIPLETS: int = 3
 
 # Maximum growing iterations before convergence
 MAX_GROWING_ITERATIONS: int = 20
@@ -52,6 +52,7 @@ class GrowthResult:
     confirming_triplets: int
     total_probe_triplets: int
     score: float
+    validated_hits: list[dict] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -175,7 +176,8 @@ def _grow_person(
     if n_confirmed < min_confirming:
         return None
 
-    score = _compute_score(n_confirmed, num_probe_triplets)
+    similarity_mean = _similarity_mean(confirmed_correspondences)
+    score = _compute_score(n_confirmed, num_probe_triplets, similarity_mean)
 
     return GrowthResult(
         person_id=person_id,
@@ -184,15 +186,43 @@ def _grow_person(
         confirming_triplets=n_confirmed,
         total_probe_triplets=num_probe_triplets,
         score=round(score, 4),
+        validated_hits=[c.candidate_hit for c in confirmed_correspondences],
     )
 
 
-def _compute_score(n_confirmed: int, num_probe_triplets: int) -> float:
-    """Compute the confirmation ratio with smoothing.
+def _similarity_mean(correspondences: list[TripletCorrespondence]) -> float:
+    """Mean cosine similarity across all confirmed triplet correspondences.
 
-    The score starts as ``confirmed / total`` then is further scaled by
-    ``confirmed / (confirmed + SMOOTHING_OFFSET)`` so that a single
-    triplet match can never yield a high score.
+    Each correspondence stores a ``candidate_hit`` dict with the KNN
+    similarity score for that hit.  A match with low mean similarity
+    (e.g. 0.4) is more likely a false positive even if many triplets
+    are geometrically consistent.
+    """
+    if not correspondences:
+        return 0.0
+    sims = [float(c.candidate_hit.get("similarity", 0.0)) for c in correspondences]
+    return sum(sims) / len(sims)
+
+
+def _compute_score(
+    n_confirmed: int,
+    num_probe_triplets: int,
+    similarity_mean: float,
+) -> float:
+    """Compute the confirmation score combining geometric ratio and similarity.
+
+    The final score is::
+
+        ratio × smooth × similarity_mean
+
+    where ``ratio`` is the fraction of probe triplets confirmed and
+    ``smooth`` is the linear dampener ``n / (n + SMOOTHING_OFFSET)``.
+
+    Multiplying by ``similarity_mean`` ensures that confirmations built
+    from low-similarity KNN hits cannot yield a high score — they may
+    be geometrically consistent with the seed transform, but they are
+    not confident matches at the descriptor level.
     """
     ratio = n_confirmed / max(num_probe_triplets, 1)
-    return min(ratio * (n_confirmed / (n_confirmed + SMOOTHING_OFFSET)), 1.0)
+    smooth = n_confirmed / (n_confirmed + SMOOTHING_OFFSET)
+    return min(ratio * smooth * similarity_mean, 1.0)

@@ -326,6 +326,37 @@ class RidgeGraph(Base):
         )
 
 
+class FingerprintOFIndex(Base):
+    """Orientation field index for the OF pre-filter (Phase 26).
+
+    Stores the 16×16 OF and coherence matrices keyed by ``fingerprint_id``
+    so that ``search_by_triplets`` can reject candidates whose global OF
+    is inconsistent with the probe.
+    """
+
+    __tablename__ = "fingerprint_of_index"
+
+    fingerprint_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("fingerprints.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    of_ori: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    of_coh: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    block_size: Mapped[int] = mapped_column(Integer, nullable=False, default=16)
+    pseudo_core_row: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pseudo_core_col: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    enrolled_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow,
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<FingerprintOFIndex(fingerprint_id={self.fingerprint_id}, "
+            f"block_size={self.block_size})>"
+        )
+
+
 class User(Base):
     """
     Forensic user — personnel who interact with the system.

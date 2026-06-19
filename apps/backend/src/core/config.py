@@ -310,6 +310,21 @@ class MccMatchingConfig:
     hough_min_support: int = field(
         default_factory=lambda: int(os.getenv("MCC_HOUGH_MIN_SUPPORT", "5"))
     )
+    # NIST-style score saturation for latent matching (NBIS Bozorth3
+    # convention). ``peak_votes / saturation`` becomes the per-candidate
+    # confidence (0-1). Override via ``MCC_CONFIDENCE_SATURATION``.
+    # 10 linked minutiae pairs ≈ strong latent match in NIST practice.
+    confidence_saturation: int = field(
+        default_factory=lambda: int(os.getenv("MCC_CONFIDENCE_SATURATION", "10"))
+    )
+    # Filter candidates below this score from the response. Default
+    # 0.70 is the "possible match" floor — anything below is treated
+    # as noise and not surfaced to the perito. The frontend
+    # further labels candidates above this as "media" (70-90%) or
+    # "alta" (>=90%). Override via ``MCC_CONFIDENCE_THRESHOLD``.
+    confidence_threshold: float = field(
+        default_factory=lambda: float(os.getenv("MCC_CONFIDENCE_THRESHOLD", "0.70"))
+    )
 
 
 @dataclass(frozen=True)

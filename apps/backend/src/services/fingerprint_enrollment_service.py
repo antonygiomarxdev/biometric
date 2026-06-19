@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import cv2
 
@@ -187,7 +187,9 @@ class FingerprintEnrollmentService:
     ) -> None:
         """Build and persist triplet features (Phase 25, Plan 25-02).
 
-        Best-effort alongside MCC indexing.
+        Also persists the orientation field for the OF pre-filter
+        (Phase 26, Plan 26-01). Best-effort: failures are logged
+        and do not abort enrollment.
         """
         if self._mcc_service is None:
             return
@@ -201,7 +203,7 @@ class FingerprintEnrollmentService:
                 str(person.external_id) if person.external_id else str(person.id)
             )
             loop = asyncio.get_running_loop()
-            num_min, num_triplets = await loop.run_in_executor(
+            num_min, num_triplets, of_result = await loop.run_in_executor(
                 None,
                 self._mcc_service.enroll_triplets,
                 str(capture.id),
@@ -213,5 +215,28 @@ class FingerprintEnrollmentService:
                 "Triplets indexed %d triplets (%d minutiae) for capture %s (person=%s)",
                 num_triplets, num_min, capture.id, person_id,
             )
+
+            # Persist OF for the pre-filter (Phase 26)
+            if of_result is not None:
+                try:
+                    from src.db.of_registry import OFRegistry
+                    from src.processing.of_similarity import OFSimilarity
+
+                    import numpy as np
+
+                    ori_arr = np.array(of_result["ori"], dtype=np.float32)
+                    coh_arr = np.array(of_result["coh"], dtype=np.float32)
+                    of_obj = OFSimilarity(
+                        ori_arr, coh_arr,
+                        block_size=cast(int, of_result["block_size"]),
+                    )
+                    registry = OFRegistry(self._session)
+                    await registry.save(str(fingerprint.id), of_obj)
+                    log.info(
+                        "OF persisted for fingerprint %s (person=%s)",
+                        fingerprint.id, person_id,
+                    )
+                except Exception as of_exc:
+                    log.warning("OF persistence failed for capture %s: %s", capture.id, of_exc)
         except Exception as e:
             log.warning("Triplet indexing failed for capture %s: %s", capture.id, e)

@@ -39,9 +39,13 @@ const MAX_BYTES = 10 * 1024 * 1024;
 const PALETTE_HIT = "#ffffff";
 const PALETTE_HIT_RING = "#22c55e";
 
-// Below these scores the perito should treat the match as suspect.
-const MATCH_THRESHOLD_GOOD = 0.6;
-const MATCH_THRESHOLD_FAIR = 0.3;
+// Tiered confidence thresholds for the perito. Above 0.9 is
+// "high" (single best match, "OK"); 0.7-0.9 is "medium" (possible
+// alternatives, requires review); below 0.7 is filtered server-side
+// as noise. The actual server-side filter lives in
+// `MCC_CONFIDENCE_THRESHOLD`.
+const MATCH_THRESHOLD_GOOD = 0.9;
+const MATCH_THRESHOLD_FAIR = 0.7;
 
 export default function AnalisisPage() {
   const navigate = useNavigate();
@@ -302,7 +306,6 @@ export default function AnalisisPage() {
       if (selectedCandidate) {
         for (const e of selectedCandidate.supporting_pairs) {
           matchedIndices.add(e.probe_mi_idx);
-          matchedIndices.add(e.probe_mj_idx);
         }
       }
 
