@@ -51,8 +51,14 @@ class EnhancerConfig:
 class BaseEnhancer(IEnhancer, ABC):
     """Clase abstracta con lógica común."""
 
-    def __init__(self, config: EnhancerConfig):
+    def __init__(
+        self,
+        config: EnhancerConfig,
+        backend: "ComputeBackend | None" = None,
+    ) -> None:
         self.config = config
+        from src.processing.compute_backends import ComputeBackend, get_compute_backend
+        self._backend: ComputeBackend = backend or get_compute_backend()
 
     @abstractmethod
     def enhance(self, img: np.ndarray, *, resize: bool = True) -> np.ndarray:

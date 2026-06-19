@@ -434,3 +434,42 @@ pairs. See `docs/adr/009-remove-cylinders.md`.
 code. If dev and prod use different code, dev testing is meaningless.
 Either ship the simpler one to prod, or have dev use the same one
 as prod. The latter is almost always the right answer.
+
+## Phase 27: Compute backend abstraction (Strategy pattern)
+
+The Gabor filter bank is hot (60 filters × convolutions × per query).
+For a 1.5s query, `enhance` is ~0.16s — small but the most
+CPU-intensive single step. The temptation is to add CuPy/cv2-cuda
+inline in the enhancer. **Don't.** That couples the enhancer to a
+specific GPU library.
+
+**What we did:** Compute backend abstraction
+(`src/processing/compute_backends/`). The enhancer calls
+`self._backend.convolve2d(image, kernel)`, not `cupy.signal.correlate2d`
+or `cv2.filter2D`. Backends are pluggable:
+- `NumpyBackend` (cv2, CPU) — default, always available
+- `CupyBackend` (CuPy, GPU CUDA) — optional, falls back gracefully
+
+Selection: `MCC_COMPUTE_BACKEND=auto|cupy|numpy` env var. Default
+`auto` tries cupy then falls back to numpy.
+
+**Why this matters:**
+- Dev = prod regardless of GPU availability
+- New backends (oneAPI, ROCm, MPS) are drop-in, no code change
+- Failure of optional GPU deps doesn't break the system
+- Tests run on the CPU backend (no GPU needed in CI)
+
+**Lesson learned:** Always abstract hot paths through a Strategy
+interface even if there's only one implementation today. Adding GPU
+or new backends should be a 1-file change, not a refactor.
+
+## Phase 27: cv2.filter2D vs scipy.signal.convolve2d
+
+`enhance` was 17.5s because the original Gabor filter bank used
+`scipy.signal.convolve2d` (pure Python reference impl). Swapping to
+`cv2.filter2D` (C++ with SIMD) was a 109x speedup on that step:
+17.5s → 0.16s. Total query time: 19s → 1.5s (12x).
+
+**Lesson learned:** Always check the actual bottleneck before
+optimizing. We assumed KNN was the bottleneck (it wasn't). One
+profiler call + one library swap = 12x speedup. No GPU, no rewrite.

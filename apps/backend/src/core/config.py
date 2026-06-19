@@ -288,6 +288,11 @@ class MccMatchingConfig:
     confidence_threshold: float = field(
         default_factory=lambda: float(os.getenv("MCC_CONFIDENCE_THRESHOLD", "0.70"))
     )
+    # Compute backend: "auto" (default) tries cupy then numpy;
+    # "cupy" forces GPU; "numpy" forces CPU cv2. Falls back gracefully.
+    compute_backend: str = field(
+        default_factory=lambda: os.getenv("MCC_COMPUTE_BACKEND", "auto")
+    )
 
 
 @dataclass(frozen=True)

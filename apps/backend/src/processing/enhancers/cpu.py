@@ -214,13 +214,12 @@ class CpuEnhancer(BaseEnhancer):
             angle = -(i * angle_inc + 90)
             filters.append(ndimage.rotate(ref_filter, angle, reshape=False))
 
-        # 2. Convolve image with ALL filters.
-        # cv2.filter2D is ~100x faster than scipy.signal.convolve2d
-        # (C++ with SIMD vs pure-Python scipy). 60 Gabor filters on
-        # 350x326 image: 17.5s -> 0.16s.
+        # 2. Convolve image with ALL filters. Uses the configured
+        # compute backend (cupy GPU when available, cv2 CPU otherwise).
+        # cv2.filter2D is ~100x faster than scipy.signal.convolve2d.
         filtered_layers = np.zeros((num_filters, *normim.shape))
         for i, kern in enumerate(filters):
-            filtered_layers[i] = cv2.filter2D(normim, -1, kern)
+            filtered_layers[i] = self._backend.convolve2d(normim, kern)
 
         # 3. Select response based on pixel-wise orientation
         orient_deg = orientim * 180 / np.pi
