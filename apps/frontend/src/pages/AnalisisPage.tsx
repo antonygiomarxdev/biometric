@@ -2,66 +2,48 @@ import {
   WorkflowStepper,
   UploadDropzone,
 } from "@/components/analisis/WorkflowStepper";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { ProbePanel } from "@/components/analisis/ProbePanel";
+import { ResultsPanel } from "@/components/analisis/ResultsPanel";
+import { useProbeProcessor } from "@/hooks/analisis/useProbeProcessor";
+import { useSearchManager } from "@/hooks/analisis/useSearchManager";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { CandidateDetailPanel } from "@/components/fingerprint/CandidateDetailPanel";
-import { drawMinutiaMarker } from "@/hooks/useMatchCanvas";
-import { useToast } from "@/components/ui/toast";
 import {
-  searchMatching,
-  listPersons,
-  createFingerprintSlot,
-  enrollFingerprint,
-  createCase,
-  getMinutiaeForImage,
-  type MatchCandidate,
-  type MatchSearchResponse,
-  type MinutiaPoint,
-  type CaseCreateInput,
-} from "@/lib/api";
-import {
-  Upload,
+  ArrowLeft,
   Fingerprint,
   Loader2,
-  CheckCircle2,
-  ArrowLeft,
+  Search,
   UserPlus,
   FilePlus,
-  Search,
-  Trophy,
+  CheckCircle2,
 } from "lucide-react";
-import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { useEffect, useRef, useState, useCallback } from "react";
-
-const VALID_TYPES = ["image/bmp", "image/png", "image/jpeg", "image/jpg"];
-const MAX_BYTES = 10 * 1024 * 1024;
-
-const PALETTE_HIT = "#ffffff";
-
-const MATCH_THRESHOLD_GOOD = 0.9;
-const MATCH_THRESHOLD_FAIR = 0.7;
+import { useCallback, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useToast } from "@/components/ui/toast";
+import {
+  createCase,
+  createFingerprintSlot,
+  enrollFingerprint,
+  listPersons,
+  type CaseCreateInput,
+  type MatchCandidate,
+} from "@/lib/api";
+import { useMutation, useQuery } from "@tanstack/react-query";
 
 export default function AnalisisPage() {
   const navigate = useNavigate();
   const { addToast } = useToast();
+  const {
+    latentFile,
+    probeDataUrl,
+    probePreviewUrl,
+    probeMinutiae,
+    isPreviewLoading,
+    handleFile,
+    reset: resetProbe,
+  } = useProbeProcessor();
 
-  const probeCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const candidateCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const probeImgRef = useRef<HTMLImageElement | null>(null);
-  const candidateImgRef = useRef<HTMLImageElement | null>(null);
-
-  const [latentFile, setLatentFile] = useState<File | null>(null);
-  const [probeDataUrl, setProbeDataUrl] = useState<string | null>(null);
-  const [probePreviewUrl, setProbePreviewUrl] = useState<string | null>(null);
-  const [searchResult, setSearchResult] = useState<MatchSearchResponse | null>(null);
-  const [selectedIdx, setSelectedIdx] = useState(0);
+  const { searchResult, searchMutation, reset: resetSearch } = useSearchManager();
 
   const [showEnrollPicker, setShowEnrollPicker] = useState(false);
   const [enrollPersonId, setEnrollPersonId] = useState("");
@@ -69,38 +51,6 @@ export default function AnalisisPage() {
   const [showCreateCase, setShowCreateCase] = useState(false);
   const [caseNumber, setCaseNumber] = useState("");
   const [caseTitle, setCaseTitle] = useState("");
-
-  const searchMutation = useMutation({
-    mutationFn: (file: File) => searchMatching(file, 10),
-    onSuccess: (result) => {
-      setSearchResult(result);
-      setSelectedIdx(0);
-      if (result.candidates.length === 0) {
-        addToast({
-          type: "info",
-          title: "Sin coincidencias",
-          description: "Podés enrolar esta huella si pertenece a alguien nuevo.",
-          duration: 5000,
-        });
-      } else {
-        addToast({
-          type: "success",
-          title: `${result.candidates.length} candidato${
-            result.candidates.length !== 1 ? "s" : ""
-          } encontrado${result.candidates.length !== 1 ? "s" : ""}`,
-          description: "Hacé click en uno para ver la comparación",
-          duration: 4000,
-        });
-      }
-    },
-    onError: (err: Error) => {
-      addToast({
-        type: "error",
-        title: "Error en búsqueda",
-        description: err.message,
-      });
-    },
-  });
 
   const enrollMutation = useMutation({
     mutationFn: async ({ personId, file }: { personId: string; file: File }) => {
@@ -152,45 +102,6 @@ export default function AnalisisPage() {
     queryFn: () => listPersons(0, 100),
   });
 
-  const handleFile = useCallback(
-    (file: File) => {
-      if (!VALID_TYPES.includes(file.type as (typeof VALID_TYPES)[number])) {
-        addToast({
-          type: "error",
-          title: "Tipo inválido",
-          description: "BMP, PNG o JPEG",
-        });
-        return;
-      }
-      if (file.size > MAX_BYTES) {
-        addToast({
-          type: "error",
-          title: "Archivo grande",
-          description: "Máx 10MB",
-        });
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        setProbeDataUrl(ev.target?.result as string);
-        setLatentFile(file);
-        setSearchResult(null);
-        setSelectedIdx(0);
-        setProbePreviewUrl(null);
-      };
-      reader.readAsDataURL(file);
-
-      getMinutiaeForImage(file)
-        .then((res) => {
-          setProbePreviewUrl(res.processed_image_url);
-        })
-        .catch((err) => {
-          console.error("Preview failed:", err);
-        });
-    },
-    [addToast]
-  );
-
   const handleSearch = useCallback(() => {
     if (!latentFile) return;
     searchMutation.mutate(latentFile);
@@ -214,14 +125,9 @@ export default function AnalisisPage() {
   }, []);
 
   const handleReset = useCallback(() => {
-    setLatentFile(null);
-    setProbeDataUrl(null);
-    setSearchResult(null);
-    setSelectedIdx(0);
-  }, []);
-
-  const selectedCandidate: MatchCandidate | null =
-    searchResult?.candidates[selectedIdx] ?? null;
+    resetProbe();
+    resetSearch();
+  }, [resetProbe, resetSearch]);
 
   const currentStep: 0 | 1 | 2 = (() => {
     if (searchResult) return 2;
@@ -229,83 +135,155 @@ export default function AnalisisPage() {
     return 0;
   })();
 
-  const probeSrc = searchResult?.probe_image_url ?? probePreviewUrl ?? probeDataUrl;
+  return (
+    <div className="min-h-screen bg-background text-foreground p-6 font-sans dark">
+      <div className="max-w-[1400px] mx-auto space-y-4">
+        <header className="flex items-center justify-between border-b border-border pb-3">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+            <Fingerprint className="w-5 h-5 text-primary" />
+            <h1 className="text-xl font-bold tracking-tight">
+              Análisis de Huella
+            </h1>
+          </div>
+          {latentFile && (
+            <Button variant="ghost" onClick={handleReset}>
+              Empezar de nuevo
+            </Button>
+          )}
+        </header>
 
-  useEffect(() => {
-    const canvas = probeCanvasRef.current;
-    if (!canvas) return;
-    if (!probeSrc) {
-      const ctx = canvas.getContext("2d");
-      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-      return;
-    }
-    const img = new Image();
-    img.onload = () => {
-      probeImgRef.current = img;
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      ctx.drawImage(img, 0, 0);
+        <WorkflowStepper
+          current={currentStep}
+          searchRunning={searchMutation.isPending}
+          minutiae={
+            searchResult?.probe_minutiae.length ?? probeMinutiae.length ?? 0
+          }
+          candidateCount={searchResult?.candidates.length ?? 0}
+          queryTimeMs={searchResult?.query_time_ms}
+        >
+          {!probeDataUrl ? (
+            <UploadDropzone onFile={handleFile} running={isPreviewLoading} />
+          ) : (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2 p-3 bg-card border border-border rounded-lg">
+                <Button
+                  size="sm"
+                  onClick={handleSearch}
+                  disabled={!latentFile || searchMutation.isPending}
+                  className="flex-1 sm:flex-none"
+                >
+                  {searchMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                      Buscando…
+                    </>
+                  ) : (
+                    <>
+                      <Search className="w-3.5 h-3.5 mr-1.5" />
+                      Buscar en la base
+                    </>
+                  )}
+                </Button>
 
-      const matchedIndices = new Set<number>();
-      if (selectedCandidate) {
-        for (const e of selectedCandidate.supporting_pairs) {
-          matchedIndices.add(e.probe_mi_idx);
-        }
-      }
+                {searchResult && searchResult.candidates.length === 0 && (
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={() => setShowEnrollPicker(!showEnrollPicker)}
+                    className="flex-1 sm:flex-none"
+                  >
+                    <UserPlus className="w-3.5 h-3.5 mr-1.5" />
+                    No hay match — enrolar
+                  </Button>
+                )}
 
-      const probeMinutiae = searchResult?.probe_minutiae;
-      if (probeMinutiae) {
-        for (let i = 0; i < probeMinutiae.length; i++) {
-          const m = probeMinutiae[i];
-          if (!m) continue;
-          const color = matchedIndices.has(i)
-            ? PALETTE_HIT
-            : "rgba(255,255,255,0.7)";
-          drawMinutiaMarker(ctx, m, color);
-        }
-      }
-    };
-    img.src = probeSrc;
-  }, [probeSrc, searchResult, selectedCandidate]);
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowEnrollPicker(!showEnrollPicker)}
+                >
+                  <UserPlus className="w-3.5 h-3.5 mr-1.5" />
+                  Enrolar
+                </Button>
 
-  const candidateSrc = selectedCandidate?.image_url ?? probePreviewUrl ?? null;
+                <div className="ml-auto text-xs text-muted-foreground font-mono">
+                  {searchResult
+                    ? `${searchResult.probe_minutiae.length} minucias · ${searchResult.candidates.length} candidatos · ${searchResult.query_time_ms}ms`
+                    : probeMinutiae.length > 0
+                    ? `${probeMinutiae.length} minucias`
+                    : isPreviewLoading
+                    ? "procesando..."
+                    : "—"}
+                </div>
+              </div>
 
-  useEffect(() => {
-    const canvas = candidateCanvasRef.current;
-    if (!canvas) return;
-    if (!candidateSrc) {
-      const ctx = canvas.getContext("2d");
-      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-      return;
-    }
-    const img = new Image();
-    img.onload = () => {
-      candidateImgRef.current = img;
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      ctx.drawImage(img, 0, 0);
+              {showEnrollPicker && (
+                <Card className="border-border/60">
+                  <CardContent className="p-3 flex flex-wrap items-center gap-2">
+                    <span className="text-sm text-muted-foreground">
+                      Persona:
+                    </span>
+                    <select
+                      value={enrollPersonId}
+                      onChange={(e) => setEnrollPersonId(e.target.value)}
+                      className="flex-1 min-w-[200px] px-2 py-1.5 bg-background border border-border rounded text-sm"
+                    >
+                      <option value="">— seleccionar —</option>
+                      {persons?.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.full_name ?? p.external_id}
+                        </option>
+                      ))}
+                    </select>
+                    <Button
+                      size="sm"
+                      onClick={handleEnroll}
+                      disabled={!enrollPersonId || enrolling}
+                    >
+                      {enrolling ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                          Enrolando…
+                        </>
+                      ) : (
+                        "Enrolar"
+                      )}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setShowEnrollPicker(false)}
+                    >
+                      Cancelar
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
 
-      if (selectedCandidate) {
-        for (const e of selectedCandidate.supporting_pairs) {
-          drawMinutiaMarker(
-            ctx,
-            {
-              x: e.candidate_mi_x,
-              y: e.candidate_mi_y,
-              angle: e.candidate_mi_angle,
-              type: 2,
-            },
-            PALETTE_HIT
-          );
-        }
-      }
-    };
-    img.src = candidateSrc;
-  }, [candidateSrc, selectedCandidate]);
+              <ProbePanel
+                probeDataUrl={probeDataUrl}
+                probePreviewUrl={probePreviewUrl}
+                probeMinutiae={probeMinutiae}
+                searchResult={searchResult}
+                selectedCandidate={searchResult?.candidates[0]}
+                onFile={handleFile}
+                isLoading={isPreviewLoading}
+              />
 
-  // ... rest of the render function
+              <ResultsPanel
+                searchResult={searchResult}
+                probeImageUrl={
+                  searchResult?.probe_image_url ?? probePreviewUrl ?? probeDataUrl
+                }
+                probeMinutiae={searchResult?.probe_minutiae ?? []}
+              />
+            </div>
+          )}
+        </WorkflowStepper>
+      </div>
+    </div>
+  );
 }
