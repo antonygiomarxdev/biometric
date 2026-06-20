@@ -32,8 +32,8 @@ Algorithm
 Given a set of probe minutiae pairs and candidate pair hits from
 KNN search, Bozorth3:
 
-1. Computes a transformation (dx, dy, dtheta) for each matched pair
-   representing how the probe pair aligns to the candidate pair.
+1. Computes a rotation-only transformation (0, 0, dtheta) for each
+   matched pair — invariant to translation and crop.
 
    ** CRITICAL — rotation-only transform for latent matching **
    The original Bozorth3 achieves rotation invariance by building an
@@ -58,20 +58,36 @@ KNN search, Bozorth3:
    represents the largest set of pairs that all agree on the same
    global rotation — equivalent to the best global alignment.
 
-4. Scores the candidate by component size / saturation.
+4. Applies a minimum component guard: the largest component must have
+   at least ``min_component_size`` pairs (default 3) AND represent
+   at least ``min_component_fraction`` of all available hits (default
+   0.25). This prevents single-rotation-bin false-positives — groups
+   of pairs from different fingers that coincidentally share a similar
+   orientation offset — from generating misleading scores.
 
-Tolerance calibration for latents
-----------------------------------
-dtheta_tol = 0.35 rad (≈ 20°).
+5. Scores the candidate by component size / saturation.
 
-NIST IR 8215 [3] reports that latent fingerprint orientation-field
-estimation has typical error ±8–15° due to smearing, partial contact,
-and noise. The Crossing Number detector adds ±5–10° for minutiae in
-low-quality zones. The tolerance 0.35 rad provides a ×1.5 safety
-margin over worst-case estimation noise.
+Tolerance calibration
+---------------------
+dtheta_tol = 0.20 rad (≈ 11.5°).
 
-For rolled/slap impressions from controlled scanners, the original
-0.15 rad (8.6°) is appropriate. For latents, use 0.35 rad or higher.
+This value is deliberately tighter than the 0.35 rad used when the
+transform included spatial components. Rationale:
+
+- With rotation-only transforms ALL pairs share dx=dy=0, so the
+  angular tolerance is the sole discriminator. A wide tolerance
+  (0.35 rad) at rotation-only mode groups pairs from different fingers
+  that share a similar rotation offset into spurious large components,
+  producing false matches.
+
+- NIST IR 8215 [3] reports latent orientation-field estimation error
+  ±8–15°. The Crossing Number detector adds ±5–10° in low-quality
+  zones. The value 0.20 rad (11.5°) covers the typical ±8° case with
+  a small safety margin. Worst-case ±15° latents may need 0.28 rad,
+  but that should only be unlocked after evaluating on your dataset.
+
+- For rolled/slap impressions from controlled scanners, 0.10–0.15 rad
+  (6–9°) is appropriate [1][2].
 
 Score formula
 -------------
@@ -104,13 +120,23 @@ class Bozorth3Linker:
     dy_tol:
         Translation tolerance in Y. Same note as dx_tol. Default 0.02.
     dtheta_tol:
-        Rotation tolerance in radians. Default 0.35 (≈ 20°), calibrated
-        for latent fingerprints per NIST IR 8215 [3]. For rolled/slap
-        impressions from controlled scanners, 0.15 rad (8.6°) is
-        appropriate.
+        Rotation tolerance in radians. Default 0.20 (≈ 11.5°), tightened
+        from 0.35 because in rotation-only mode the angular tolerance is
+        the sole discriminator — a wide value groups pairs from different
+        fingers into spurious large components.
+        For rolled/slap from controlled scanners: 0.10–0.15 rad.
+        For worst-case latents (very low quality): up to 0.28 rad.
     saturation:
         Component size at which the absolute score reaches 1.0 (used
         only for single-candidate results). Default 30.
+    min_component_size:
+        Minimum number of pairs in the largest component for a result
+        to be considered valid. Prevents single-pair components from
+        generating misleading scores. Default 3.
+    min_component_fraction:
+        Minimum fraction of total available hits that the largest
+        component must represent. Guards against trivial wins when very
+        few hits are returned. Default 0.25.
 
     References
     ----------
@@ -122,13 +148,17 @@ class Bozorth3Linker:
         self,
         dx_tol: float = 0.02,
         dy_tol: float = 0.02,
-        dtheta_tol: float = 0.35,  # raised from 0.15 → 0.35 for latents [3]
+        dtheta_tol: float = 0.20,
         saturation: int = 30,
+        min_component_size: int = 3,
+        min_component_fraction: float = 0.25,
     ) -> None:
         self._dx_tol = dx_tol
         self._dy_tol = dy_tol
         self._dtheta_tol = dtheta_tol
         self._saturation = saturation
+        self._min_component_size = min_component_size
+        self._min_component_fraction = min_component_fraction
 
     def link(
         self,
@@ -171,15 +201,6 @@ class Bozorth3Linker:
                 result["person_id"] = person_id
                 results.append(result)
 
-        # Margin-normalised score: stable when genuine and impostor
-        # vote counts are close — common for latents with few minutiae.
-        #
-        #   margin_i = (n_i - best_fp_i) / max(n_i, 1)   ∈ [-1, 1]
-        #   score_i  = (margin_i + 1) / 2                 ∈ [ 0, 1]
-        #
-        # When n >> best_fp → margin → 1.0 → score → 1.0.
-        # When n == best_fp → margin = 0.0 → score = 0.5.
-        # When n <  best_fp → margin < 0.0 → score < 0.5.
         if len(results) > 1:
             for r in results:
                 n = r["validated_count"]
@@ -190,27 +211,18 @@ class Bozorth3Linker:
                 margin = (n - best_fp) / max(n, 1)
                 r["score"] = round((margin + 1) / 2, 4)
         elif len(results) == 1:
-            # Single candidate: absolute score vs saturation
             n = results[0]["validated_count"]
             results[0]["score"] = round(min(1.0, n / max(self._saturation, 1)), 4)
 
         results.sort(key=lambda r: float(r["score"]), reverse=True)
         return results[:top_k]
 
-    # ------------------------------------------------------------------
-    # Internal: per-person linking
-    # ------------------------------------------------------------------
-
     def _link_person(
         self,
         probe_pairs: list[dict[str, Any]],
         person_hits: list[dict[str, Any]],
     ) -> dict[str, Any] | None:
-        """Link hits for a single candidate person.
-
-        Returns a result dict or ``None`` if no valid component found.
-        """
-        # Per-probe-pair best hit (highest similarity)
+        """Link hits for a single candidate person."""
         best_per_query: dict[int, dict[str, Any]] = {}
         for hit in person_hits:
             q_idx = hit["query_pair_index"]
@@ -220,8 +232,6 @@ class Bozorth3Linker:
         if not best_per_query:
             return None
 
-        # Compute rotation-only transformation for each hit.
-        # See module docstring for why dx=dy=0 is used here.
         transforms: dict[int, tuple[float, float, float]] = {}
         for q_idx, hit in best_per_query.items():
             if q_idx >= len(probe_pairs):
@@ -232,20 +242,17 @@ class Bozorth3Linker:
         if not transforms:
             return None
 
-        # Build compatibility graph via Union-Find.
-        # Two pairs are compatible if their transformations agree within
-        # dtheta_tol. Since dx=dy=0 always, only the angular difference
-        # is checked — equivalent to the original Bozorth3 angular
-        # subgraph compatibility test [1].
         uf = _UnionFind()
         keys = sorted(transforms.keys())
         for i in range(len(keys)):
             for j in range(i + 1, len(keys)):
                 ki, kj = keys[i], keys[j]
-                if _are_compatible(transforms[ki], transforms[kj], self._dx_tol, self._dy_tol, self._dtheta_tol):
+                if _are_compatible(
+                    transforms[ki], transforms[kj],
+                    self._dx_tol, self._dy_tol, self._dtheta_tol,
+                ):
                     uf.union(ki, kj)
 
-        # Find largest component
         components: dict[int, list[int]] = defaultdict(list)
         for k in keys:
             root = uf.find(k)
@@ -257,24 +264,27 @@ class Bozorth3Linker:
         largest_key = max(components, key=lambda r: len(components[r]))
         largest = components[largest_key]
         n = len(largest)
+        total_hits = len(best_per_query)
+
+        # Guard: reject trivially small or fractionally insignificant components.
+        # Eliminates false-positive components from pairs that coincidentally
+        # share a rotation offset but belong to different fingers.
+        if n < self._min_component_size:
+            return None
+        if total_hits > 0 and (n / total_hits) < self._min_component_fraction:
+            return None
 
         score = min(1.0, n / max(self._saturation, 1))
 
-        # Collect hits in the largest component, sorted by similarity desc
         component_hits = [best_per_query[q_idx] for q_idx in largest]
         component_hits.sort(key=lambda h: float(h["similarity"]), reverse=True)
 
         return {
-            "person_id": "",  # filled by caller
+            "person_id": "",
             "score": round(score, 4),
             "validated_count": n,
             "supporting_pairs": component_hits,
         }
-
-
-# ------------------------------------------------------------------
-# Helpers
-# ------------------------------------------------------------------
 
 
 def _compute_transform(
@@ -284,39 +294,9 @@ def _compute_transform(
     """Compute rigid transformation for a matched pair.
 
     Returns (0, 0, dtheta) — rotation-only form.
-
-    Rationale
-    ---------
-    The original Bozorth3 algorithm (FBI/NIST, Alan Bozorth 1993-95)
-    achieves rotation invariance by building an angular compatibility
-    graph rather than by aligning absolute coordinates [1]. Two pairs
-    are compatible if they vote for the same global rotation. Translation
-    invariance is implicit: if N pairs scattered across the image all
-    agree on the same rotation, they must belong to the same impression.
-
-    Using absolute (mi_x, mi_y) as the transformation reference is
-    incorrect for latent fingerprints because:
-
-    (a) A latent is a partial impression — the same minutia appears at
-        different absolute coordinates in the latent vs the enrolled
-        image. The offset dx = x_enrolled - x_latent can be 0.3–0.5
-        in normalised [0,1] coordinates, far exceeding any reasonable
-        dx_tol.
-
-    (b) NIST IR 8215 [3] estimates rigid transformation parameters
-        from the orientation field, not from absolute minutia positions,
-        precisely because absolute positions are unreliable in latents.
-
-    (c) Cappelli et al. [4] (MCC) explicitly build descriptors that are
-        position- and rotation-invariant by encoding only local
-        neighbourhood geometry. The same principle applies here: what
-        matters is whether pairs agree on orientation, not where they
-        happen to sit in the image.
-
-    All values are in normalised coordinates (0-1 range).
+    See module docstring for full rationale.
     """
     dtheta = _normalise_angle(float(hit["mi_angle"]) - float(probe_pair["mi_angle"]))
-    # dx=0 and dy=0 so that _are_compatible tests only angular agreement.
     return (0.0, 0.0, dtheta)
 
 
@@ -327,13 +307,7 @@ def _are_compatible(
     dy_tol: float,
     dtheta_tol: float,
 ) -> bool:
-    """Check if two transformations are compatible (within tolerance).
-
-    With the rotation-only transform, only the dtheta component is
-    meaningful. The dx/dy checks always pass (0 == 0) but are retained
-    so that this function works correctly if ``_compute_transform`` is
-    extended with spatial components in the future.
-    """
+    """Check if two transformations are compatible (within tolerance)."""
     return (
         abs(t1[0] - t2[0]) <= dx_tol
         and abs(t1[1] - t2[1]) <= dy_tol
