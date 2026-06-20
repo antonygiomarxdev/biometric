@@ -37,4 +37,4 @@ def thin(image: np.ndarray) -> np.ndarray:
     ) > 0
 
     skel_bool = skeletonize(binary_bool)
-    return skel_bool.astype(np.uint8)
+    return (skel_bool.astype(np.uint8) * 255)
