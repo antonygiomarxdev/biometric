@@ -31,10 +31,11 @@ export function useCanvas(
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
 
-      ctx.fillStyle = "red";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
       ctx.drawImage(img, 0, 0);
+
+      // Debug: Fill with a semi-transparent color after drawing the image
+      ctx.fillStyle = "rgba(255, 0, 0, 0.5)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       if (drawCallback) {
         drawCallback(ctx, img);
