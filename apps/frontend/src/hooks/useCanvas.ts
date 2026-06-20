@@ -23,6 +23,11 @@ export function useCanvas(
       canvas.height = img.naturalHeight;
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
+      
+      // Debug: Fill with a solid color
+      ctx.fillStyle = "red";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
       ctx.drawImage(img, 0, 0);
 
       if (drawCallback) {
