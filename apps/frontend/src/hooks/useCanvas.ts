@@ -29,6 +29,9 @@ export function useCanvas(
         drawCallback(ctx, img);
       }
     };
+    img.onerror = () => {
+      console.error("Failed to load image:", imgSrc);
+    };
     img.src = imgSrc;
   }, [imgSrc, canvasRef, drawCallback]);
 }
