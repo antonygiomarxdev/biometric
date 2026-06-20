@@ -108,17 +108,31 @@ def _encode_type_pair(t1: int, t2: int) -> int:
 def pair_to_vector(p: dict) -> list[float]:
     """Convert a pair dict to a 5-D feature vector for Qdrant.
 
-    (dx, dy, sin(dtheta), cos(dtheta), distance)
+    Returns (dx, dy, sin(dtheta), cos(dtheta), distance) WITHOUT L2
+    normalisation.
 
-    The vector is L2-normalised so cosine similarity in Qdrant works.
+    Rationale
+    ---------
+    L2-normalising the vector before storing in Qdrant collapses all
+    pairs that share the same *direction* but differ in *magnitude*
+    (i.e. different inter-minutia distances or spatial offsets) to
+    identical unit vectors.  Two pairs from completely different spatial
+    zones — or from different fingers — that happen to point in the
+    same direction would return cosine similarity = 1.0, making the
+    KNN step useless as a discriminator.
+
+    Qdrant's cosine distance metric already L2-normalises internally
+    when comparing vectors, so pre-normalising here is both redundant
+    and destructive: it throws away the magnitude information that
+    distinguishes pairs at different scales and positions.
+
+    By returning the raw vector, pairs from the same finger zone will
+    have genuinely high cosine similarity (same direction AND similar
+    magnitude), while pairs from different zones or different fingers
+    will diverge in at least one component.
     """
     dx = p["dx"]
     dy = p["dy"]
     dtheta = p["dtheta"]
     dist = p["distance"]
-
-    v = [dx, dy, math.sin(dtheta), math.cos(dtheta), dist]
-    norm = math.sqrt(sum(x * x for x in v))
-    if norm < 1e-10:
-        return [0.0] * 5
-    return [x / norm for x in v]
+    return [dx, dy, math.sin(dtheta), math.cos(dtheta), dist]

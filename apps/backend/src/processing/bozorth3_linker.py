@@ -32,62 +32,66 @@ Algorithm
 Given a set of probe minutiae pairs and candidate pair hits from
 KNN search, Bozorth3:
 
-1. Computes a rotation-only transformation (0, 0, dtheta) for each
-   matched pair — invariant to translation and crop.
+1. Computes a rigid transformation (dx, dy, dtheta) for each matched
+   pair — the spatial offset and rotation that maps the probe pair
+   onto the gallery pair.
 
-   ** CRITICAL — rotation-only transform for latent matching **
-   The original Bozorth3 achieves rotation invariance by building an
-   angular compatibility graph [1]. Translation invariance emerges
-   from checking angular consistency across ALL pairs simultaneously,
-   not by computing absolute spatial offsets. For latent fingerprints
-   (partial impressions, random placement, distortion), using absolute
-   (mi_x, mi_y) coordinates as the transformation reference is
-   incorrect: a minutia at position 0.10 in a cropped latent vs 0.50
-   in the enrolled image produces dx=0.40, which exceeds any
-   reasonable dx_tol and prevents genuine pairs from grouping.
+   The transformation is computed as:
+     dx    = gallery_mi_x - probe_mi_x   (translation in X)
+     dy    = gallery_mi_y - probe_mi_y   (translation in Y)
+     dtheta = gallery_mi_angle - probe_mi_angle  (rotation)
 
-   This implementation therefore uses (0, 0, dtheta) as the
-   transformation — only the angular component is tested for
-   compatibility. Two pairs are compatible if they agree on the global
-   rotation, regardless of where in the image they lie.
+   Two pairs are compatible if they agree on (dx, dy, dtheta) within
+   tolerance — meaning they both support the SAME rigid alignment of
+   probe onto gallery. This is the correct geometric interpretation:
+   if two pairs from the latent map to two pairs in the enrolled image
+   under the same transform, they are evidence of a genuine match.
+
+   NOTE on translation invariance for latent matching
+   ---------------------------------------------------
+   Previous versions used a rotation-only transform (dx=0, dy=0) to
+   handle the unknown placement of the latent on the finger. However,
+   this discards all spatial information and allows pairs from entirely
+   different spatial zones — including different people — to be grouped
+   as compatible as long as their angle delta matches. The result is a
+   high rate of false positives.
+
+   The correct approach is to keep (dx, dy): two genuinely matching
+   pairs WILL agree on the same translation because they both come from
+   the same physical zone of the same finger. Pairs from different
+   fingers or different zones will disagree on the translation even if
+   they accidentally share a similar rotation.
+
+   The dx_tol / dy_tol parameters (default 0.10 in normalised coords)
+   provide enough slack for the elastic distortion typical of latent
+   impressions without being so loose as to merge pairs from different
+   fingers.
 
 2. Links matched pairs whose transformations are compatible (within
-   dtheta_tol), building a compatibility graph.
+   dx_tol, dy_tol, dtheta_tol), building a compatibility graph.
 
 3. Finds the largest connected component via Union-Find. This
    represents the largest set of pairs that all agree on the same
-   global rotation — equivalent to the best global alignment.
+   rigid alignment — equivalent to the best global alignment.
 
 4. Applies a minimum component guard: the largest component must have
    at least ``min_component_size`` pairs (default 3) AND represent
    at least ``min_component_fraction`` of all available hits (default
-   0.25). This prevents single-rotation-bin false-positives — groups
-   of pairs from different fingers that coincidentally share a similar
-   orientation offset — from generating misleading scores.
+   0.25). This prevents small coincidental clusters from generating
+   misleading scores.
 
 5. Scores the candidate by component size / saturation.
 
 Tolerance calibration
 ---------------------
+dx_tol = dy_tol = 0.10 (normalised coords, i.e. 10% of image width/height).
+  Covers the typical elastic distortion in latent impressions while
+  remaining tight enough to reject pairs from different spatial zones.
+
 dtheta_tol = 0.20 rad (≈ 11.5°).
-
-This value is deliberately tighter than the 0.35 rad used when the
-transform included spatial components. Rationale:
-
-- With rotation-only transforms ALL pairs share dx=dy=0, so the
-  angular tolerance is the sole discriminator. A wide tolerance
-  (0.35 rad) at rotation-only mode groups pairs from different fingers
-  that share a similar rotation offset into spurious large components,
-  producing false matches.
-
-- NIST IR 8215 [3] reports latent orientation-field estimation error
-  ±8–15°. The Crossing Number detector adds ±5–10° in low-quality
-  zones. The value 0.20 rad (11.5°) covers the typical ±8° case with
-  a small safety margin. Worst-case ±15° latents may need 0.28 rad,
-  but that should only be unlocked after evaluating on your dataset.
-
-- For rolled/slap impressions from controlled scanners, 0.10–0.15 rad
-  (6–9°) is appropriate [1][2].
+  Covers ±8° orientation-field estimation error (NIST IR 8215 [3])
+  plus ±5° from the Crossing Number detector in low-quality zones.
+  For rolled/slap impressions from controlled scanners: 0.10–0.15 rad.
 
 Score formula
 -------------
@@ -109,21 +113,19 @@ from typing import Any
 
 
 class Bozorth3Linker:
-    """NBIS-style Bozorth3 pair linker with latent-optimised parameters.
+    """NBIS-style Bozorth3 pair linker.
 
     Parameters
     ----------
     dx_tol:
-        Translation tolerance in X (normalised coords). Retained for
-        API compatibility; has no effect when ``_compute_transform``
-        returns dx=0 (rotation-only mode). Default 0.02.
+        Translation tolerance in X (normalised coords). Two pairs are
+        compatible only if their implied X-translations agree within this
+        margin. Default 0.10 (10% of image width), covering elastic
+        distortion in latent impressions.
     dy_tol:
-        Translation tolerance in Y. Same note as dx_tol. Default 0.02.
+        Translation tolerance in Y. Default 0.10.
     dtheta_tol:
-        Rotation tolerance in radians. Default 0.20 (≈ 11.5°), tightened
-        from 0.35 because in rotation-only mode the angular tolerance is
-        the sole discriminator — a wide value groups pairs from different
-        fingers into spurious large components.
+        Rotation tolerance in radians. Default 0.20 (≈ 11.5°).
         For rolled/slap from controlled scanners: 0.10–0.15 rad.
         For worst-case latents (very low quality): up to 0.28 rad.
     saturation:
@@ -131,12 +133,10 @@ class Bozorth3Linker:
         only for single-candidate results). Default 30.
     min_component_size:
         Minimum number of pairs in the largest component for a result
-        to be considered valid. Prevents single-pair components from
-        generating misleading scores. Default 3.
+        to be considered valid. Default 3.
     min_component_fraction:
         Minimum fraction of total available hits that the largest
-        component must represent. Guards against trivial wins when very
-        few hits are returned. Default 0.25.
+        component must represent. Default 0.25.
 
     References
     ----------
@@ -146,8 +146,8 @@ class Bozorth3Linker:
 
     def __init__(
         self,
-        dx_tol: float = 0.02,
-        dy_tol: float = 0.02,
+        dx_tol: float = 0.10,
+        dy_tol: float = 0.10,
         dtheta_tol: float = 0.20,
         saturation: int = 30,
         min_component_size: int = 3,
@@ -266,9 +266,6 @@ class Bozorth3Linker:
         n = len(largest)
         total_hits = len(best_per_query)
 
-        # Guard: reject trivially small or fractionally insignificant components.
-        # Eliminates false-positive components from pairs that coincidentally
-        # share a rotation offset but belong to different fingers.
         if n < self._min_component_size:
             return None
         if total_hits > 0 and (n / total_hits) < self._min_component_fraction:
@@ -291,13 +288,26 @@ def _compute_transform(
     probe_pair: dict[str, Any],
     hit: dict[str, Any],
 ) -> tuple[float, float, float]:
-    """Compute rigid transformation for a matched pair.
+    """Compute the rigid transformation (dx, dy, dtheta) for a matched pair.
 
-    Returns (0, 0, dtheta) — rotation-only form.
-    See module docstring for full rationale.
+    Given a probe pair (mi_probe, mj_probe) and a gallery hit (mi_gallery,
+    mj_gallery), the transformation that maps the probe anchor minutia onto
+    the gallery anchor minutia is:
+
+        dx     = gallery_mi_x - probe_mi_x
+        dy     = gallery_mi_y - probe_mi_y
+        dtheta = gallery_mi_angle - probe_mi_angle
+
+    Two pairs are "compatible" (support the same alignment) if they agree
+    on (dx, dy, dtheta) within tolerance. This is the correct geometric
+    test: genuinely matching pairs from the same finger zone will all imply
+    the same rigid transform; pairs from different zones or different people
+    will disagree on dx/dy even if they accidentally share a similar dtheta.
     """
+    dx = float(hit.get("mi_x", 0.0)) - float(probe_pair["mi_x"])
+    dy = float(hit.get("mi_y", 0.0)) - float(probe_pair["mi_y"])
     dtheta = _normalise_angle(float(hit["mi_angle"]) - float(probe_pair["mi_angle"]))
-    return (0.0, 0.0, dtheta)
+    return (dx, dy, dtheta)
 
 
 def _are_compatible(
