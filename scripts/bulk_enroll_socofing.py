@@ -115,40 +115,45 @@ def collect_images(
             "Verify the dataset is mounted under apps/backend/static/SOCOFing/Real/."
         )
 
-    seen_pids: list[str] = []
-    images: list[SocofingImage] = []
+    pid_order: list[str] = []
+    pid_images: dict[str, list[SocofingImage]] = {}
 
     for path in sorted(SOCOFING_REAL.glob("*.BMP")):
         m = FILENAME_RE.match(path.name)
         if m is None:
             continue
         pid = m["pid"]
-        if pid in seen_pids:
-            continue
-        if offset_subjects > 0 and len(seen_pids) < offset_subjects:
-            seen_pids.append(pid)
-            continue
-        if limit_subjects is not None and len(seen_pids) - offset_subjects >= limit_subjects:
-            continue
+        if pid not in pid_order:
+            pid_order.append(pid)
+        img = _make_image(m, path)
+        if img is not None:
+            pid_images.setdefault(pid, []).append(img)
 
-        hand_finger = f"{m['hand']}_{m['finger']}"
-        fgp = FGP_MAP.get(hand_finger)
-        if fgp is None:
-            log.warning("Unrecognised hand/finger combo: %s → %s", path.name, hand_finger)
-            continue
+    selected_pids = pid_order[offset_subjects:]
+    if limit_subjects is not None:
+        selected_pids = selected_pids[:limit_subjects]
 
-        seen_pids.append(pid)
-        images.append(SocofingImage(
-            pid=pid,
-            pid_z4=pid.zfill(4),
-            gender=m["gender"],
-            hand=m["hand"],
-            finger=m["finger"],
-            fgp=fgp,
-            path=path,
-        ))
-
+    images: list[SocofingImage] = []
+    for pid in selected_pids:
+        images.extend(pid_images.get(pid, []))
     return images
+
+
+def _make_image(m: re.Match, path: Path) -> SocofingImage | None:
+    hand_finger = f"{m['hand']}_{m['finger']}"
+    fgp = FGP_MAP.get(hand_finger)
+    if fgp is None:
+        log.warning("Unrecognised hand/finger combo: %s → %s", path.name, hand_finger)
+        return None
+    return SocofingImage(
+        pid=m["pid"],
+        pid_z4=m["pid"].zfill(4),
+        gender=m["gender"],
+        hand=m["hand"],
+        finger=m["finger"],
+        fgp=fgp,
+        path=path,
+    )
 
 
 # ---------------------------------------------------------------------------
