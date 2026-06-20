@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 class SearchByPairsResult(TypedDict):
     candidates: list[dict]
     probe_minutiae: list[dict]
+    skeleton_png: bytes
 
 
 class MccMatchingService:
@@ -376,13 +377,16 @@ class MccMatchingService:
         skeleton = result["skeleton"]
         t_pipeline = _time.monotonic()
 
+        ok_enc, skel_enc = cv2.imencode(".png", skeleton)
+        skeleton_png = skel_enc.tobytes() if ok_enc else b""
+
         probe_pairs = extract_pairs(norm_minutiae, min_quality=config.matching.min_pair_quality)
         t_pairs = _time.monotonic()
 
         pixel_minutiae = self._norm_to_pixel_coords(norm_minutiae, skeleton.shape)
 
         if not probe_pairs:
-            return {"candidates": [], "probe_minutiae": pixel_minutiae}
+            return {"candidates": [], "probe_minutiae": pixel_minutiae, "skeleton_png": skeleton_png}
 
         query_vectors = [pair_to_vector(p) for p in probe_pairs]
         t_vectors = _time.monotonic()
@@ -403,7 +407,7 @@ class MccMatchingService:
         )
 
         if not all_hits:
-            return {"candidates": [], "probe_minutiae": pixel_minutiae}
+            return {"candidates": [], "probe_minutiae": pixel_minutiae, "skeleton_png": skeleton_png}
 
         t_link_start = _time.monotonic()
         linker = Bozorth3Linker(
@@ -463,4 +467,4 @@ class MccMatchingService:
                 "external_id": None,
             })
 
-        return {"candidates": candidates, "probe_minutiae": pixel_minutiae}
+        return {"candidates": candidates, "probe_minutiae": pixel_minutiae, "skeleton_png": skeleton_png}

@@ -136,6 +136,7 @@ export interface MatchCandidate {
   confidence: string;
   capture_id: string | null;
   candidate_minutiae: MinutiaPoint[];
+  image_url: string | null;
 }
 
 /** Response of POST /api/v1/matching/search (Phase 24). */
@@ -143,6 +144,7 @@ export interface MatchSearchResponse {
   success: boolean;
   query_time_ms: number;
   total_candidates: number;
+  probe_image_url: string;
   probe_minutiae: MinutiaPoint[];
   candidates: MatchCandidate[];
 }

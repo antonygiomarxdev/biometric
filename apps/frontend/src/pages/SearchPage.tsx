@@ -21,8 +21,6 @@ import { CandidateDetailPanel } from "@/components/fingerprint/CandidateDetailPa
 import {
   searchMatching,
   createCase,
-  fetchCaptureImage,
-  getMinutiaeForImage,
   type MatchCandidate,
   type MatchSearchResponse,
   type MinutiaPoint,
@@ -46,28 +44,14 @@ export default function SearchPage() {
 
   const [latentFile, setLatentFile] = useState<File | null>(null);
   const [latentPreview, setLatentPreview] = useState<string | null>(null);
-  const [probeSkeletonUrl, setProbeSkeletonUrl] = useState<string | null>(null);
   const [searchResult, setSearchResult] = useState<MatchSearchResponse | null>(null);
   const [selectedCandidate, setSelectedCandidate] = useState<MatchCandidate | null>(null);
-  const [candidateImageUrl, setCandidateImageUrl] = useState<string | null>(null);
   const [createModal, setCreateModal] = useState<CreateCaseModalState>({
     open: false,
     candidate: null,
   });
   const [caseNumber, setCaseNumber] = useState("");
   const [caseTitle, setCaseTitle] = useState("");
-
-  useEffect(() => {
-    if (!selectedCandidate?.capture_id) {
-      setCandidateImageUrl(null);
-      return;
-    }
-    let cancelled = false;
-    fetchCaptureImage(selectedCandidate.capture_id)
-      .then((url) => { if (!cancelled) setCandidateImageUrl(url); })
-      .catch(() => { if (!cancelled) setCandidateImageUrl(null); });
-    return () => { cancelled = true; };
-  }, [selectedCandidate?.capture_id]);
 
   const searchMutation = useMutation({
     mutationFn: (file: File) => searchMatching(file, 10),
@@ -143,16 +127,8 @@ export default function SearchPage() {
         setLatentFile(file);
         setSearchResult(null);
         setSelectedCandidate(null);
-        setProbeSkeletonUrl(null);
       };
       reader.readAsDataURL(file);
-
-      getMinutiaeForImage(file)
-        .then((preview) => {
-          const skeletonUrl = `data:image/png;base64,${preview.processed_image}`;
-          setProbeSkeletonUrl(skeletonUrl);
-        })
-        .catch(() => {});
     },
     [addToast],
   );
@@ -384,12 +360,11 @@ export default function SearchPage() {
           </Card>
         </div>
 
-        {selectedCandidate && searchResult && (probeSkeletonUrl ?? latentPreview) && (
+        {selectedCandidate && searchResult && (
           <CandidateDetailPanel
             candidate={selectedCandidate}
-            probeImageUrl={probeSkeletonUrl ?? latentPreview!}
+            probeImageUrl={searchResult.probe_image_url}
             probeMinutiae={probeMinutiae}
-            candidateImageUrl={candidateImageUrl}
             onDismiss={() => setSelectedCandidate(null)}
           />
         )}

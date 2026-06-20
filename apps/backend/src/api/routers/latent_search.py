@@ -4,24 +4,30 @@ Fingerprint latent search router — NIST Bozorth3 pair matching (Phase 27).
 Accepts a latent/probe fingerprint image, runs the quality pipeline,
 extracts 5-D pair descriptors, runs KNN against the pair_features
 collection, then Bozorth3 linking groups geometrically compatible
-matches. Returns ranked candidates with score, hits, match trace,
-and probe minutiae.
+matches. Returns ranked candidates with score, image URLs, matched
+pairs, and probe/candidate minutiae coordinates.
+
+The frontend loads the probe and candidate images from the returned
+URLs and renders the minutiae markers itself.
 """
 from __future__ import annotations
 
 import asyncio
 import logging
 import time
+import uuid as _uuid
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from sqlalchemy import select
 
 from src.api.dependencies import get_async_db, get_mcc_matching_service
 from src.api.prefix import API_PREFIX
 from src.db.models import Person
+from src.db.repositories.capture_minutia_repository import CaptureMinutiaRepository
 from src.dev.logger import dev_log
+from src.storage.object_storage import storage
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,6 +41,8 @@ router = APIRouter(
     tags=["matching"],
 )
 
+API_PREFIX_PATH = API_PREFIX  # reuse for image URL construction
+
 
 @router.post(
     "/search",
@@ -43,7 +51,8 @@ router = APIRouter(
         "NIST Bozorth3-style matching: extracts 5-D pair descriptors per "
         "minutia pair, runs KNN against the pair_features collection, then "
         "Union-Find links geometrically compatible matches. Returns ranked "
-        "candidates with score, hits, match trace, and probe minutiae."
+        "candidates with score, image URLs, matched pairs, and minutiae "
+        "coordinates for frontend rendering."
     ),
     responses={
         200: {"description": "Ranked candidates with NIST Bozorth3 scores"},
@@ -65,6 +74,13 @@ async def search_latent(
         None, matching.search_by_pairs, image_bytes, top_k,
     )
     query_time_ms = int((time.monotonic() - t0) * 1000)
+
+    # Save probe skeleton to MinIO (temp key, TTL-managed externally)
+    search_id = str(_uuid.uuid4())
+    skeleton_png: bytes = result.get("skeleton_png", b"")
+    if skeleton_png:
+        storage.upload_file(skeleton_png, f"temp/{search_id}.png", content_type="image/png")
+    probe_image_url = f"{API_PREFIX_PATH}/matching/probe/{search_id}/image"
 
     probe_minutiae = [
         {
@@ -146,11 +162,7 @@ async def search_latent(
                 cap_uuid = UUID(best_capture_id)
                 cap_entity = await session.get(FingerprintCapture, cap_uuid)
                 if cap_entity is not None:
-                    from src.db.repositories.capture_minutia_repository import (
-                        CaptureMinutiaRepository,
-                    )
                     rows = await CaptureMinutiaRepository.list_for_capture(session, cap_uuid)
-                    # rows have x, y as normalized (0-1); convert to 256x256 pixel coords
                     candidate_minutiae = [
                         {
                             "x": round(float(r.x) * 256),
@@ -163,6 +175,11 @@ async def search_latent(
             except (ValueError, TypeError):
                 pass
 
+        candidate_image_url = (
+            f"{API_PREFIX_PATH}/captures/{best_capture_id}/image"
+            if best_capture_id else None
+        )
+
         candidates.append({
             "person_id": pid,
             "score": score,
@@ -174,10 +191,12 @@ async def search_latent(
             "confidence": confidence,
             "capture_id": best_capture_id,
             "candidate_minutiae": candidate_minutiae,
+            "image_url": candidate_image_url,
         })
 
     dev_log(
         "search.endpoint",
+        search_id=search_id,
         image_bytes=len(image_bytes),
         top_k=top_k,
         candidates=len(candidates),
@@ -189,6 +208,32 @@ async def search_latent(
         "success": True,
         "query_time_ms": query_time_ms,
         "total_candidates": len(candidates),
+        "probe_image_url": probe_image_url,
         "probe_minutiae": probe_minutiae,
         "candidates": candidates,
     }
+
+
+@router.get(
+    "/probe/{search_id}/image",
+    summary="Get the probe skeleton image from a previous search",
+    description=(
+        "Returns the thinned binary skeleton (256×256 PNG) generated during "
+        "the search. The probe image is stored temporarily in MinIO (key "
+        "``temp/{search_id}.png``) and cleaned up periodically."
+    ),
+    responses={
+        200: {"content": {"image/png": {}}, "description": "PNG skeleton bytes"},
+        404: {"description": "Search ID not found or expired"},
+    },
+)
+async def get_probe_image(search_id: str) -> Response:
+    """Serve the probe skeleton image from the temp MinIO location."""
+    png_bytes = storage.download_file(f"temp/{search_id}.png")
+    if png_bytes is None:
+        raise HTTPException(status_code=404, detail="Probe image expired or not found")
+    return Response(
+        content=png_bytes,
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )

@@ -10,7 +10,6 @@ interface CandidateDetailPanelProps {
   candidate: MatchCandidate;
   probeImageUrl: string;
   probeMinutiae: MinutiaPoint[];
-  candidateImageUrl: string | null;
   onDismiss: () => void;
 }
 
@@ -35,7 +34,6 @@ export function CandidateDetailPanel({
   candidate,
   probeImageUrl,
   probeMinutiae,
-  candidateImageUrl,
   onDismiss,
 }: CandidateDetailPanelProps): React.JSX.Element {
   const topFingerprintId = useMemo(
@@ -81,11 +79,11 @@ export function CandidateDetailPanel({
         </Button>
       </CardHeader>
       <CardContent className="space-y-6">
-        {candidateImageUrl && candidate.candidate_minutiae.length > 0 ? (
+        {candidate.image_url && candidate.candidate_minutiae.length > 0 ? (
           <MatchOverlay
             probeImageUrl={probeImageUrl}
             probeMinutiae={probeMinutiae}
-            candidateImageUrl={candidateImageUrl}
+            candidateImageUrl={candidate.image_url}
             candidateMinutiae={candidate.candidate_minutiae}
             supportingPairs={candidate.supporting_pairs}
             candidateLabel={candidateLabel}
