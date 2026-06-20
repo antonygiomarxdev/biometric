@@ -19,7 +19,7 @@ import uuid as _uuid
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
 from sqlalchemy import select
 
 from src.api.dependencies import get_async_db, get_mcc_matching_service

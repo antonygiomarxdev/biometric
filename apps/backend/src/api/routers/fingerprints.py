@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import cv2
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 
 from src.api.dependencies import get_async_db, get_mcc_matching_service
 from src.api.prefix import API_PREFIX
@@ -97,7 +96,6 @@ async def list_fingerprints(
 
 @router.post(
     API_PREFIX + "/fingerprints/preview",
-    response_model=FingerprintPreviewResponse,
     summary="Preview minutiae extraction without persisting (Phase 23)",
     description=(
         "Accepts a fingerprint image (BMP, PNG, JPEG), runs the full "
@@ -116,11 +114,12 @@ async def preview_fingerprint(
 ) -> Any:
     """Preview minutiae for a fingerprint image without persisting.
 
-    Runs the MCC mini-pipeline (Gabor + RidgeGraphExtractor) and
-    returns the enhanced image (base64 PNG) plus detected minutiae.
-    Does not touch the DB or Qdrant. Backend for ``getMinutiaeForImage``
-    in ``apps/frontend/src/lib/api.ts`` (Phase 23, D-29).
+    Runs the quality pipeline and stores the skeleton temporarily in
+    MinIO (key ``temp/{preview_id}.png``). Returns the image URL plus
+    detected minutiae for the frontend to render.
     """
+    import uuid as _uuid
+
     image_bytes = await file.read()
     if not image_bytes:
         raise HTTPException(status_code=400, detail="Empty file")
@@ -141,14 +140,39 @@ async def preview_fingerprint(
     ok, buf = cv2.imencode(".png", skeleton)
     if not ok:
         raise HTTPException(status_code=400, detail="Failed to encode skeleton")
-    b64_png = base64.b64encode(buf.tobytes()).decode("ascii")
+
+    preview_id = str(_uuid.uuid4())
+    from src.storage.object_storage import storage
+    storage.upload_file(buf.tobytes(), f"temp/{preview_id}.png", content_type="image/png")
 
     h, w = skeleton.shape[:2]
-    return FingerprintPreviewResponse(
-        processed_image=b64_png,
-        minutiae=[MinutiaPoint(**p) for p in minutiae_dicts],
-        terminations=0,
-        bifurcations=0,
-        image_shape=[int(h), int(w)],
-        image_dtype=str(skeleton.dtype),
+    return {
+        "preview_id": preview_id,
+        "processed_image_url": f"/api/v1/fingerprints/preview/{preview_id}/image",
+        "minutiae": [MinutiaPoint(**p) for p in minutiae_dicts],
+        "terminations": 0,
+        "bifurcations": 0,
+        "image_shape": [int(h), int(w)],
+        "image_dtype": str(skeleton.dtype),
+    }
+
+
+@router.get(
+    API_PREFIX + "/fingerprints/preview/{preview_id}/image",
+    summary="Get a preview skeleton image by preview_id",
+    responses={
+        200: {"content": {"image/png": {}}, "description": "PNG skeleton bytes"},
+        404: {"description": "Preview ID not found or expired"},
+    },
+)
+async def get_preview_image(preview_id: str) -> Response:
+    """Serve the skeleton image for a previous preview call."""
+    from src.storage.object_storage import storage
+    png_bytes = storage.download_file(f"temp/{preview_id}.png")
+    if png_bytes is None:
+        raise HTTPException(status_code=404, detail="Preview image expired or not found")
+    return Response(
+        content=png_bytes,
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=3600"},
     )

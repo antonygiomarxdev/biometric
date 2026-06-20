@@ -14,7 +14,7 @@
 // Base configuration
 // ---------------------------------------------------------------------------
 
-const API_BASE = "http://localhost:8000";
+const API_BASE = "";
 
 async function request<T>(
   method: string,
@@ -196,9 +196,10 @@ export interface CaptureResponse {
   graphs: unknown[]; // RidgeGraph removed in Phase 23
 }
 
-/** Response of POST /api/v1/fingerprints/preview (Phase 23). */
+/** Response of POST /api/v1/fingerprints/preview. */
 export interface FingerprintPreviewResponse {
-  processed_image: string; // base64 PNG (no data: prefix)
+  preview_id: string;
+  processed_image_url: string; // URL to load the skeleton PNG
   minutiae: MinutiaPoint[];
   terminations: number;
   bifurcations: number;
@@ -388,21 +389,6 @@ export function searchMatching(
     "/api/v1/matching/search",
     { formData, query: { top_k: topK } },
   );
-}
-
-/** Fetch the skeleton fingerprint image for an enrolled capture.
- *  Returns a blob URL ready to bind to <img src=...>. */
-export async function fetchCaptureImage(captureId: string): Promise<string> {
-  const res = await fetch(`${API_BASE}/api/v1/captures/${captureId}/image`);
-  if (!res.ok) {
-    const err = new Error(
-      `Failed to fetch capture image: ${res.status}`,
-    ) as Error & { status?: number };
-    err.status = res.status;
-    throw err;
-  }
-  const blob = await res.blob();
-  return URL.createObjectURL(blob);
 }
 
 // Decisions

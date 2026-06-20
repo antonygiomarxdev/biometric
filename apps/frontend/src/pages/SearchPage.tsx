@@ -21,6 +21,7 @@ import { CandidateDetailPanel } from "@/components/fingerprint/CandidateDetailPa
 import {
   searchMatching,
   createCase,
+  getMinutiaeForImage,
   type MatchCandidate,
   type MatchSearchResponse,
   type MinutiaPoint,
@@ -44,6 +45,7 @@ export default function SearchPage() {
 
   const [latentFile, setLatentFile] = useState<File | null>(null);
   const [latentPreview, setLatentPreview] = useState<string | null>(null);
+  const [probePreviewUrl, setProbePreviewUrl] = useState<string | null>(null);
   const [searchResult, setSearchResult] = useState<MatchSearchResponse | null>(null);
   const [selectedCandidate, setSelectedCandidate] = useState<MatchCandidate | null>(null);
   const [createModal, setCreateModal] = useState<CreateCaseModalState>({
@@ -127,8 +129,13 @@ export default function SearchPage() {
         setLatentFile(file);
         setSearchResult(null);
         setSelectedCandidate(null);
+        setProbePreviewUrl(null);
       };
       reader.readAsDataURL(file);
+
+      getMinutiaeForImage(file)
+        .then((res) => setProbePreviewUrl(res.processed_image_url))
+        .catch(() => {});
     },
     [addToast],
   );
