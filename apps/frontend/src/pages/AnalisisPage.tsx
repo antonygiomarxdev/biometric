@@ -25,6 +25,7 @@ import {
   createFingerprintSlot,
   enrollFingerprint,
   createCase,
+  getMinutiaeForImage,
   type MatchCandidate,
   type MatchSearchResponse,
   type MinutiaPoint,
@@ -55,6 +56,7 @@ export default function AnalisisPage() {
 
   const [latentFile, setLatentFile] = useState<File | null>(null);
   const [probeDataUrl, setProbeDataUrl] = useState<string | null>(null);
+  const [probePreviewUrl, setProbePreviewUrl] = useState<string | null>(null);
   const [searchResult, setSearchResult] = useState<MatchSearchResponse | null>(null);
   const [selectedIdx, setSelectedIdx] = useState(0);
 
@@ -157,8 +159,15 @@ export default function AnalisisPage() {
         setLatentFile(file);
         setSearchResult(null);
         setSelectedIdx(0);
+        setProbePreviewUrl(null);
       };
       reader.readAsDataURL(file);
+
+      getMinutiaeForImage(file)
+        .then((res) => {
+          setProbePreviewUrl(res.processed_image_url);
+        })
+        .catch(() => {});
     },
     [addToast],
   );
@@ -215,7 +224,11 @@ export default function AnalisisPage() {
   useEffect(() => {
     const canvas = probeCanvasRef.current;
     if (!canvas) return;
-    if (!probeSrc) return;
+    if (!probeSrc) {
+      const ctx = canvas.getContext("2d");
+      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
     const img = new Image();
     img.onload = () => {
       probeImgRef.current = img;
@@ -249,7 +262,7 @@ export default function AnalisisPage() {
   // Canvas drawing: candidate image with matched minutiae
   // ============================================================
 
-  const candidateSrc = selectedCandidate?.image_url ?? null;
+  const candidateSrc = selectedCandidate?.image_url ?? probePreviewUrl ?? null;
 
   useEffect(() => {
     const canvas = candidateCanvasRef.current;
@@ -593,7 +606,7 @@ export default function AnalisisPage() {
                 </div>
                 <CandidateDetailPanel
                   candidate={selectedCandidate}
-                  probeImageUrl={searchResult?.probe_image_url ?? probeDataUrl ?? ""}
+                  probeImageUrl={searchResult?.probe_image_url ?? probePreviewUrl ?? probeDataUrl ?? ""}
                   probeMinutiae={
                     searchResult?.probe_minutiae.map((m) => ({
                       x: m.x,

@@ -105,14 +105,17 @@ class SocofingImage:
     path: Path
 
 
-def collect_images(limit_subjects: int | None = None) -> list[SocofingImage]:
+def collect_images(
+    limit_subjects: int | None = None,
+    offset_subjects: int = 0,
+) -> list[SocofingImage]:
     if not SOCOFING_REAL.exists():
         raise SystemExit(
             f"SOCOFing Real directory not found: {SOCOFING_REAL}. "
             "Verify the dataset is mounted under apps/backend/static/SOCOFing/Real/."
         )
 
-    seen_pids: set[str] = set()
+    seen_pids: list[str] = []
     images: list[SocofingImage] = []
 
     for path in sorted(SOCOFING_REAL.glob("*.BMP")):
@@ -120,7 +123,12 @@ def collect_images(limit_subjects: int | None = None) -> list[SocofingImage]:
         if m is None:
             continue
         pid = m["pid"]
-        if limit_subjects is not None and pid not in seen_pids and len(seen_pids) >= limit_subjects:
+        if pid in seen_pids:
+            continue
+        if offset_subjects > 0 and len(seen_pids) < offset_subjects:
+            seen_pids.append(pid)
+            continue
+        if limit_subjects is not None and len(seen_pids) - offset_subjects >= limit_subjects:
             continue
 
         hand_finger = f"{m['hand']}_{m['finger']}"
@@ -129,7 +137,7 @@ def collect_images(limit_subjects: int | None = None) -> list[SocofingImage]:
             log.warning("Unrecognised hand/finger combo: %s → %s", path.name, hand_finger)
             continue
 
-        seen_pids.add(pid)
+        seen_pids.append(pid)
         images.append(SocofingImage(
             pid=pid,
             pid_z4=pid.zfill(4),
@@ -273,8 +281,13 @@ async def worker(
 # Main orchestrator
 # ---------------------------------------------------------------------------
 
-async def main(limit_subjects: int | None, dry_run: bool, num_workers: int) -> int:
-    images = collect_images(limit_subjects)
+async def main(
+    limit_subjects: int | None,
+    offset_subjects: int,
+    dry_run: bool,
+    num_workers: int,
+) -> int:
+    images = collect_images(limit_subjects, offset_subjects)
 
     by_subject: dict[str, list[SocofingImage]] = {}
     for img in images:
@@ -347,6 +360,10 @@ def parse_args() -> argparse.Namespace:
         help="Limit to N subjects (for testing); default = all 600.",
     )
     parser.add_argument(
+        "--offset", type=int, default=0,
+        help="Skip first N subjects (to resume from a point).",
+    )
+    parser.add_argument(
         "--workers", type=int, default=_DEFAULT_WORKERS,
         help=f"Number of parallel workers (default: {_DEFAULT_WORKERS} = all CPUs).",
     )
@@ -369,6 +386,7 @@ if __name__ == "__main__":
     )
     sys.exit(asyncio.run(main(
         limit_subjects=args.limit,
+        offset_subjects=args.offset,
         dry_run=args.dry_run,
         num_workers=args.workers,
     )))
