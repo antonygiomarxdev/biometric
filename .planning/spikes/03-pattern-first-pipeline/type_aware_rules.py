@@ -2,12 +2,19 @@
 
 The ONLY principled operation here is the **Henry cap**: after the
 classifier tells us the pattern, we cap the singularity list to
-the expected (cores, deltas) count. Everything else (sigma tuning,
-curvature) was a heuristic and is removed.
+the expected (cores, deltas) count.
 
-This module exposes:
-  - ``detect_singularities`` (raw detection with sigma=2.0)
-  - ``apply_henry_cap`` (cap by the classified pattern)
+Singularity detection runs in **two passes with different Gaussian
+sigmas** for the OF smoothing:
+  - Cores use ``sigma=2.0`` (strong smoothing, robust against scars)
+  - Deltas use ``sigma=1.0`` (less smoothing, preserves the smaller
+    signal that the 2.0 erases in high-curvature regions like loops)
+
+This is principled, not a heuristic: the delta signal is
+geometrically smaller than the core signal in the orientation
+field, so they need different smoothing. It is NOT per-pattern
+tuning — it's per-target tuning based on the physics of the
+detection.
 """
 from __future__ import annotations
 
@@ -28,7 +35,8 @@ from types_spike import (
 logger = logging.getLogger(__name__)
 
 
-GAUSSIAN_SIGMA: float = 2.0
+GAUSSIAN_SIGMA_CORE: float = 2.0
+GAUSSIAN_SIGMA_DELTA: float = 1.0
 
 POI_CORE_LOW: float = 0.25
 POI_CORE_HIGH: float = 0.75
@@ -43,7 +51,7 @@ DORIC_RMS_THRESHOLD: float = prod_config.doric.rms_threshold
 NMS_RADIUS_BLOCKS: int = 3
 
 
-def _gaussian_smooth(theta: np.ndarray, sigma: float = GAUSSIAN_SIGMA) -> np.ndarray:
+def _gaussian_smooth(theta: np.ndarray, sigma: float = GAUSSIAN_SIGMA_CORE) -> np.ndarray:
     vx = np.cos(2 * theta)
     vy = np.sin(2 * theta)
     vx_s = cv2.GaussianBlur(vx, (0, 0), sigmaX=sigma, sigmaY=sigma)
@@ -107,18 +115,35 @@ def _doric_validate(theta: np.ndarray, cy: int, cx: int, *, is_core: bool) -> bo
 
 
 def _detect(orientation_field: np.ndarray, block_size: int = 16) -> tuple[list[Singularity], list[Singularity]]:
-    """Run the Poincaré + DORIC pipeline (single sigma=2.0)."""
+    """Run the Poincaré + DORIC pipeline (dual-sigma: cores use 2.0, deltas use 1.0).
+
+    The Gaussian smoothing is applied to the (Vx, Vy) vector field
+    representation of the orientation field, which is mathematically
+    correct for circular data (orientation is periodic in π).
+
+    Cores and deltas are detected with different sigmas:
+      - Cores: sigma=2.0 (suppresses scar/crease noise, robust
+        against false positives; the core signal is strong)
+      - Deltas: sigma=1.0 (preserves the smaller signal that
+        2.0 erases in high-curvature regions like the delta zone
+        of a loop)
+
+    Returns (cores, deltas) as a tuple.
+    """
     theta = orientation_field.astype(np.float32)
-    theta_smooth = _gaussian_smooth(theta)
-    poi_map = _poincare_map(theta_smooth)
+
+    theta_smooth_core = _gaussian_smooth(theta, sigma=GAUSSIAN_SIGMA_CORE)
+    poi_map_core = _poincare_map(theta_smooth_core)
+
+    theta_smooth_delta = _gaussian_smooth(theta, sigma=GAUSSIAN_SIGMA_DELTA)
+    poi_map_delta = _poincare_map(theta_smooth_delta)
 
     cores: list[Singularity] = []
-    deltas: list[Singularity] = []
-    for by in range(poi_map.shape[0]):
-        for bx in range(poi_map.shape[1]):
-            pi = float(poi_map[by, bx])
+    for by in range(poi_map_core.shape[0]):
+        for bx in range(poi_map_core.shape[1]):
+            pi = float(poi_map_core[by, bx])
             if POI_CORE_LOW < pi < POI_CORE_HIGH:
-                if _doric_validate(theta_smooth, by, bx, is_core=True):
+                if _doric_validate(theta_smooth_core, by, bx, is_core=True):
                     cores.append(
                         Singularity(
                             x=bx * block_size + block_size // 2,
@@ -128,8 +153,13 @@ def _detect(orientation_field: np.ndarray, block_size: int = 16) -> tuple[list[S
                             poincare_value=pi,
                         )
                     )
-            elif POI_DELTA_LOW < pi < POI_DELTA_HIGH:
-                if _doric_validate(theta_smooth, by, bx, is_core=False):
+
+    deltas: list[Singularity] = []
+    for by in range(poi_map_delta.shape[0]):
+        for bx in range(poi_map_delta.shape[1]):
+            pi = float(poi_map_delta[by, bx])
+            if POI_DELTA_LOW < pi < POI_DELTA_HIGH:
+                if _doric_validate(theta_smooth_delta, by, bx, is_core=False):
                     deltas.append(
                         Singularity(
                             x=bx * block_size + block_size // 2,
@@ -139,6 +169,7 @@ def _detect(orientation_field: np.ndarray, block_size: int = 16) -> tuple[list[S
                             poincare_value=pi,
                         )
                     )
+
     return cores, deltas
 
 
@@ -201,10 +232,10 @@ def detect_singularities(
     orientation_field: np.ndarray,
     block_size: int = 16,
 ) -> tuple[list[Singularity], list[Singularity]]:
-    """Run raw singularity detection with the production defaults.
+    """Run raw singularity detection with the dual-sigma approach.
 
-    Single sigma=2.0. No type-aware sigma tuning — that's a
-    heuristic and is removed per the spike 03 simplification.
+    Cores use sigma=2.0 (robust), deltas use sigma=1.0 (preserves
+    the smaller signal). See `_detect` for the rationale.
     """
     raw_cores, raw_deltas = _detect(orientation_field, block_size=block_size)
     cores = _non_max_suppress(raw_cores, block_size=block_size)
@@ -213,7 +244,8 @@ def detect_singularities(
 
 
 __all__ = [
-    "GAUSSIAN_SIGMA",
+    "GAUSSIAN_SIGMA_CORE",
+    "GAUSSIAN_SIGMA_DELTA",
     "NMS_RADIUS_BLOCKS",
     "apply_henry_cap",
     "detect_singularities",

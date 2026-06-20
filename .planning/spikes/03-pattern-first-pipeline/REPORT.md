@@ -51,6 +51,38 @@ Ambos se removieron. El spike 03 ahora es:
 **3/5 marcados como UNKNOWN** (100, 102, 103 — son loops con delta
 no detectado, conteo 1-0 no matchea Henry).
 
+## Fix intentado: dual-sigma detection
+
+Probamos la **detección con dos sigmas** en el preprocesador (en el
+spike, no en producción):
+- **Cores**: sigma=2.0 (suprime ruido, señal robusta)
+- **Deltas**: sigma=1.0 (preserva la señal más pequeña que el 2.0 borra)
+
+Esto es principled, **no per-pattern tuning**. Es per-target: el
+delta ES físicamente más chico que el core en el OF, así que necesita
+menos suavizado. No es heurística inventada.
+
+**Resultado**: el dual-sigma está implementado en
+`type_aware_rules.py:_detect`, pero **no alcanza** para que el POI
+llegue al rango [-0.75, -0.25] en los deltas de loops. El OF a
+16x16 + smoothing de cualquier sigma no captura bien la señal del
+delta en zonas de alta curvatura.
+
+**Lo que sí probamos y no sirvió**:
+- `sigma=1.0` para deltas (preserva más señal) — insuficiente
+- `block_size=8` (OF más fino, 32x32) — perdimos el delta del 101
+  que con block_size=16 sí se detectaba
+
+**Lo que probablemente sí sirve** (fuera de scope de este spike):
+- OF multi-escala (calcular a 8, 16, 32 y combinar)
+- Poincaré a nivel de píxel (no a nivel de bloque) usando gradientes
+  de la imagen enhanced directamente
+- Suavizar el OF en el espacio de la imagen (256x256), no en el
+  espacio del OF (16x16) — sigma=2.0 en OF es 32 píxeles en imagen
+
+Estos cambios son refactors del preprocesador base, no del spike.
+El spike 03 los deja como **trabajo futuro** explícito.
+
 ## Lo que esto significa
 
 El spike 03 es **principled**: no inventa nada. Si el conteo no
@@ -90,8 +122,9 @@ máximo principled que se puede hacer sin datos de producción.
 
 1. **Datos de producción reales** (5-10 latentes con ground truth
    firmado por el perito). Sin esto, no podemos validar nada.
-2. **Fix de `sigma` para deltas en loops**. Esto es un fix del
-   pipeline base, no del spike.
+2. **Refactor del preprocesador base** (fuera de scope de este
+   spike): OF multi-escala o Poincaré a nivel de píxel. El dual-sigma
+   no fue suficiente para los deltas de loops.
 3. **Facing direction solo funciona cuando hay 1-1**. Los 3 loops
    no la activan porque no detectan delta. Fix de #2 lo activaría.
 
@@ -99,13 +132,15 @@ máximo principled que se puede hacer sin datos de producción.
 
 Spike 03 cumple su propósito: validar la arquitectura pattern-first
 con reglas principled. El clasificador Henry-only es correcto y
-honesto. **El sistema está listo para producción cuando se le den
-datos reales para calibrar el pipeline base** (no el spike).
+honesto. El dual-sigma está implementado como el fix menos invasivo
+que se probó; no es suficiente pero es principled y queda
+documentado para refactor futuro.
 
 **No-Go** para merge sin antes:
 - Conseguir 5-10 latentes reales con ground truth
-- Validar el pipeline base (singularity detection) en esos datos
-- Si el pipeline base falla, arreglarlo, no parchear el spike
+- Refactor del preprocesador (multi-escala o pixel-level POI) para
+  resolver el problema del delta en loops
+- Validar el pipeline completo (no solo el spike) en esos datos
 
 ## Lo que Spike 03 deja como base
 

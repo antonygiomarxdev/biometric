@@ -107,6 +107,11 @@ def _run_enhance_and_skeleton(image: np.ndarray) -> dict[str, Any]:
 
 
 def _get_orientation_field(image: np.ndarray, normalized: np.ndarray) -> np.ndarray | None:
+    """Compute the OF at the production default resolution (block_size=16).
+
+    The block_size is kept at 16 to match the production orientation
+    field. This is what the matcher and downstream consumers expect.
+    """
     analyzer = OrientationFieldAnalyzer(block_size=16)
     ctx = PipelineContext(raw_image=image, fingerprint_id="spike03")
     ctx.preprocessed_image = normalized

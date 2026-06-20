@@ -204,8 +204,11 @@ def _make_grid(image: np.ndarray, result: Any) -> tuple[plt.Figure, dict[str, An
         f"  confidence:   {classification.confidence:.2f}\n"
         f"  singularities: {result.num_cores} cores / {result.num_deltas} deltas\n"
         f"  facing (loops): {classification.facing.value}\n\n"
-        f"OVERLAPS: {n_overlap} flagged",
-        fontsize=11, verticalalignment="center",
+        f"OVERLAPS: {n_overlap} flagged\n\n"
+        f"Dual-sigma detection:\n"
+        f"  cores:  sigma=2.0 (robust)\n"
+        f"  deltas: sigma=1.0 (preserves signal)",
+        fontsize=10, verticalalignment="center",
         family="monospace", color="white",
         transform=ax.transAxes,
         bbox=dict(boxstyle="round,pad=0.4", facecolor="#222", alpha=0.85),
