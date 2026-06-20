@@ -25,7 +25,8 @@ async function request<T>(
     formData?: FormData;
   },
 ): Promise<T> {
-  const url = new URL(`${API_BASE}${path}`);
+  const base = API_BASE || window.location.origin;
+  const url = new URL(path, base);
   if (options?.query) {
     for (const [key, value] of Object.entries(options.query)) {
       if (value !== undefined) {
