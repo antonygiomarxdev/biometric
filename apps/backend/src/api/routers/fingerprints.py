@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 import cv2
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import Response as FastAPIResponse
 
 from src.api.dependencies import get_async_db, get_mcc_matching_service
 from src.api.prefix import API_PREFIX
@@ -23,6 +24,7 @@ from src.schemas.fingerprint_schema import (
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+    from starlette.responses import Response
 
     from src.services.mcc_matching_service import MccMatchingService
 
@@ -163,14 +165,13 @@ async def preview_fingerprint(
         404: {"description": "Preview ID not found or expired"},
     },
 )
-async def get_preview_image(preview_id: str) -> Any:
+async def get_preview_image(preview_id: str) -> FastAPIResponse:
     """Serve the skeleton image for a previous preview call."""
-    from fastapi.responses import Response
     from src.storage.object_storage import storage
     png_bytes = storage.download_file(f"temp/{preview_id}.png")
     if png_bytes is None:
         raise HTTPException(status_code=404, detail="Preview image expired or not found")
-    return Response(
+    return FastAPIResponse(
         content=png_bytes,
         media_type="image/png",
         headers={"Cache-Control": "public, max-age=3600"},
