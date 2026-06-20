@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import cv2
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
@@ -17,14 +17,11 @@ from src.db.repositories.fingerprint_repository import FingerprintRepository
 from src.schemas.fingerprint_schema import (
     FingerprintCreate,
     FingerprintListResponse,
-    FingerprintPreviewResponse,
     FingerprintResponse,
     MinutiaPoint,
 )
 
 if TYPE_CHECKING:
-    import uuid
-
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from src.services.mcc_matching_service import MccMatchingService
