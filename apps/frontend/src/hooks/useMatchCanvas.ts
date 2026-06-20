@@ -56,7 +56,7 @@ const DIR_LINE_LEN = 8;
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 /** NIST-style minutia marker: hollow circle + direction line. */
-function drawMinutiaMarker(
+export function drawMinutiaMarker(
   ctx: CanvasRenderingContext2D,
   m: MinutiaPoint,
   color: string,
