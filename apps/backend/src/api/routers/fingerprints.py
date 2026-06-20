@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import logging
 import uuid
 from typing import TYPE_CHECKING, Any
 
 import cv2
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import Response as FastAPIResponse
 
 from src.api.dependencies import get_async_db, get_mcc_matching_service
 from src.api.prefix import API_PREFIX
@@ -18,13 +18,13 @@ from src.db.repositories.fingerprint_repository import FingerprintRepository
 from src.schemas.fingerprint_schema import (
     FingerprintCreate,
     FingerprintListResponse,
-    FingerprintPreviewResponse,
     FingerprintResponse,
     MinutiaPoint,
 )
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+    from starlette.responses import Response
 
     from src.services.mcc_matching_service import MccMatchingService
 
@@ -42,7 +42,7 @@ router = APIRouter(tags=["fingerprints"])
         200: {"description": "Slot already existed, returned as-is"},
         201: {"description": "Slot created"},
         404: {"description": "Person not found"},
-    }
+    },
 )
 async def create_fingerprint(
     person_id: uuid.UUID,
@@ -50,18 +50,15 @@ async def create_fingerprint(
     session: AsyncSession = Depends(get_async_db),
     response: Response | None = None,
 ) -> Any:
-    """Idempotent fingerprint slot creation.
-
-    If a slot already exists for the (person, finger_position, capture_type)
-    triple, return it with HTTP 200 instead of raising 409. This makes
-    the enrollment wizard resilient to re-selection, repeated clicks,
-    and re-enrollments of the same finger.
-    """
+    """Idempotent fingerprint slot creation."""
     person = await session.get(Person, person_id)
     if person is None:
         raise HTTPException(status_code=404, detail="Person not found")
     existing = await FingerprintRepository.find_slot(
-        session, person_id, data.finger_position, data.capture_type,
+        session,
+        person_id,
+        data.finger_position,
+        data.capture_type,
     )
     if existing is not None:
         if response is not None:
@@ -95,30 +92,15 @@ async def list_fingerprints(
 
 @router.post(
     API_PREFIX + "/fingerprints/preview",
-    response_model=FingerprintPreviewResponse,
     summary="Preview minutiae extraction without persisting (Phase 23)",
-    description=(
-        "Accepts a fingerprint image (BMP, PNG, JPEG), runs the full "
-        "extraction pipeline (Gabor enhancement + skeletonization + minutiae), "
-        "and returns the processed image (base64 PNG) plus the detected "
-        "minutiae. Does NOT persist a capture; the perito reviews the "
-        "extraction in the UI and explicitly enrolls via the captures endpoint."
-    ),
-    responses={
-        400: {"description": "Invalid image or extraction failure"},
-    },
 )
 async def preview_fingerprint(
     file: UploadFile = File(..., description="Fingerprint image (BMP, PNG, JPEG)"),
     mcc_svc: MccMatchingService = Depends(get_mcc_matching_service),
 ) -> Any:
-    """Preview minutiae for a fingerprint image without persisting.
+    """Preview minutiae for a fingerprint image without persisting."""
+    import uuid as _uuid
 
-    Runs the MCC mini-pipeline (Gabor + RidgeGraphExtractor) and
-    returns the enhanced image (base64 PNG) plus detected minutiae.
-    Does not touch the DB or Qdrant. Backend for ``getMinutiaeForImage``
-    in ``apps/frontend/src/lib/api.ts`` (Phase 23, D-29).
-    """
     image_bytes = await file.read()
     if not image_bytes:
         raise HTTPException(status_code=400, detail="Empty file")
@@ -126,7 +108,9 @@ async def preview_fingerprint(
     loop = asyncio.get_running_loop()
     try:
         result = await loop.run_in_executor(
-            None, mcc_svc.preview, image_bytes,
+            None,
+            mcc_svc.preview,
+            image_bytes,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -139,14 +123,38 @@ async def preview_fingerprint(
     ok, buf = cv2.imencode(".png", skeleton)
     if not ok:
         raise HTTPException(status_code=400, detail="Failed to encode skeleton")
-    b64_png = base64.b64encode(buf.tobytes()).decode("ascii")
+
+    preview_id = str(_uuid.uuid4())
+    from src.storage.object_storage import storage
+
+    storage.upload_file(buf.tobytes(), f"temp/{preview_id}.png", content_type="image/png")
 
     h, w = skeleton.shape[:2]
-    return FingerprintPreviewResponse(
-        processed_image=b64_png,
-        minutiae=[MinutiaPoint(**p) for p in minutiae_dicts],
-        terminations=0,
-        bifurcations=0,
-        image_shape=[int(h), int(w)],
-        image_dtype=str(skeleton.dtype),
+    return {
+        "preview_id": preview_id,
+        "processed_image_url": f"/api/v1/fingerprints/preview/{preview_id}/image",
+        "minutiae": [MinutiaPoint(**p) for p in minutiae_dicts],
+        "terminations": 0,
+        "bifurcations": 0,
+        "image_shape": [int(h), int(w)],
+        "image_dtype": str(skeleton.dtype),
+    }
+
+
+@router.get(
+    API_PREFIX + "/fingerprints/preview/{preview_id}/image",
+    response_model=None,
+    summary="Get a preview skeleton image by preview_id",
+)
+async def get_preview_image(preview_id: str) -> FastAPIResponse:
+    """Serve the skeleton image for a previous preview call."""
+    from src.storage.object_storage import storage
+
+    png_bytes = storage.download_file(f"temp/{preview_id}.png")
+    if png_bytes is None:
+        raise HTTPException(status_code=404, detail="Preview image expired or not found")
+    return FastAPIResponse(
+        content=png_bytes,
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=3600"},
     )
