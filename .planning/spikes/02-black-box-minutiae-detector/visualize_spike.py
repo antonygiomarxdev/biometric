@@ -43,14 +43,38 @@ ZONE_COLOURS: dict[Zone, tuple[int, int, int]] = {
 
 
 def _default_samples() -> list[Path]:
+    """CLEAN Real images only (no Altered variants).
+
+    Per the spike methodology: validate the black-box architecture on
+    ground-truth-clean prints first. Distorted variants (CR, Obl, Zcut)
+    introduce boundary effects that confuse the singularity detector
+    and obscure whether the base architecture is sound.
+    """
+    if not SOCOFING_REAL.exists():
+        return []
+    persons = ["100__", "101__", "102__", "103__", "104__"]
     samples: list[Path] = []
-    samples.extend(sorted(SOCOFING_REAL.glob("100__*.BMP"))[:1])
-    if SOCOFING_ALTERED.exists():
-        samples.extend(sorted(SOCOFING_ALTERED.glob("100__*_CR.BMP"))[:1])
-        samples.extend(sorted(SOCOFING_ALTERED.glob("100__*_Zcut.BMP"))[:1])
-        samples.extend(sorted(SOCOFING_REAL.glob("101__*.BMP"))[:1])
-        samples.extend(sorted(SOCOFING_ALTERED.glob("101__*_Zcut.BMP"))[:1])
+    for prefix in persons:
+        matches = sorted(SOCOFING_REAL.glob(f"{prefix}*.BMP"))[:1]
+        samples.extend(matches)
     return [p for p in samples if p.exists()]
+
+
+def _add_argparse() -> None:
+    """Allow the perito to request altered variants explicitly."""
+    import argparse
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument(
+        "--include-altered", action="store_true",
+        help="Include Altered-Easy variants (CR, Zcut, Obl).",
+    )
+    args, remaining = parser.parse_known_args()
+    sys.argv = [sys.argv[0]] + remaining
+    global _INCLUDE_ALTERED
+    _INCLUDE_ALTERED = args.include_altered
+
+
+_INCLUDE_ALTERED = False
 
 
 def _draw_minutia(
@@ -123,9 +147,13 @@ def _make_grid(image: np.ndarray, result: Any) -> tuple[plt.Figure, dict[str, An
     deltas = result.deltas
     pattern_mask = result.pattern_area_mask
 
-    fig, axes = plt.subplots(2, 3, figsize=(20, 12))
+    fig = plt.figure(figsize=(24, 16))
+    gs = fig.add_gridspec(3, 4, height_ratios=[12, 12, 2.2])
+    axes = gs[:2, :3].subgridspec(2, 3).subplots()
+    legend_ax = fig.add_subplot(gs[2, :])
     fig.suptitle(
-        f"Spike 02: Black-Box Detector — {result.num_minutiae} validated "
+        f"Spike 02: Black-Box Detector — {result.num_minutiae} validated, "
+        f"pattern: {result.metadata.get('inferred_pattern', 'unknown')} "
         f"({result.num_cores} cores, {result.num_deltas} deltas)",
         fontsize=14, fontweight="bold",
     )
@@ -147,7 +175,7 @@ def _make_grid(image: np.ndarray, result: Any) -> tuple[plt.Figure, dict[str, An
     for m in minutiae:
         zone_counts[m.zone.name] = zone_counts.get(m.zone.name, 0) + 1
     ax.set_title(
-        f"1. Enhanced + validated minutiae\n"
+        f"1. Enhanced + validated minutiae (NBIS)\n"
         f"   zones: {zone_counts}",
         fontsize=10,
     )
@@ -229,6 +257,9 @@ def _make_grid(image: np.ndarray, result: Any) -> tuple[plt.Figure, dict[str, An
     term_count = sum(1 for m in minutiae if m.type == MinutiaType.TERMINATION)
     bif_count = sum(1 for m in minutiae if m.type == MinutiaType.BIFURCATION)
     timings = result.metadata.get("timings", {})
+    n_raw_cores = result.metadata.get("n_raw_cores", 0)
+    n_raw_deltas = result.metadata.get("n_raw_deltas", 0)
+    inferred = result.metadata.get("inferred_pattern", "unknown")
     summary = (
         f"raw candidates:  {result.metadata.get('n_raw_candidates', 0)}\n"
         f"validated:       {result.num_minutiae}\n"
@@ -242,7 +273,12 @@ def _make_grid(image: np.ndarray, result: Any) -> tuple[plt.Figure, dict[str, An
         f"  avg trace:     {avg_trace:.1f} px\n"
         f"\n"
         f"type: T={term_count}  B={bif_count}\n"
-        f"cores: {result.num_cores}  deltas: {result.num_deltas}\n"
+        f"\n"
+        f"SINGULARITIES\n"
+        f"  raw cores:     {n_raw_cores}\n"
+        f"  raw deltas:    {n_raw_deltas}\n"
+        f"  after NMS+ctx: {result.num_cores}-{result.num_deltas}\n"
+        f"  inferred:      {inferred}\n"
         f"\n"
         f"enhance:  {timings.get('enhance_ms', 0)} ms\n"
         f"norm:     {timings.get('norm_ms', 0)} ms\n"
@@ -259,6 +295,51 @@ def _make_grid(image: np.ndarray, result: Any) -> tuple[plt.Figure, dict[str, An
     ax.axis("off")
     ax.set_facecolor("#111")
 
+    legend_ax.axis("off")
+
+    def _bgr_to_hex(bgr: tuple[int, int, int]) -> str:
+        b, g, r = bgr
+        return f"#{r:02X}{g:02X}{b:02X}"
+
+    legend_items = [
+        ("Ridge ending (type 1)", "o", _bgr_to_hex(ZONE_COLOURS[Zone.INTERIOR])),
+        ("Bifurcation (type 3)", "s", _bgr_to_hex(ZONE_COLOURS[Zone.INTERIOR])),
+        ("Border zone", "o", _bgr_to_hex(ZONE_COLOURS[Zone.BORDER])),
+        ("Near core", "o", _bgr_to_hex(ZONE_COLOURS[Zone.NEAR_CORE])),
+        ("Near delta", "o", _bgr_to_hex(ZONE_COLOURS[Zone.NEAR_DELTA])),
+        ("Core (NBIS)", "*", "#00FF00"),
+        ("Delta (NBIS)", "v", "#FF0000"),
+        ("Overlap / crossing", "X", "#FF0000"),
+    ]
+    handles: list[Any] = []
+    for label, marker, colour in legend_items:
+        handles.append(
+            plt.Line2D(
+                [0], [0], marker=marker, color="white", markerfacecolor=colour,
+                markeredgecolor=colour, markersize=12, label=label, linestyle="None",
+            )
+        )
+    handles.append(
+        plt.Line2D(
+            [0], [0], color="white", linewidth=2,
+            label="Line = ridge direction (longer = higher conf)",
+        )
+    )
+    handles.append(
+        plt.Line2D(
+            [0], [0], color="white", linewidth=0, marker="s", markerfacecolor="#B4B464",
+            markeredgecolor="#B4B464", markersize=14, alpha=0.5,
+            label="Pattern area (yellow tint)",
+        )
+    )
+    leg = legend_ax.legend(
+        handles=handles, loc="center", ncol=4, frameon=True,
+        fontsize=11, facecolor="#1a1a1a", edgecolor="#444",
+    )
+    for text in leg.get_texts():
+        text.set_color("white")
+    legend_ax.set_facecolor("#111")
+
     plt.tight_layout()
 
     summary_dict = {
@@ -271,8 +352,11 @@ def _make_grid(image: np.ndarray, result: Any) -> tuple[plt.Figure, dict[str, An
         "n_high_conf": high_conf,
         "n_low_conf": low_conf,
         "n_overlap": n_overlap,
+        "n_raw_cores": n_raw_cores,
+        "n_raw_deltas": n_raw_deltas,
         "n_cores": result.num_cores,
         "n_deltas": result.num_deltas,
+        "inferred_pattern": inferred,
         "mean_confidence": mean_q,
         "avg_trace_px": avg_trace,
     }
@@ -280,6 +364,7 @@ def _make_grid(image: np.ndarray, result: Any) -> tuple[plt.Figure, dict[str, An
 
 
 def main(argv: list[str]) -> None:
+    _add_argparse()
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     subdir = OUT_DIR / timestamp
@@ -314,8 +399,10 @@ def main(argv: list[str]) -> None:
             f"     raw={summary['n_raw_candidates']:3d}  "
             f"validated={summary['n_validated']:3d}  "
             f"overlap={summary['n_overlap']:2d}  "
-            f"cores={summary['n_cores']}  "
-            f"deltas={summary['n_deltas']}  "
+            f"raw_cores={summary['n_raw_cores']:2d}  "
+            f"raw_deltas={summary['n_raw_deltas']:2d}  "
+            f"-> {summary['n_cores']}-{summary['n_deltas']}  "
+            f"({summary['inferred_pattern']})  "
             f"mean_q={summary['mean_confidence']:.2f}"
         )
         summary["image"] = img_path.name

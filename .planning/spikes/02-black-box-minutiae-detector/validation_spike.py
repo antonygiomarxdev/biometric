@@ -81,6 +81,27 @@ POI_DELTA_LOW: float = -0.75
 POI_DELTA_HIGH: float = -0.25
 POI_DIVISOR: float = prod_config.doric.poi_divisor
 
+# NMS radius in blocks (each block is 16x16 at 256x256).
+# 3 blocks = 48 pixels at 256x256, enough to collapse the
+# "cluster of N peaks around the real core" pattern that the
+# block-based Poincaré computation produces.
+NMS_RADIUS_BLOCKS: int = 3
+
+# Henry pattern rules (NIST Handbook of Fingerprint Examination).
+#   Plain arch:     0 cores, 0 deltas
+#   Tented arch:    0 cores, 1 delta
+#   Loop:           1 core,  1 delta
+#   Whorl:          2 cores, 2 deltas
+# These are the only valid (core, delta) counts in the standard
+# Henry classification. The context check uses them to filter
+# the post-NMS singularity list.
+HENRY_RULES: dict[tuple[int, int], str] = {
+    (0, 0): "plain_arch",
+    (0, 1): "tented_arch",
+    (1, 1): "loop",
+    (2, 2): "whorl",
+}
+
 
 # ---------------------------------------------------------------------------
 # Singularity detection (ALL cores and deltas)
@@ -206,6 +227,116 @@ def detect_all_singularities(
                     )
 
     return cores, deltas
+
+
+# ---------------------------------------------------------------------------
+# Non-Maximum Suppression (NMS) for singularities
+# ---------------------------------------------------------------------------
+
+
+def non_max_suppress(
+    singularities: list[Singularity],
+    radius_blocks: int = NMS_RADIUS_BLOCKS,
+    block_size: int = 16,
+) -> list[Singularity]:
+    """Non-maximum suppression for singularity candidates.
+
+    Keeps only the local maximum (by ``|Poincaré index|``) within a
+    neighbourhood of ``radius_blocks`` blocks. This collapses the
+    "cluster of N peaks around the real core" problem that the
+    block-based Poincaré computation produces (the OF rotates
+    sharply across multiple blocks at a singularity, so each block
+    independently sees a high PI value).
+
+    Args:
+        singularities: Raw candidates from Poincaré + DORIC.
+        radius_blocks: Suppression radius in blocks. The DORIC
+            sample radius is also in blocks; using the same scale
+            ensures two peaks from the same singularity collapse.
+        block_size: Block size in pixels (16 at 256x256).
+
+    Returns:
+        Filtered list with only the local maxima.
+    """
+    if not singularities:
+        return []
+    sorted_sings = sorted(
+        singularities,
+        key=lambda s: abs(s.poincare_value),
+        reverse=True,
+    )
+    radius_px = radius_blocks * block_size
+    kept: list[Singularity] = []
+    for s in sorted_sings:
+        too_close = any(
+            abs(s.x - k.x) <= radius_px and abs(s.y - k.y) <= radius_px
+            for k in kept
+        )
+        if not too_close:
+            kept.append(s)
+    return kept
+
+
+# ---------------------------------------------------------------------------
+# Context check (Henry pattern rules)
+# ---------------------------------------------------------------------------
+
+
+def infer_pattern_from_count(n_cores: int, n_deltas: int) -> str:
+    """Map a (n_cores, n_deltas) count pair to a pattern label.
+
+    Uses the standard Henry classification (see HENRY_RULES).
+    For non-standard counts, returns a soft label that records
+    the inconsistency without rejecting the result.
+    """
+    if (n_cores, n_deltas) in HENRY_RULES:
+        return HENRY_RULES[(n_cores, n_deltas)]
+    if n_cores == 1 and n_deltas == 0:
+        return "loop_missing_delta"
+    if n_cores >= 2 and n_deltas < 2:
+        return "whorl_or_loop"
+    if n_cores == 0 and n_deltas >= 2:
+        return "ambiguous_arch"
+    if n_cores > 2 or n_deltas > 2:
+        return "over_detected"
+    return "unknown"
+
+
+def apply_singularity_context(
+    cores: list[Singularity],
+    deltas: list[Singularity],
+) -> tuple[list[Singularity], list[Singularity], str]:
+    """Apply the Henry pattern rules to post-NMS singularities.
+
+    The rule: a fingerprint has a known (cores, deltas) count based
+    on its pattern type. The detected count must match one of the
+    known patterns; if it doesn't, the most permissive valid
+    interpretation is applied (capping over-detected counts to the
+    maximum known, keeping under-detected ones with a label).
+
+    Returns:
+        (filtered_cores, filtered_deltas, inferred_pattern_label)
+    """
+    n_cores = len(cores)
+    n_deltas = len(deltas)
+    pattern = infer_pattern_from_count(n_cores, n_deltas)
+
+    if pattern in HENRY_RULES.values():
+        return cores, deltas, pattern
+
+    if pattern == "loop_missing_delta":
+        return cores, deltas, pattern
+
+    if pattern == "whorl_or_loop":
+        return cores[:2], deltas, pattern
+
+    if pattern == "ambiguous_arch":
+        return cores, deltas[:1], pattern
+
+    if pattern == "over_detected":
+        return cores[:2], deltas[:2], pattern
+
+    return cores, deltas, pattern
 
 
 # ---------------------------------------------------------------------------
@@ -532,8 +663,14 @@ def detect(image: np.ndarray) -> DetectionResult:
     coherence_field = ctx.coherence_field
 
     cores, deltas = ([], [])
+    raw_cores: list[Singularity] = []
+    raw_deltas: list[Singularity] = []
     if orientation_field is not None:
-        cores, deltas = detect_all_singularities(orientation_field, block_size=16)
+        raw_cores, raw_deltas = detect_all_singularities(orientation_field, block_size=16)
+
+    nms_cores = non_max_suppress(raw_cores)
+    nms_deltas = non_max_suppress(raw_deltas)
+    cores, deltas, inferred_pattern = apply_singularity_context(nms_cores, nms_deltas)
 
     pattern_mask = compute_pattern_area_mask(skeleton)
 
@@ -557,8 +694,11 @@ def detect(image: np.ndarray) -> DetectionResult:
             "normalized_shape": list(normalized.shape),
             "n_raw_candidates": len(raw_minutiae),
             "n_validated": len(validated),
+            "n_raw_cores": len(raw_cores),
+            "n_raw_deltas": len(raw_deltas),
             "n_cores": len(cores),
             "n_deltas": len(deltas),
+            "inferred_pattern": inferred_pattern,
             "timings": raw_artefacts["timings"],
         },
     )
@@ -567,9 +707,11 @@ def detect(image: np.ndarray) -> DetectionResult:
 __all__ = [
     "BORDER_MARGIN_PX",
     "DORIC_RADIUS",
+    "HENRY_RULES",
     "MAX_TRACE_PX",
     "MIN_TRACE_BRANCH_PX",
     "MIN_TRACE_TERMINATION_PX",
+    "NMS_RADIUS_BLOCKS",
     "OVERLAP_BRANCH_PX",
     "PATTERN_AREA_DILATION_PX",
     "POI_CORE_HIGH",
@@ -577,12 +719,15 @@ __all__ = [
     "POI_DELTA_HIGH",
     "POI_DELTA_LOW",
     "SINGULARITY_PROXIMITY_PX",
+    "apply_singularity_context",
     "classify_zone",
     "compute_pattern_area_mask",
     "compute_confidence",
     "detect",
     "detect_all_singularities",
+    "infer_pattern_from_count",
     "is_overlap_junction",
+    "non_max_suppress",
     "run_quality_zones",
     "trace_ridge_from_bifurcation",
     "trace_ridge_from_termination",

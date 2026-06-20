@@ -2,7 +2,11 @@
 
 **Inicio:** 2026-06-19
 **Tiempo estimado:** 5–7 días
-**Estado:** En progreso
+**Estado:** CERRADO — ver [REPORT.md](./REPORT.md) para el veredicto
+
+**Veredicto:** NO-GO para merge. La arquitectura de caja negra es viable,
+pero el ORDEN de operaciones es incorrecto. La clasificación de patrón
+debe ir ANTES de la detección de minucias. Eso es el spike 03.
 
 ## Objetivo
 
@@ -69,6 +73,47 @@ validación contextual inspirada en la práctica forense.
   - **Singularity proximity:** minucias adyacentes al core/delta son más
     estables (anclas), pero las que están pegadas al delta pueden ser artefactos.
 
+## Reglas implementadas (Henry / NBIS)
+
+Estas son reglas estándar de la clasificación de Henry (NIST Handbook of
+Fingerprint Examination, US DOJ). **No son heurísticas inventadas** — son
+conocimiento forense establecido.
+
+### Non-Maximum Suppression de singularidades (NMS)
+
+- **Problema:** el campo de orientación es por bloque (16x16). En un core
+  real, el OF rota bruscamente a través de 3-4 bloques vecinos. El índice
+  de Poincaré calcula +0.5 en CADA uno de esos bloques, y DORIC los valida
+  a todos porque muestrean el mismo modelo zero-pole global.
+- **Solución:** ordenar por `|PI|` descendente, mantener el primero,
+  descartar todos los que estén a menos de `NMS_RADIUS_BLOCKS=3` (48 px
+  a 256x256). Es el mismo algoritmo de SIFT/Harris para keypoints.
+- **Por qué 3 bloques:** el radio de muestreo de DORIC es también de
+  bloques. Dos picos del mismo core están a <= radio DORIC entre sí, así
+  que NMS con esa escala los colapsa.
+
+### Conteo esperado de singularidades (Henry)
+
+| Patrón | Cores | Deltas |
+|--------|-------|--------|
+| Plain arch | 0 | 0 |
+| Tented arch | 0 | 1 |
+| Loop | 1 | 1 |
+| Whorl | 2 | 2 |
+
+Después de NMS, el conteo detectado debe matchear uno de estos. Si no:
+
+| Detectado | Interpretación | Acción |
+|-----------|----------------|--------|
+| 1 core, 0 deltas | Loop con delta débil | Mantener core, marcar `loop_missing_delta` |
+| >=2 cores, <2 deltas | Whorl con deltas débiles | Cap a 2 cores, mantener deltas, `whorl_or_loop` |
+| 0 cores, >=2 deltas | Arch ambiguo | Cap a 1 delta, `ambiguous_arch` |
+| >2 cores o >2 deltas | Sobre-detección (NMS insuficiente) | Cap a 2-2, `over_detected` |
+
+El patrón inferido se reporta en `metadata.inferred_pattern` pero **no se
+usa para tomar decisiones de matching** — esa parte queda para un spike
+separado de clasificación de patrón.
+
 ## Anti-patrones (del LESSONS_LEARNED)
 
 - ❌ **No añadir thresholds sin datos.** Cada threshold se calibra contra el
@@ -111,3 +156,4 @@ uv run python .planning/spikes/02-black-box-minutiae-detector/compare_spike.py
 - `docs/LESSONS_LEARNED.md` — anti-patrones a evitar
 - `apps/backend/scripts/visualize_minutiae.py` — visualizador del baseline
 - `apps/backend/src/services/mcc_matching_service.py` — pipeline real
+- `NIST_NOMENCLATURE.md` — mapeo de tipos a NBIS / ISO 19794-2 / ENFSI
