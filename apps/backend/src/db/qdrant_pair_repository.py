@@ -57,7 +57,7 @@ class QdrantPairRepository:
     ) -> QdrantPairRepository:
         """Construct from a host/port pair, falling back to in-memory on failure."""
         try:
-            client = QdrantClient(host=host, port=port)
+            client = QdrantClient(host=host, port=port, timeout=30.0)
             client.get_collections()
             return cls(client)
         except Exception as exc:
