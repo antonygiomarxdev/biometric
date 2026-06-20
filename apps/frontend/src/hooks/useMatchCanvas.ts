@@ -51,30 +51,36 @@ export function colorForIndex(i: number): string {
   return PALETTE[((i % PALETTE.length) + PALETTE.length) % PALETTE.length]!;
 }
 
-const MINUTIA_RADIUS = 3.5;
-const MATCHED_RING_RADIUS = 5.0;
+const CIRCLE_RADIUS = 3;
+const DIR_LINE_LEN = 8;
 const SVG_NS = "http://www.w3.org/2000/svg";
 
-function drawDot(
+/** NIST-style minutia marker: hollow circle + direction line. */
+function drawMinutiaMarker(
   ctx: CanvasRenderingContext2D,
   m: MinutiaPoint,
   color: string,
-  ringRadius: number,
-  innerRadius: number,
 ): void {
-  // Outer ring (colored)
+  const cx = m.x;
+  const cy = m.y;
+  const angle = m.angle;
+
+  // Direction line
+  const dx = Math.cos(angle) * DIR_LINE_LEN;
+  const dy = Math.sin(angle) * DIR_LINE_LEN;
   ctx.beginPath();
-  ctx.arc(m.x, m.y, ringRadius, 0, 2 * Math.PI);
-  ctx.fillStyle = color;
-  ctx.fill();
-  ctx.strokeStyle = "rgba(255,255,255,0.7)";
-  ctx.lineWidth = 1;
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + dx, cy + dy);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
   ctx.stroke();
-  // Inner dot (white)
+
+  // Hollow circle
   ctx.beginPath();
-  ctx.arc(m.x, m.y, innerRadius, 0, 2 * Math.PI);
-  ctx.fillStyle = "white";
-  ctx.fill();
+  ctx.arc(cx, cy, CIRCLE_RADIUS, 0, 2 * Math.PI);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
 }
 
 function drawMinutiae(
@@ -85,11 +91,9 @@ function drawMinutiae(
 ): void {
   minutiae.forEach((m, idx) => {
     if (matched.has(idx)) {
-      const pairColor = pairColors.get(idx) ?? PALETTE[0]!;
-      drawDot(ctx, m, pairColor, MATCHED_RING_RADIUS, MINUTIA_RADIUS);
+      drawMinutiaMarker(ctx, m, pairColors.get(idx) ?? PALETTE[0]!);
     } else {
-      const typeColor = m.type === 1 ? "#22c55e" : "#ef4444";
-      drawDot(ctx, m, typeColor, MINUTIA_RADIUS + 1, MINUTIA_RADIUS - 0.5);
+      drawMinutiaMarker(ctx, m, "rgba(255,255,255,0.7)");
     }
   });
 }
@@ -159,26 +163,20 @@ export function useMatchCanvas(args: UseMatchCanvasArgs): UseMatchCanvasResult {
       // Probe dots
       drawMinutiae(probeCtx, args.probeMinutiae, probeMatched, probePairColors);
 
-      // Candidate dots: draw the entry positions directly (one dot per
-      // match pair, since the wire format gives (x, y) of the
-      // candidate minutia that matched, not an index into the
-      // candidate minutiae array).
+      // Candidate matched minutiae (one per matched pair)
       args.matchTrace.forEach((entry, pairIndex) => {
         const color = colorForIndex(pairIndex);
-        drawDot(
+        drawMinutiaMarker(
           candidateCtx,
-          { x: entry.candidate_x, y: entry.candidate_y, angle: 0, type: 0 },
+          { x: entry.candidate_x, y: entry.candidate_y, angle: entry.candidate_angle, type: 0 },
           color,
-          MATCHED_RING_RADIUS,
-          MINUTIA_RADIUS,
         );
       });
       // Unmatched candidate minutiae
       const matchedXs = new Set(args.matchTrace.map((e) => `${e.candidate_x},${e.candidate_y}`));
       args.candidateMinutiae.forEach((m) => {
         if (!matchedXs.has(`${m.x},${m.y}`)) {
-          const typeColor = m.type === 1 ? "#22c55e" : "#ef4444";
-          drawDot(candidateCtx, m, typeColor, MINUTIA_RADIUS + 1, MINUTIA_RADIUS - 0.5);
+          drawMinutiaMarker(candidateCtx, m, "rgba(255,255,255,0.7)");
         }
       });
     });

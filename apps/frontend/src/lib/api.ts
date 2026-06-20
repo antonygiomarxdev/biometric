@@ -116,6 +116,7 @@ export interface MatchTraceEntry {
   probe_y: number;
   candidate_x: number;
   candidate_y: number;
+  candidate_angle: number;
   similarity: number;
 }
 

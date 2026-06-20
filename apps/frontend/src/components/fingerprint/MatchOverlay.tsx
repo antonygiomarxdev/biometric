@@ -26,6 +26,7 @@ function buildTrace(
       probe_y: probeP?.y ?? 0,
       candidate_x: sp.candidate_mi_x,
       candidate_y: sp.candidate_mi_y,
+      candidate_angle: sp.candidate_mi_angle,
       similarity: sp.similarity,
     };
   });
