@@ -8,7 +8,7 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 import cv2
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from src.api.dependencies import get_async_db, get_mcc_matching_service
 from src.api.prefix import API_PREFIX
@@ -156,14 +156,16 @@ async def preview_fingerprint(
 
 @router.get(
     API_PREFIX + "/fingerprints/preview/{preview_id}/image",
+    response_model=None,
     summary="Get a preview skeleton image by preview_id",
     responses={
         200: {"content": {"image/png": {}}, "description": "PNG skeleton bytes"},
         404: {"description": "Preview ID not found or expired"},
     },
 )
-async def get_preview_image(preview_id: str) -> Response:
+async def get_preview_image(preview_id: str) -> Any:
     """Serve the skeleton image for a previous preview call."""
+    from fastapi.responses import Response
     from src.storage.object_storage import storage
     png_bytes = storage.download_file(f"temp/{preview_id}.png")
     if png_bytes is None:
