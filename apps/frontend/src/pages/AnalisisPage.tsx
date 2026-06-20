@@ -17,19 +17,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { CandidateDetailPanel } from "@/components/fingerprint/CandidateDetailPanel";
+import { drawMinutiaMarker } from "@/hooks/useMatchCanvas";
 import { useToast } from "@/components/ui/toast";
 import {
-  getMinutiaeForImage,
   searchMatching,
   listPersons,
   createFingerprintSlot,
   enrollFingerprint,
   createCase,
-  fetchCaptureImage,
   type MatchCandidate,
   type MatchSearchResponse,
   type MinutiaPoint,
-  type FingerprintPreviewResponse,
   type CaseCreateInput,
 } from "@/lib/api";
 
@@ -37,7 +35,6 @@ const VALID_TYPES = ["image/bmp", "image/png", "image/jpeg", "image/jpg"];
 const MAX_BYTES = 10 * 1024 * 1024;
 
 const PALETTE_HIT = "#ffffff";
-const PALETTE_HIT_RING = "#22c55e";
 
 // Tiered confidence thresholds for the perito. Above 0.9 is
 // "high" (single best match, "OK"); 0.7-0.9 is "medium" (possible
@@ -58,13 +55,8 @@ export default function AnalisisPage() {
 
   const [latentFile, setLatentFile] = useState<File | null>(null);
   const [probeDataUrl, setProbeDataUrl] = useState<string | null>(null);
-  const [processedDataUrl, setProcessedDataUrl] = useState<string | null>(null);
-  const [preview, setPreview] = useState<FingerprintPreviewResponse | null>(null);
   const [searchResult, setSearchResult] = useState<MatchSearchResponse | null>(null);
   const [selectedIdx, setSelectedIdx] = useState(0);
-
-  const [candidateDataUrl, setCandidateDataUrl] = useState<string | null>(null);
-  const [candidateLoading, setCandidateLoading] = useState(false);
 
   const [showEnrollPicker, setShowEnrollPicker] = useState(false);
   const [enrollPersonId, setEnrollPersonId] = useState("");
@@ -76,19 +68,6 @@ export default function AnalisisPage() {
   // ============================================================
   // Mutations / queries
   // ============================================================
-
-  const previewMutation = useMutation({
-    mutationFn: (file: File) => getMinutiaeForImage(file),
-    onSuccess: (result) => {
-      setPreview(result);
-      if (result.processed_image) {
-        setProcessedDataUrl(`data:image/png;base64,${result.processed_image}`);
-      }
-    },
-    onError: (err: Error) => {
-      addToast({ type: "error", title: "Error al procesar", description: err.message });
-    },
-  });
 
   const searchMutation = useMutation({
     mutationFn: (file: File) => searchMatching(file, 10),
@@ -176,16 +155,12 @@ export default function AnalisisPage() {
       reader.onload = (ev) => {
         setProbeDataUrl(ev.target?.result as string);
         setLatentFile(file);
-        setPreview(null);
         setSearchResult(null);
         setSelectedIdx(0);
-        setCandidateDataUrl(null);
-        setProcessedDataUrl(null);
-        previewMutation.mutate(file);
       };
       reader.readAsDataURL(file);
     },
-    [addToast, previewMutation],
+    [addToast],
   );
 
   const handleSearch = useCallback(() => {
@@ -213,11 +188,8 @@ export default function AnalisisPage() {
   const handleReset = useCallback(() => {
     setLatentFile(null);
     setProbeDataUrl(null);
-    setProcessedDataUrl(null);
-    setPreview(null);
     setSearchResult(null);
     setSelectedIdx(0);
-    setCandidateDataUrl(null);
   }, []);
 
   // ============================================================
@@ -227,72 +199,23 @@ export default function AnalisisPage() {
   const selectedCandidate: MatchCandidate | null =
     searchResult?.candidates[selectedIdx] ?? null;
 
-  // Stepper state — drives the always-visible WorkflowStepper
-  // 0=no image, 1=uploaded, 2=previewed, 3=searched (candidates available)
-  const currentStep: 0 | 1 | 2 | 3 = (() => {
-    if (searchResult) return 3;
-    if (preview) return 2;
+  // Stepper state — 0=no image, 1=uploaded, 2=searched (candidates available)
+  const currentStep: 0 | 1 | 2 = (() => {
+    if (searchResult) return 2;
     if (probeDataUrl) return 1;
     return 0;
   })();
-
-  useEffect(() => {
-    if (!selectedCandidate) {
-      setCandidateDataUrl(null);
-      return;
-    }
-    const captureId = selectedCandidate.supporting_pairs[0]?.candidate_capture_id;
-    if (!captureId) {
-      setCandidateDataUrl(null);
-      return;
-    }
-    let cancelled = false;
-    setCandidateLoading(true);
-    fetchCaptureImage(captureId)
-      .then((url) => {
-        if (!cancelled) {
-          setCandidateDataUrl(url);
-          setCandidateLoading(false);
-        }
-      })
-      .catch((err: Error & { status?: number }) => {
-        if (cancelled) return;
-        setCandidateLoading(false);
-        setCandidateDataUrl(null);
-        // 503 = capture predates the enhanced_image column. Surface a
-        // clear toast so the perito re-enrolls. There is no in-place
-        // fallback — legacy data is treated as missing, not as something
-        // to silently paper over.
-        if (err.status === 503) {
-          addToast({
-            type: "warning",
-            title: "Captura legacy sin imagen enhanced",
-            description:
-              "Esta captura se enroló antes de la migración. Re-enrolá para ver la comparación visual.",
-            duration: 8000,
-          });
-        } else {
-          addToast({
-            type: "warning",
-            title: "No se pudo cargar la imagen del candidato",
-            description: err.message,
-          });
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedCandidate, addToast]);
 
   // ============================================================
   // Canvas drawing: probe image with minutiae
   // ============================================================
 
+  const probeSrc = searchResult?.probe_image_url ?? probeDataUrl;
+
   useEffect(() => {
     const canvas = probeCanvasRef.current;
     if (!canvas) return;
-    const src = processedDataUrl ?? probeDataUrl;
-    if (!src) return;
+    if (!probeSrc) return;
     const img = new Image();
     img.onload = () => {
       probeImgRef.current = img;
@@ -309,37 +232,31 @@ export default function AnalisisPage() {
         }
       }
 
-      // Prefer search-pipeline minutiae (same coordinate space as matchedIndices).
-      // Fall back to preview minutiae when no search has been done.
-      const probeMinutiae = searchResult?.probe_minutiae ?? preview?.minutiae;
+      const probeMinutiae = searchResult?.probe_minutiae;
       if (probeMinutiae) {
         for (let i = 0; i < probeMinutiae.length; i++) {
           const m = probeMinutiae[i];
           if (!m) continue;
-          if (matchedIndices.has(i)) {
-            drawDot(ctx, m.x, m.y, 7, PALETTE_HIT, PALETTE_HIT_RING, 2.5);
-          } else {
-            drawDot(ctx, m.x, m.y, 4, "#9ca3af", "#ffffff", 1);
-          }
+          const color = matchedIndices.has(i) ? PALETTE_HIT : "rgba(255,255,255,0.7)";
+          drawMinutiaMarker(ctx, m, color);
         }
       }
     };
-    img.src = src;
-  }, [processedDataUrl, probeDataUrl, preview, searchResult, selectedCandidate]);
+    img.src = probeSrc;
+  }, [probeSrc, searchResult, selectedCandidate]);
 
   // ============================================================
   // Canvas drawing: candidate image with matched minutiae
   // ============================================================
 
+  const candidateSrc = selectedCandidate?.image_url ?? null;
+
   useEffect(() => {
     const canvas = candidateCanvasRef.current;
     if (!canvas) return;
-    const src = candidateDataUrl ?? processedDataUrl;
-    if (!src) {
+    if (!candidateSrc) {
       const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-      }
+      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
       return;
     }
     const img = new Image();
@@ -352,23 +269,13 @@ export default function AnalisisPage() {
       ctx.drawImage(img, 0, 0);
 
       if (selectedCandidate) {
-        const matched: MinutiaPoint[] = selectedCandidate.supporting_pairs.map(
-          (e) => ({ x: e.candidate_mi_x, y: e.candidate_mi_y, angle: e.candidate_mi_angle, type: 2 }),
-        );
-        for (const m of matched) {
-          drawDot(ctx, m.x, m.y, 7, PALETTE_HIT, PALETTE_HIT_RING, 2.5);
-        }
-      } else if (preview?.minutiae) {
-        // Default mode: show the same processed probe with all minutiae
-        // circled. Lets the perito visually confirm the extraction
-        // before kicking off a search.
-        for (const m of preview.minutiae) {
-          drawDot(ctx, m.x, m.y, 4, "#22c55e", "#ffffff", 1.2);
+        for (const e of selectedCandidate.supporting_pairs) {
+          drawMinutiaMarker(ctx, { x: e.candidate_mi_x, y: e.candidate_mi_y, angle: e.candidate_mi_angle, type: 2 }, PALETTE_HIT);
         }
       }
     };
-    img.src = src;
-  }, [candidateDataUrl, processedDataUrl, selectedCandidate, preview]);
+    img.src = candidateSrc;
+  }, [candidateSrc, selectedCandidate]);
 
   // ============================================================
   // Render
@@ -398,16 +305,16 @@ export default function AnalisisPage() {
         {/* ============================================================ */}
         <WorkflowStepper
           current={currentStep}
-          previewRunning={previewMutation.isPending}
+          previewRunning={false}
           searchRunning={searchMutation.isPending}
-          minutiae={preview?.minutiae.length ?? 0}
+          minutiae={searchResult?.probe_minutiae.length ?? 0}
           candidateCount={searchResult?.candidates.length ?? 0}
           queryTimeMs={searchResult?.query_time_ms}
         >
           {!probeDataUrl ? (
             <UploadDropzone
               onFile={handleFile}
-              running={previewMutation.isPending}
+              running={false}
             />
           ) : (
             <>
@@ -416,7 +323,7 @@ export default function AnalisisPage() {
               <Button
                 size="sm"
                 onClick={handleSearch}
-                disabled={!preview || searchMutation.isPending || preview.minutiae.length === 0}
+                disabled={searchMutation.isPending}
                 className="flex-1 sm:flex-none"
               >
                 {searchMutation.isPending ? (
@@ -454,15 +361,10 @@ export default function AnalisisPage() {
               </Button>
 
               <div className="ml-auto text-xs text-muted-foreground font-mono">
-                {preview ? (
-                  <>{preview.minutiae.length} minucias</>
-                ) : previewMutation.isPending ? (
-                  <span className="text-primary">procesando…</span>
+                {searchResult ? (
+                  <>{searchResult.probe_minutiae.length} minucias · {searchResult.candidates.length} candidatos · {searchResult.query_time_ms}ms</>
                 ) : (
                   "—"
-                )}
-                {searchResult && (
-                  <> · {searchResult.candidates.length} candidatos · {searchResult.query_time_ms}ms</>
                 )}
               </div>
             </div>
@@ -520,7 +422,7 @@ export default function AnalisisPage() {
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm uppercase tracking-wider text-muted-foreground">
                     {searchResult ? "Procesada" : "Original"}{" "}
-                    {preview && `· ${preview.minutiae.length} minucias`}
+                    {searchResult && `· ${searchResult.probe_minutiae.length} minucias`}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-3">
@@ -555,9 +457,7 @@ export default function AnalisisPage() {
                 </CardHeader>
                 <CardContent className="p-3">
                   <div className="aspect-square bg-black rounded overflow-hidden flex items-center justify-center">
-                    {candidateLoading ? (
-                      <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-                    ) : candidateDataUrl || processedDataUrl ? (
+                    {candidateSrc ? (
                       <canvas
                         ref={candidateCanvasRef}
                         className="w-full h-full object-contain"
@@ -693,7 +593,7 @@ export default function AnalisisPage() {
                 </div>
                 <CandidateDetailPanel
                   candidate={selectedCandidate}
-                  probeImageUrl={processedDataUrl ?? probeDataUrl}
+                  probeImageUrl={searchResult?.probe_image_url ?? probeDataUrl ?? ""}
                   probeMinutiae={
                     searchResult?.probe_minutiae.map((m) => ({
                       x: m.x,
@@ -702,7 +602,6 @@ export default function AnalisisPage() {
                       type: m.type,
                     })) ?? []
                   }
-                  candidateImageUrl={candidateDataUrl}
                   onDismiss={() => setSelectedIdx(0)}
                 />
               </div>
@@ -790,24 +689,6 @@ export default function AnalisisPage() {
       </div>
     </div>
   );
-}
-
-function drawDot(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  radius: number,
-  fillColor: string,
-  ringColor: string,
-  ringWidth: number,
-): void {
-  ctx.beginPath();
-  ctx.arc(x, y, radius, 0, 2 * Math.PI);
-  ctx.fillStyle = fillColor;
-  ctx.fill();
-  ctx.strokeStyle = ringColor;
-  ctx.lineWidth = ringWidth;
-  ctx.stroke();
 }
 
 // ============================================================
