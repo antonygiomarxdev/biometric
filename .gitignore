@@ -53,7 +53,12 @@ data/
 # Model artifacts and embeddings (large binaries)
 *.pt
 *.onnx
+*.onnx.data
 *.pth
 *.npz
 apps/backend/models/
+data/models/*.onnx
+data/models/*.onnx.data
 !apps/backend/models/README.md
+!data/models/MODEL_CARD.md
+!data/models/.gitkeep
