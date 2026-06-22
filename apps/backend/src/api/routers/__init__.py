@@ -6,7 +6,7 @@ Each router handles a single REST resource (per D-02):
 - ``cases`` — CRUD for forensic cases
 - ``evidencias`` — CRUD for latent fingerprint evidence with image upload
 - ``huellas_conocidas`` — Known (ten-print) fingerprint registration
-- ``latent_search`` — Latent print RAG similarity search against known gallery
+- ``matching`` — Fingerprint matching via deep embedding (AFR-Net)
 - ``decisiones`` — Examiner matching verdicts with audit-trail logging
 - ``dictamenes`` — PDF legal report generation with HMAC-SHA256 signature
 - ``auditoria`` — Audit log querying
@@ -21,7 +21,7 @@ from .decisions import router as decisions_router
 from .evidence import router as evidence_router
 from .fingerprints import router as fingerprints_router
 from .genai import router as genai_router
-from .latent_search import router as latent_search_router
+from .matching import router as matching_router
 from .persons import router as persons_router
 from .reports import router as reports_router
 
@@ -34,7 +34,7 @@ __all__ = [
     "evidence_router",
     "fingerprints_router",
     "genai_router",
-    "latent_search_router",
+    "matching_router",
     "persons_router",
     "reports_router",
 ]

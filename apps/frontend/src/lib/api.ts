@@ -46,7 +46,16 @@ async function request<T>(
     body = JSON.stringify(options.body);
   }
 
-  const response = await fetch(url.toString(), { method, headers, body });
+  const response = await fetch(url.toString(), {
+    method,
+    headers,
+    body,
+    // FastAPI returns 307 redirects for trailing-slash mismatches
+    // (e.g. ``/persons`` → ``/persons/``).  The browser follows them
+    // automatically, but the SPA's ``fetch`` wrapper must opt in
+    // explicitly to keep parity with the browser.
+    redirect: "follow",
+  });
 
   if (!response.ok) {
     const errorBody = await response.text();
@@ -78,76 +87,32 @@ export class ApiError extends Error {
 
 // ---------------------------------------------------------------------------
 // Domain types — mirror backend Pydantic models
+//
+// Note: the legacy ``MinutiaPoint`` / ``SupportingPair`` / ``MatchTraceEntry``
+// types from the deleted MCC/Bozorth3 pipeline are gone.  The deep
+// embedding pipeline (Phase 29) returns a single cosine similarity
+// score per candidate plus a GradCAM heatmap of the probe — no
+// minutiae extraction.
 // ---------------------------------------------------------------------------
-
-/**
- * A single minutia point. Mirrors the legacy MinutiaPoint from the
- * deleted src/client/ and the FingerprintPreviewResponse from the
- * backend. Used by useCanvasDrawer and MinutiaeEditor.
- */
-export interface MinutiaPoint {
-  x: number;
-  y: number;
-  angle: number; // radians
-  type: number; // 0=termination, 1=bifurcation, 2=unknown
-}
-
-/** A single match from the search (one pair on each side). */
-export interface SupportingPair {
-  probe_mi_idx: number;
-  probe_mj_idx: number;
-  candidate_mi_x: number;
-  candidate_mi_y: number;
-  candidate_mi_angle: number;
-  candidate_mj_x: number;
-  candidate_mj_y: number;
-  candidate_mj_angle: number;
-  candidate_fingerprint_id: string;
-  candidate_capture_id: string;
-  similarity: number;
-}
-
-/**
- * One matched minutia pair used by the overlay rendering hook.
- * Derived from SupportingPair + probeMinutiae at render time.
- */
-export interface MatchTraceEntry {
-  probe_mi_idx: number;
-  probe_x: number;
-  probe_y: number;
-  candidate_x: number;
-  candidate_y: number;
-  candidate_angle: number;
-  similarity: number;
-}
 
 /** A single ranked match candidate. */
 export interface MatchCandidate {
   person_id: string;
   score: number;
-  peak_votes: number;
-  peak_transformation: {
-    dx: number;
-    dy: number;
-    dtheta: number;
-  } | null;
-  supporting_pairs: SupportingPair[];
-  num_probe_pairs: number;
   full_name: string | null;
   external_id: string | null;
-  confidence: string;
-  capture_id: string | null;
-  candidate_minutiae: MinutiaPoint[];
   image_url: string | null;
+  capture_id: string | null;
+  finger_name: string | null;
 }
 
-/** Response of POST /api/v1/matching/search (Phase 24). */
+/** Response of POST /api/v1/matching/search (Phase 29). */
 export interface MatchSearchResponse {
-  success: boolean;
   query_time_ms: number;
+  probe_gradcam_b64: string;
+  enhance_applied: boolean;
+  search_mode: "single" | "ensemble";
   total_candidates: number;
-  probe_image_url: string;
-  probe_minutiae: MinutiaPoint[];
   candidates: MatchCandidate[];
 }
 
@@ -179,33 +144,17 @@ export interface FingerprintSlotResponse {
   updated_at: string;
 }
 
-/** Single capture record (Phase 17). */
+/** Single capture record (Phase 17, updated Phase 29). */
 export interface CaptureResponse {
   id: string;
   fingerprint_id: string;
   capture_index: number;
   image_uri: string;
-  image_dpi: number | null;
-  image_quality_score: number | null;
   algorithm_version: string;
   processed_at: string;
-  num_minutiae: number | null;
-  num_graphs: number | null;
   is_reference: boolean;
   is_exemplar: boolean;
   notes: string | null;
-  graphs: unknown[]; // RidgeGraph removed in Phase 23
-}
-
-/** Response of POST /api/v1/fingerprints/preview. */
-export interface FingerprintPreviewResponse {
-  preview_id: string;
-  processed_image_url: string; // URL to load the skeleton PNG
-  minutiae: MinutiaPoint[];
-  terminations: number;
-  bifurcations: number;
-  image_shape: [number, number]; // [h, w]
-  image_dtype: string;
 }
 
 /** POST /api/v1/decisions body. */
@@ -243,13 +192,12 @@ export interface CaseListResponse {
   limit: number;
 }
 
-/** Latent fingerprint evidence attached to a case (Phase 18). */
+/** Latent fingerprint evidence attached to a case (Phase 18, updated Phase 29). */
 export interface EvidenceResponse {
   id: string;
   case_id: string;
   fingerprint_id: string;
   image_path: string | null;
-  num_minutiae: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -335,25 +283,16 @@ export function listFingerprintsForPerson(
   );
 }
 
-// Pre-enrollment preview (Phase 23, D-29)
-export function getMinutiaeForImage(
-  file: File,
-): Promise<FingerprintPreviewResponse> {
-  const formData = new FormData();
-  formData.append("file", file);
-  return request<FingerprintPreviewResponse>(
-    "POST",
-    "/api/v1/fingerprints/preview",
-    { formData },
-  );
-}
+// Pre-enrollment preview: removed in Phase 29. The deep-embedding
+// pipeline computes the embedding at enrollment time, so no separate
+// preview call is needed. The matching endpoint
+// POST /api/v1/matching/search returns GradCAM for visualisation.
 
 // Enrollment (POST capture)
 export function enrollFingerprint(
   fingerprintId: string,
   file: File,
   options?: {
-    imageDpi?: number;
     isReference?: boolean;
     isExemplar?: boolean;
     notes?: string;
@@ -361,9 +300,6 @@ export function enrollFingerprint(
 ): Promise<CaptureResponse> {
   const formData = new FormData();
   formData.append("file", file);
-  if (options?.imageDpi !== undefined) {
-    formData.append("image_dpi", String(options.imageDpi));
-  }
   if (options?.isReference !== undefined) {
     formData.append("is_reference", String(options.isReference));
   }
@@ -382,13 +318,14 @@ export function enrollFingerprint(
 export function searchMatching(
   file: File,
   topK = 10,
+  mode: "single" | "ensemble" = "single",
 ): Promise<MatchSearchResponse> {
   const formData = new FormData();
   formData.append("file", file);
   return request<MatchSearchResponse>(
     "POST",
     "/api/v1/matching/search",
-    { formData, query: { top_k: topK } },
+    { formData, query: { top_k: topK, mode } },
   );
 }
 

@@ -21,14 +21,12 @@ import { CandidateDetailPanel } from "@/components/fingerprint/CandidateDetailPa
 import {
   searchMatching,
   createCase,
-  getMinutiaeForImage,
   type MatchCandidate,
   type MatchSearchResponse,
-  type MinutiaPoint,
   type CaseCreateInput,
 } from "@/lib/api";
 
-const VALID_TYPES = ["image/bmp", "image/png", "image/jpeg", "image/jpg"];
+const VALID_TYPES = ["image/bmp", "image/png", "image/jpeg", "image/jpg", "image/tiff"];
 const MAX_BYTES = 10 * 1024 * 1024;
 
 interface CreateCaseModalState {
@@ -45,7 +43,6 @@ export default function SearchPage() {
 
   const [latentFile, setLatentFile] = useState<File | null>(null);
   const [latentPreview, setLatentPreview] = useState<string | null>(null);
-  const [probePreviewUrl, setProbePreviewUrl] = useState<string | null>(null);
   const [searchResult, setSearchResult] = useState<MatchSearchResponse | null>(null);
   const [selectedCandidate, setSelectedCandidate] = useState<MatchCandidate | null>(null);
   const [createModal, setCreateModal] = useState<CreateCaseModalState>({
@@ -109,7 +106,7 @@ export default function SearchPage() {
         addToast({
           type: "error",
           title: "Tipo de archivo inválido",
-          description: "Selecciona una imagen BMP, PNG o JPEG",
+          description: "Selecciona una imagen BMP, PNG, JPEG o TIFF",
         });
         return;
       }
@@ -129,13 +126,8 @@ export default function SearchPage() {
         setLatentFile(file);
         setSearchResult(null);
         setSelectedCandidate(null);
-        setProbePreviewUrl(null);
       };
       reader.readAsDataURL(file);
-
-      getMinutiaeForImage(file)
-        .then((res) => setProbePreviewUrl(res.processed_image_url))
-        .catch(() => {});
     },
     [addToast],
   );
@@ -191,10 +183,6 @@ export default function SearchPage() {
       }
     };
   }, [latentPreview]);
-
-  const probeMinutiae: MinutiaPoint[] = (searchResult?.probe_minutiae ?? []).map(
-    (m) => ({ x: m.x, y: m.y, angle: m.angle, type: m.type }),
-  );
 
   return (
     <div className="min-h-screen bg-background text-foreground p-8 font-sans dark">
@@ -297,7 +285,7 @@ export default function SearchPage() {
                 type="file"
                 ref={fileInputRef}
                 className="hidden"
-                accept="image/*"
+                accept="image/png, image/jpeg, image/bmp, image/tiff"
                 onChange={handleFileChange}
               />
             </CardContent>
@@ -341,7 +329,10 @@ export default function SearchPage() {
               ) : (
                 <div className="space-y-3">
                   {searchResult.candidates.map((candidate, index) => (
-                    <div key={candidate.person_id} className="space-y-1">
+                    <div
+                      key={`${index}-${candidate.capture_id ?? candidate.person_id}`}
+                      className="space-y-1"
+                    >
                       <CandidateCard
                         candidate={candidate}
                         rank={index + 1}
@@ -369,9 +360,10 @@ export default function SearchPage() {
 
         {selectedCandidate && searchResult && (
           <CandidateDetailPanel
-            candidate={selectedCandidate}
-            probeImageUrl={searchResult.probe_image_url}
-            probeMinutiae={probeMinutiae}
+            candidate={selectedCandidate!}
+            probeImageUrl={searchResult.probe_gradcam_b64
+              ? `data:image/png;base64,${searchResult.probe_gradcam_b64}`
+              : latentPreview ?? ""}
             onDismiss={() => setSelectedCandidate(null)}
           />
         )}

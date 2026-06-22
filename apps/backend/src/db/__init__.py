@@ -10,7 +10,6 @@ from .models import (
     FingerprintCapture,
     FingerprintOFIndex,
     Person,
-    RidgeGraph,
     User,
 )
 
@@ -24,6 +23,5 @@ __all__ = [
     "FingerprintCapture",
     "FingerprintOFIndex",
     "Person",
-    "RidgeGraph",
     "User",
 ]

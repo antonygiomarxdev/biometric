@@ -29,7 +29,7 @@ from src.api.routers import (
     evidence_router,
     fingerprints_router,
     genai_router,
-    latent_search_router,
+    matching_router,
     persons_router,
     reports_router,
 )
@@ -142,7 +142,7 @@ app.include_router(auth_router)
 app.include_router(cases_router)
 app.include_router(evidence_router)
 app.include_router(genai_router)
-app.include_router(latent_search_router)
+app.include_router(matching_router)
 app.include_router(decisions_router)
 app.include_router(reports_router)
 app.include_router(audit_router)

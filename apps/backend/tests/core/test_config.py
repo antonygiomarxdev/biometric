@@ -15,7 +15,6 @@ from src.core.config import (
     ExtractionConfig,
     FusionConfig,
     GaborConfig,
-    MccMatchingConfig,
     OrientationFieldConfig,
     PipelineConfig,
     QdrantIndexConfig,
@@ -345,56 +344,13 @@ class TestEnhancerDefaultsConfig:
 
 
 # ---------------------------------------------------------------------------
-# Phase 21: MCC cylinder matching config
+# Phase 29: Deep embedding config defaults
 # ---------------------------------------------------------------------------
 
 
-class TestMccMatchingConfigDefaults:
-    """MccMatchingConfig defaults for the NIST Bozorth3 pair matcher (Phase 27)."""
-
-    def test_defaults(self) -> None:
-        cfg = MccMatchingConfig()
-        assert cfg.link_dx_tol == 0.02
-        assert cfg.link_dy_tol == 0.02
-        assert cfg.link_dtheta_tol == 0.15
-        assert cfg.confidence_saturation == 30
-        assert cfg.confidence_threshold == 0.70
-
-    def test_top_level_config_exposes_mcc(self) -> None:
+class TestEmbeddingConfigDefaults:
+    def test_embedding_defaults(self) -> None:
         cfg = Config()
-        assert isinstance(cfg.matching, MccMatchingConfig)
-        assert cfg.matching.link_dx_tol == 0.02
-        assert cfg.matching.link_dy_tol == 0.02
-        assert cfg.matching.link_dtheta_tol == 0.15
-
-
-class TestMccMatchingConfigFromEnv:
-    """Environment variables should override MccMatchingConfig defaults."""
-
-    @pytest.fixture(autouse=True)
-    def _set_env(self) -> Any:
-        env_vars = {
-            "MCC_LINK_DX_TOL": "0.05",
-            "MCC_LINK_DY_TOL": "0.05",
-            "MCC_LINK_DTHETA_TOL": "0.5",
-            "MCC_CONFIDENCE_SATURATION": "50",
-            "MCC_CONFIDENCE_THRESHOLD": "0.85",
-        }
-        for k, v in env_vars.items():
-            os.environ[k] = v
-        yield
-        for k in env_vars:
-            os.environ.pop(k, None)
-
-    def test_overrides(self) -> None:
-        cfg = MccMatchingConfig()
-        assert cfg.link_dx_tol == 0.05
-        assert cfg.link_dy_tol == 0.05
-        assert cfg.link_dtheta_tol == 0.5
-        assert cfg.confidence_saturation == 50
-        assert cfg.confidence_threshold == 0.85
-
-    def test_mcc_config_via_config_class_monkeypatch(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("MCC_LINK_DX_TOL", "0.99")
-        cfg = Config()
-        assert cfg.matching.link_dx_tol == 0.99
+        assert cfg.embedding_dim == 512
+        assert cfg.embedding_num_classes == 540
+        assert cfg.qdrant_embedding_collection == "fingerprint_embeddings"

@@ -12,24 +12,22 @@ import {
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
-import { MinutiaeEditor } from "@/components/fingerprint/MinutiaeEditor";
 import {
   listPersons,
   createFingerprintSlot,
-  getMinutiaeForImage,
   enrollFingerprint,
 } from "@/lib/api";
-import type { MinutiaPoint, PersonResponse, CaptureResponse } from "@/lib/api";
+import type { PersonResponse, CaptureResponse } from "@/lib/api";
 
-type EnrollStep = "select-person" | "upload-image" | "review-minutiae" | "submitting" | "done";
+type EnrollStep = "select-person" | "upload-image" | "submitting" | "done";
 
-const VALID_TYPES = ["image/bmp", "image/png", "image/jpeg", "image/jpg"] as const;
+const VALID_TYPES = ["image/bmp", "image/png", "image/jpeg", "image/jpg", "image/tiff", "image/tif", "image/x-tiff"] as const;
 const MAX_BYTES = 10 * 1024 * 1024;
 const STEPS: { id: EnrollStep; label: string }[] = [
   { id: "select-person", label: "1. Seleccionar persona" },
   { id: "upload-image", label: "2. Subir imagen de huella" },
-  { id: "review-minutiae", label: "3. Revisar y editar minucias" },
-  { id: "done", label: "Huella enrolada exitosamente" },
+  { id: "submitting", label: "3. Indexando embedding" },
+  { id: "done", label: "4. Huella enrolada" },
 ];
 
 function StepIndicator({ current }: { current: EnrollStep }): React.JSX.Element {
@@ -75,13 +73,8 @@ export default function EnrollPage(): React.JSX.Element {
   const [fingerprintSlotId, setFingerprintSlotId] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [minutiae, setMinutiae] = useState<MinutiaPoint[]>([]);
-  const [editedMinutiae, setEditedMinutiae] = useState<MinutiaPoint[]>([]);
-  const [terminations, setTerminations] = useState(0);
-  const [bifurcations, setBifurcations] = useState(0);
   const [enrolledCapture, setEnrolledCapture] = useState<CaptureResponse | null>(null);
 
-  // Fetch persons (limit 100 — enough for the MVP dropdown)
   const {
     data: persons,
     isLoading: personsLoading,
@@ -91,7 +84,6 @@ export default function EnrollPage(): React.JSX.Element {
     queryFn: () => listPersons(0, 100),
   });
 
-  // Step 1 -> 2: create fingerprint slot
   const slotMutation = useMutation({
     mutationFn: (personId: string) => createFingerprintSlot(personId, 0, "rolled"),
     onSuccess: (slot) => {
@@ -115,7 +107,36 @@ export default function EnrollPage(): React.JSX.Element {
     }
   };
 
-  // Step 2: file upload
+  const enrollMutation = useMutation({
+    mutationFn: async () => {
+      if (!fingerprintSlotId || !file) {
+        throw new Error("Falta slot o archivo");
+      }
+      return enrollFingerprint(fingerprintSlotId, file);
+    },
+    onSuccess: (capture) => {
+      setEnrolledCapture(capture);
+      setStep("done");
+      addToast({
+        type: "success",
+        title: "Huella enrolada",
+        description: "Captura registrada con embedding AFR-Net",
+      });
+      queryClient.invalidateQueries({ queryKey: ["persons"] });
+      if (caseId) {
+        queryClient.invalidateQueries({ queryKey: ["evidencias", caseId] });
+      }
+    },
+    onError: (err: Error) => {
+      addToast({
+        type: "error",
+        title: "No se pudo procesar la imagen",
+        description: err.message,
+      });
+      setStep("upload-image");
+    },
+  });
+
   const handleFileChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const f = e.target.files?.[0];
@@ -124,7 +145,7 @@ export default function EnrollPage(): React.JSX.Element {
         addToast({
           type: "error",
           title: "Tipo de archivo inválido",
-          description: "Selecciona una imagen BMP, PNG o JPEG",
+          description: "Selecciona una imagen BMP, PNG, JPEG o TIFF",
         });
         return;
       }
@@ -140,11 +161,8 @@ export default function EnrollPage(): React.JSX.Element {
       try {
         const dataUrl = await readFileAsDataUrl(f);
         setPreviewUrl(dataUrl);
-        const preview = await getMinutiaeForImage(f);
-        setMinutiae(preview.minutiae);
-        setTerminations(preview.terminations);
-        setBifurcations(preview.bifurcations);
-        setStep("review-minutiae");
+        setStep("submitting");
+        await enrollMutation.mutateAsync();
       } catch (err) {
         addToast({
           type: "error",
@@ -153,70 +171,14 @@ export default function EnrollPage(): React.JSX.Element {
         });
       }
     },
-    [addToast],
+    [addToast, enrollMutation],
   );
-
-  // Step 3 -> submitting: enrollment
-  const enrollMutation = useMutation({
-    mutationFn: async () => {
-      if (!fingerprintSlotId || !file) {
-        throw new Error("Faltan datos para enrolar");
-      }
-      return enrollFingerprint(fingerprintSlotId, file, {
-        isExemplar: true,
-        isReference: true,
-      });
-    },
-    onSuccess: (capture) => {
-      setEnrolledCapture(capture);
-      setStep("done");
-      addToast({
-        type: "success",
-        title: "Huella enrolada",
-        description: `Captura registrada con ${capture.num_minutiae ?? 0} minucias`,
-      });
-      queryClient.invalidateQueries({ queryKey: ["persons"] });
-      if (caseId) {
-        queryClient.invalidateQueries({ queryKey: ["evidencias", caseId] });
-      }
-    },
-    onError: (err: Error) => {
-      addToast({
-        type: "error",
-        title: "No se pudo procesar la imagen",
-        description: err.message,
-      });
-      setStep("review-minutiae");
-    },
-  });
-
-  // Called by MinutiaeEditor.save
-  const handleMinutiaeSave = useCallback(
-    (m: MinutiaPoint[]) => {
-      setEditedMinutiae(m);
-      setStep("submitting");
-      // Note: the backend /fingerprints/{id}/captures endpoint re-runs the
-      // pipeline; the perito's edited minutiae are advisory for the UI
-      // only. (The wire format is multipart with the original image; the
-      // backend's pipeline rebuilds minutiae. D-12 / D-29 say the editor
-      // is "for review".)
-      // Trigger the enrollment mutation.
-    },
-    [],
-  );
-
-  // Auto-trigger enrollMutation when step enters "submitting"
-  if (step === "submitting" && !enrollMutation.isPending && !enrollMutation.isSuccess) {
-    enrollMutation.mutate();
-  }
 
   const handleEnrollAnother = () => {
     setSelectedPersonId(null);
     setFingerprintSlotId(null);
     setFile(null);
     setPreviewUrl(null);
-    setMinutiae([]);
-    setEditedMinutiae([]);
     setEnrolledCapture(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
     setStep("select-person");
@@ -237,7 +199,8 @@ export default function EnrollPage(): React.JSX.Element {
             <div>
               <h1 className="text-2xl font-bold tracking-tight">Enrolar Huella</h1>
               <p className="text-sm text-muted-foreground">
-                Selecciona una persona, sube una imagen y revisa las minucias extraídas.
+                Selecciona una persona y sube una imagen. El sistema genera automáticamente
+                el embedding AFR-Net y lo indexa en la base vectorial.
               </p>
             </div>
           </div>
@@ -313,7 +276,8 @@ export default function EnrollPage(): React.JSX.Element {
               <CardHeader>
                 <CardTitle className="text-base">2. Subir imagen de huella</CardTitle>
                 <CardDescription>
-                  Selecciona una imagen (BMP, PNG, JPEG — máx 10MB) o arrastra y suelta el archivo aquí.
+                  Selecciona una imagen (BMP, PNG, JPEG — máx 10MB). El modelo
+                  AFR-Net procesará la imagen y generará el embedding automáticamente.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -330,7 +294,7 @@ export default function EnrollPage(): React.JSX.Element {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*"
+                  accept="image/png, image/jpeg, image/bmp, image/tiff"
                   className="hidden"
                   onChange={handleFileChange}
                 />
@@ -338,37 +302,21 @@ export default function EnrollPage(): React.JSX.Element {
             </Card>
           )}
 
-          {step === "review-minutiae" && previewUrl && (
-            <div className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">3. Revisar y editar minucias</CardTitle>
-                  <CardDescription>
-                    {terminations} terminaciones, {bifurcations} bifurcaciones. Edita si
-                    es necesario y confirma para enrolar.
-                  </CardDescription>
-                </CardHeader>
-              </Card>
-              <MinutiaeEditor
-                imageUrl={previewUrl}
-                initialMinutiae={minutiae}
-                onSave={handleMinutiaeSave}
-                onCancel={() => {
-                  setStep("upload-image");
-                  if (fileInputRef.current) fileInputRef.current.value = "";
-                }}
-              />
-            </div>
-          )}
-
           {step === "submitting" && (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <Loader2 className="w-8 h-8 animate-spin text-primary mb-3" />
-                <p className="text-sm font-medium">Procesando huella...</p>
+                <p className="text-sm font-medium">Generando embedding AFR-Net...</p>
                 <p className="text-xs mt-1 text-muted-foreground">
-                  Indexando cilindros MCC en Qdrant.
+                  La huella se está indexando en la base de datos vectorial.
                 </p>
+                {previewUrl && (
+                  <img
+                    src={previewUrl}
+                    alt="Vista previa de la huella"
+                    className="mt-4 max-h-48 rounded border border-border"
+                  />
+                )}
               </CardContent>
             </Card>
           )}
@@ -381,12 +329,16 @@ export default function EnrollPage(): React.JSX.Element {
                   Huella enrolada exitosamente
                 </h2>
                 <p className="text-sm text-muted-foreground mt-2 max-w-md">
-                  Captura registrada con {enrolledCapture.num_minutiae ?? 0} minucias
-                  {editedMinutiae.length > 0
-                    ? ` (${editedMinutiae.length} editadas)`
-                    : ""}. Los cilindros MCC se han indexado en la base de datos
-                  AFIS.
+                  Captura registrada (algoritmo {enrolledCapture.algorithm_version})
+                  y embedding indexado en la base de datos vectorial.
                 </p>
+                {previewUrl && (
+                  <img
+                    src={previewUrl}
+                    alt="Huella enrolada"
+                    className="mt-4 max-h-48 rounded border border-border"
+                  />
+                )}
                 <div className="flex items-center gap-2 mt-6">
                   <Button variant="outline" onClick={handleEnrollAnother}>
                     <Fingerprint className="w-4 h-4 mr-2" />

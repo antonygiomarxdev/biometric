@@ -1,8 +1,10 @@
-"""Fingerprint storage service — MinIO wrapper for skeleton PNGs.
+"""Fingerprint storage service — MinIO wrapper for capture PNGs.
 
-At enrollment, the thinned binary skeleton (256×256) is uploaded to MinIO
-at ``captures/{capture_id}.png`` inside the configured bucket.  This is
-the single image source of truth — no separate enhanced/normalised copy.
+At enrollment, the original captured image (re-encoded as PNG) is uploaded
+to MinIO at ``captures/{capture_id}.png`` inside the configured bucket.
+This is the single image source of truth — the original is preserved
+so the perito can review it later, while the deep embedding model
+derives features from it directly.
 """
 from __future__ import annotations
 
@@ -16,7 +18,7 @@ OBJECT_PREFIX = "captures"
 
 
 class FingerprintStorage:
-    """MinIO-backed storage for fingerprint skeleton images."""
+    """MinIO-backed storage for fingerprint capture images."""
 
     @staticmethod
     def _key(capture_id: str) -> str:

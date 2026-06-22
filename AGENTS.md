@@ -1,5 +1,23 @@
 # Project Conventions
 
+## Project Memory (READ FIRST)
+
+Before starting work, **always read `docs/LESSONS_LEARNED.md`**. It documents
+recurring bugs, anti-patterns discovered in this codebase, and the reasoning
+behind non-obvious decisions. Skipping it is how you repeat Phase 25's
+"score formula isn't the bug, the algorithm is" mistake.
+
+After completing a phase, append new bugs and lessons to that file in the
+established format (Symptom → Root cause → Fix → Lesson).
+
+Other reference docs worth knowing:
+- `.planning/STATE.md` — current project state
+- `.planning/PROJECT.md` — high-level vision and decisions
+- `.planning/ROADMAP.md` — phases and what each delivers
+- `.planning/adr/*.md` — architectural decision records (read the relevant
+  ADR before changing the system it documents)
+- `.planning/phases/<N>-*/` — per-phase context, plan, and summary
+
 ## Language
 
 - **UI/UX:** Spanish (users in Nicaragua)

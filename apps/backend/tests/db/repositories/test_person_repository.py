@@ -38,13 +38,14 @@ async def session():
 class TestPersonRepository:
     @pytest.mark.asyncio
     async def test_create_minimal(self, session) -> None:
-        p = await PersonRepository.create(session, external_id="X")
+        p, created = await PersonRepository.create(session, external_id="X")
         assert p.id is not None
         assert p.external_id == "X"
+        assert created is True
 
     @pytest.mark.asyncio
     async def test_create_with_all_fields(self, session) -> None:
-        p = await PersonRepository.create(
+        p, _ = await PersonRepository.create(
             session,
             external_id="X", full_name="Juan", doc_type="cedula",
             doc_number="001", sex="M",
@@ -83,8 +84,16 @@ class TestPersonRepository:
         assert results[0].full_name == "Juan Pérez"
 
     @pytest.mark.asyncio
+    async def test_create_idempotent(self, session) -> None:
+        p1, c1 = await PersonRepository.create(session, external_id="X")
+        p2, c2 = await PersonRepository.create(session, external_id="X")
+        assert c1 is True
+        assert c2 is False
+        assert p1.id == p2.id
+
+    @pytest.mark.asyncio
     async def test_update_fields(self, session) -> None:
-        p = await PersonRepository.create(session, external_id="X", full_name="Old")
+        p, _ = await PersonRepository.create(session, external_id="X", full_name="Old")
         updated = await PersonRepository.update(session, p.id, full_name="New")
         assert updated is not None
         assert updated.full_name == "New"
@@ -95,6 +104,6 @@ class TestPersonRepository:
 
     @pytest.mark.asyncio
     async def test_delete_success(self, session) -> None:
-        p = await PersonRepository.create(session, external_id="X")
+        p, _ = await PersonRepository.create(session, external_id="X")
         assert await PersonRepository.delete(session, p.id) is True
         assert await PersonRepository.get_by_id(session, p.id) is None

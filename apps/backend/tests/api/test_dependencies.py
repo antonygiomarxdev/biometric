@@ -399,25 +399,3 @@ class TestLifespan:
         assert init_db_called, "init_db should be called on startup"
         assert init_pool_called, "init_process_pool should be called on startup"
         assert dispose_called, "dispose should be called on shutdown"
-
-
-# ---------------------------------------------------------------------------
-# MccMatchingService provider (Phase 21)
-# ---------------------------------------------------------------------------
-
-
-def test_get_mcc_matching_service_returns_singleton() -> None:
-    from unittest.mock import patch, MagicMock
-    from src.api import dependencies
-    from src.services.mcc_matching_service import MccMatchingService
-
-    mock_repo = MagicMock()
-    with patch(
-        "src.db.qdrant_pair_repository.QdrantPairRepository.from_host",
-        return_value=mock_repo,
-    ):
-        dependencies._mcc_matching_service = None
-        svc1 = dependencies.get_mcc_matching_service()
-        svc2 = dependencies.get_mcc_matching_service()
-    assert svc1 is svc2
-    assert isinstance(svc1, MccMatchingService)

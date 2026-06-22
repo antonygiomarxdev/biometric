@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     import uuid
 
     from sqlalchemy.ext.asyncio import AsyncSession
+    from starlette.responses import Response
 
 from src.api.dependencies import get_async_db
 from src.api.prefix import API_PREFIX
@@ -27,18 +28,20 @@ router = APIRouter(prefix=f"{API_PREFIX}/persons", tags=["persons"])
     "/",
     response_model=PersonResponse,
     status_code=201,
-    summary="Create a new person",
-    responses={409: {"description": "Person with this external ID already exists"}},
+    summary="Create a new person (idempotent on external_id)",
+    responses={
+        200: {"description": "Person with this external_id already existed"},
+    },
 )
 async def create_person(
     data: PersonCreate,
     session: AsyncSession = Depends(get_async_db),
+    response: Response | None = None,
 ) -> Any:
     svc = PersonService(session)
-    try:
-        p = await svc.create_person(data)
-    except ValueError as e:
-        raise HTTPException(status_code=409, detail=str(e)) from e
+    p, created = await svc.create_person_idempotent(data)
+    if response is not None:
+        response.status_code = 201 if created else 200
     return p
 
 
@@ -56,6 +59,26 @@ async def get_person(
     p = await svc.get_person(person_id)
     if p is None:
         raise HTTPException(status_code=404, detail="Person not found")
+    return p
+
+
+@router.get(
+    "/by-external-id/{external_id}",
+    response_model=PersonResponse,
+    summary="Look up a person by external ID",
+    responses={404: {"description": "Person with this external ID not found"}},
+)
+async def get_person_by_external_id(
+    external_id: str,
+    session: AsyncSession = Depends(get_async_db),
+) -> Any:
+    svc = PersonService(session)
+    p = await svc.get_person_by_external_id(external_id)
+    if p is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Person with external_id '{external_id}' not found",
+        )
     return p
 
 

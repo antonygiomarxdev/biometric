@@ -12,7 +12,6 @@ from typing import Any
 import uuid6
 from sqlalchemy import (
     DateTime,
-    Float,
     ForeignKey,
     Index,
     Integer,
@@ -104,8 +103,6 @@ class Evidence(Base):
         String(100), nullable=False, index=True
     )
     image_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    num_minutiae: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    minutiae_data: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
@@ -245,16 +242,12 @@ class FingerprintCapture(Base):
     capture_index: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     image_uri: Mapped[str] = mapped_column(String(500), nullable=False)
     image_hash_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
-    image_dpi: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    image_quality_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     algorithm_version: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="phase-13-v1",
+        String(50), nullable=False, default="afrnet-v1",
     )
     processed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow,
     )
-    num_minutiae: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    num_graphs: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_reference: Mapped[bool] = mapped_column(nullable=False, default=False)
     is_exemplar: Mapped[bool] = mapped_column(nullable=False, default=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -265,13 +258,14 @@ class FingerprintCapture(Base):
     fingerprint: Mapped["Fingerprint"] = relationship(
         "Fingerprint", back_populates="captures",
     )
-    graphs: Mapped[list["RidgeGraph"]] = relationship(
-        "RidgeGraph", back_populates="capture", cascade="all, delete-orphan",
-    )
 
     __table_args__ = (
         UniqueConstraint(
             "fingerprint_id", "capture_index", name="uq_capture_index",
+        ),
+        UniqueConstraint(
+            "fingerprint_id", "image_hash_sha256",
+            name="uq_capture_fingerprint_image_hash",
         ),
     )
 
@@ -279,90 +273,6 @@ class FingerprintCapture(Base):
         return (
             f"<FingerprintCapture(id={self.id}, "
             f"fingerprint_id={self.fingerprint_id}, idx={self.capture_index})>"
-        )
-
-
-class CaptureMinutia(Base):
-    __tablename__ = "capture_minutiae"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid7,
-        server_default=text("gen_random_uuid()"),
-    )
-    capture_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("fingerprint_captures.id", ondelete="CASCADE"),
-        nullable=False, index=True,
-    )
-    person_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("persons.id", ondelete="CASCADE"),
-        nullable=False, index=True,
-    )
-    minutia_index: Mapped[int] = mapped_column(Integer, nullable=False)
-    x: Mapped[float] = mapped_column(Float, nullable=False)
-    y: Mapped[float] = mapped_column(Float, nullable=False)
-    angle: Mapped[float] = mapped_column(Float, nullable=False)
-    type: Mapped[int] = mapped_column(Integer, nullable=False)
-    quality: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    algo_version: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="pairs-v1",
-    )
-    extracted_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=utcnow,
-    )
-
-    __table_args__ = (
-        UniqueConstraint(
-            "capture_id", "minutia_index", name="uq_capture_minutia",
-        ),
-    )
-
-    def __repr__(self) -> str:
-        return (
-            f"<CaptureMinutia(capture_id={self.capture_id}, "
-            f"idx={self.minutia_index}, type={self.type}, q={self.quality:.2f})>"
-        )
-
-
-class RidgeGraph(Base):
-    __tablename__ = "ridge_graphs"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid7,
-        server_default=text("gen_random_uuid()"),
-    )
-    capture_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("fingerprint_captures.id", ondelete="CASCADE"),
-        nullable=False, index=True,
-    )
-    graph_index: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    region_x: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    region_y: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    region_w: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    region_h: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    num_nodes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    num_edges: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    graph_data: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
-    core_x: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    core_y: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    delta_x: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    delta_y: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    singularity_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=utcnow,
-    )
-
-    capture: Mapped["FingerprintCapture"] = relationship(
-        "FingerprintCapture", back_populates="graphs",
-    )
-
-    def __repr__(self) -> str:
-        return (
-            f"<RidgeGraph(id={self.id}, capture_id={self.capture_id}, "
-            f"idx={self.graph_index}, nodes={self.num_nodes})>"
         )
 
 

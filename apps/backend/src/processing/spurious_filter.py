@@ -264,7 +264,7 @@ class SkeletonCleanerStep(IPipelineStep):
     """Pipeline step that cleans the skeleton before graph extraction.
 
     Should be placed between the Gabor enhancer/skeletonizer and the
-    RidgeGraphExtractor.  Removes spurious ridges that would otherwise
+    Removes spurious ridges that would otherwise
     create false minutiae in the graph.
     """
 

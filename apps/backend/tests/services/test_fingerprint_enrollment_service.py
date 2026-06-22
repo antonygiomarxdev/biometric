@@ -1,4 +1,4 @@
-"""Tests for FingerprintEnrollmentService."""
+"""Tests for FingerprintEnrollmentService (Phase 29 deep embedding)."""
 
 from __future__ import annotations
 
@@ -10,10 +10,7 @@ import pytest
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from src.core.types import MinutiaCandidate, MinutiaType, NormalizedFingerprint
-from src.db.models import Base, Fingerprint, Person
-from src.db.repositories.fingerprint_repository import FingerprintRepository
-from src.db.repositories.person_repository import PersonRepository
+from src.db.models import Base
 from src.services.fingerprint_enrollment_service import (
     FingerprintEnrollmentService,
 )
@@ -21,7 +18,6 @@ from src.services.fingerprint_enrollment_service import (
 
 @pytest.fixture(autouse=True)
 def mock_cv2_imdecode():
-    """Return a fake grayscale image so cv2.imdecode doesn't return None."""
     with patch("cv2.imdecode", return_value=np.zeros((100, 100), dtype=np.uint8)):
         yield
 
@@ -31,7 +27,7 @@ async def session():
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
 
     @event.listens_for(engine.sync_engine, "connect")
-    def _fk_pragma(dbapi_con, _):  # noqa: ARG001
+    def _fk_pragma(dbapi_con, _):
         dbapi_con.execute("PRAGMA foreign_keys=ON")
 
     async with engine.begin() as conn:
@@ -44,45 +40,61 @@ async def session():
     await engine.dispose()
 
 
-def make_normalized(minutiae_count: int = 5) -> NormalizedFingerprint:
-    minutiae = [
-        MinutiaCandidate(
-            x=10 + i * 5, y=20 + i * 5, angle=0.0,
-            type=MinutiaType.TERMINATION, confidence=0.9,
-            origin=0,  # type: ignore[arg-type]
-        )
-        for i in range(minutiae_count)
-    ]
-    return NormalizedFingerprint(
-        id="test", minutiae=minutiae, width=100, height=100,
-    )
+def _make_embedding_service(points: list[str] | None = None) -> MagicMock:
+    svc = MagicMock()
+    # Use a coroutine that returns a string (since ``enroll`` is now async)
+    async def _enroll(*_args: object, **_kwargs: object) -> str:
+        return (points or ["emb-1"])[0]
+    svc.enroll.side_effect = _enroll
+    svc.embed.return_value = (np.zeros(512, dtype=np.float32), None)
+    svc.search.return_value = {"candidates": []}
+    return svc
 
 
-def make_fingerprint_service():
-    fp = MagicMock()
-    fp._process_image.return_value = make_normalized(5)
-    return fp
+def _make_loader() -> MagicMock:
+    """Return a ModelLoader double whose pool is a real ThreadPoolExecutor
+    so ``run_in_executor`` works in tests.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    from src.ai.loader import ModelLoader
+
+    loader = MagicMock(spec=ModelLoader)
+    loader.pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="test")
+    return loader
 
 
 class TestCreateCapture:
     @pytest.mark.asyncio
-    async def test_creates_capture_with_graphs(self, session) -> None:
+    async def test_creates_capture_with_embedding(self, session) -> None:
+        from src.db.repositories.person_repository import PersonRepository
+        from src.db.repositories.fingerprint_repository import FingerprintRepository
+
         p = await PersonRepository.create(session, external_id="X")
         fp = await FingerprintRepository.create(session, person_id=p.id, finger_position=2)
-        svc = FingerprintEnrollmentService(session, make_fingerprint_service())
+        svc = FingerprintEnrollmentService(
+            session,
+            embedding_service=_make_embedding_service(),
+            loader=_make_loader(),
+        )
         image_bytes = b"FAKE_IMAGE_BYTES"
-        capture, graphs = await svc.create_capture(fp.id, image_bytes)
+        capture, embedding_id = await svc.create_capture(fp.id, image_bytes)
         assert capture.id is not None
         assert capture.fingerprint_id == fp.id
-        # RidgeGraph extraction removed per "No Legacy" mandate
-        assert len(graphs) == 0
-        assert capture.num_graphs == 0
+        assert embedding_id is not None
 
     @pytest.mark.asyncio
     async def test_updates_capture_count_on_parent(self, session) -> None:
+        from src.db.repositories.person_repository import PersonRepository
+        from src.db.repositories.fingerprint_repository import FingerprintRepository
+
         p = await PersonRepository.create(session, external_id="X")
         fp = await FingerprintRepository.create(session, person_id=p.id, finger_position=2)
-        svc = FingerprintEnrollmentService(session, make_fingerprint_service())
+        svc = FingerprintEnrollmentService(
+            session,
+            embedding_service=_make_embedding_service(),
+            loader=_make_loader(),
+        )
         await svc.create_capture(fp.id, b"x")
         await session.refresh(fp)
         assert fp.capture_count == 1
@@ -90,28 +102,26 @@ class TestCreateCapture:
 
     @pytest.mark.asyncio
     async def test_missing_fingerprint_raises(self, session) -> None:
-        svc = FingerprintEnrollmentService(session, make_fingerprint_service())
+        svc = FingerprintEnrollmentService(
+            session,
+            embedding_service=_make_embedding_service(),
+            loader=_make_loader(),
+        )
         with pytest.raises(ValueError, match="not found"):
             await svc.create_capture(uuid.uuid4(), b"x")
 
     @pytest.mark.asyncio
-    async def test_zero_minutiae_produces_zero_graphs(self, session) -> None:
-        p = await PersonRepository.create(session, external_id="X")
-        fp = await FingerprintRepository.create(session, person_id=p.id, finger_position=2)
-        empty_fp = MagicMock()
-        empty_fp.process_image.return_value = NormalizedFingerprint(
-            id="x", minutiae=[], width=10, height=10,
-        )
-        svc = FingerprintEnrollmentService(session, empty_fp)
-        capture, graphs = await svc.create_capture(fp.id, b"x")
-        assert graphs == []
-        assert capture.num_graphs == 0
-
-    @pytest.mark.asyncio
     async def test_two_captures_increment_index(self, session) -> None:
+        from src.db.repositories.person_repository import PersonRepository
+        from src.db.repositories.fingerprint_repository import FingerprintRepository
+
         p = await PersonRepository.create(session, external_id="X")
         fp = await FingerprintRepository.create(session, person_id=p.id, finger_position=2)
-        svc = FingerprintEnrollmentService(session, make_fingerprint_service())
+        svc = FingerprintEnrollmentService(
+            session,
+            embedding_service=_make_embedding_service(),
+            loader=_make_loader(),
+        )
         c1, _ = await svc.create_capture(fp.id, b"x")
         c2, _ = await svc.create_capture(fp.id, b"x")
         assert c1.capture_index == 1
@@ -123,61 +133,65 @@ class TestCreateCapture:
     async def test_image_hash_is_sha256(self, session) -> None:
         import hashlib
 
+        from src.db.repositories.person_repository import PersonRepository
+        from src.db.repositories.fingerprint_repository import FingerprintRepository
+
         p = await PersonRepository.create(session, external_id="X")
         fp = await FingerprintRepository.create(session, person_id=p.id, finger_position=2)
-        svc = FingerprintEnrollmentService(session, make_fingerprint_service())
+        svc = FingerprintEnrollmentService(
+            session,
+            embedding_service=_make_embedding_service(),
+            loader=_make_loader(),
+        )
         bytes_in = b"hello world"
         c, _ = await svc.create_capture(fp.id, bytes_in)
         assert c.image_hash_sha256 == hashlib.sha256(bytes_in).hexdigest()
 
 
-def test_init_accepts_mcc_service() -> None:
-    """FingerprintEnrollmentService __init__ accepts mcc_matching_service kwarg."""
+def test_init_accepts_embedding_service() -> None:
     svc = FingerprintEnrollmentService.__new__(FingerprintEnrollmentService)
     svc._session = MagicMock()
-    svc._fp_service = MagicMock()
-    svc._mcc_service = MagicMock()
-    assert svc._mcc_service is not None
+    svc._embedding_service = MagicMock()
+    svc._loader = _make_loader()
+    assert svc._embedding_service is not None
 
 
 @pytest.mark.asyncio
-async def test_index_pairs_invokes_enroll_pairs_with_image_bytes() -> None:
-    """_index_pairs should call MccMatchingService.enroll_pairs with correct params."""
-    calls = []
+async def test_create_capture_returns_embedding_id() -> None:
+    from src.db.models import Fingerprint
 
-    class _FakeSvc:
-        def enroll_pairs(self, capture_id, fingerprint_id, person_id, image_bytes):
-            calls.append({
-                "capture_id": capture_id,
-                "fingerprint_id": fingerprint_id,
-                "person_id": person_id,
-                "len": len(image_bytes),
-            })
-            return 5
+    person_id = uuid.uuid4()
+    fp_id = uuid.uuid4()
 
-    person = MagicMock(spec=Person)
-    person.external_id = "ext-1"
-    person.id = 1
+    fp = MagicMock(spec=Fingerprint)
+    fp.id = fp_id
+    fp.person_id = person_id
+    fp.finger_position = 2
+
+    async def _fake_get(model, id_val):
+        return fp
+
+    loader = _make_loader()
 
     svc = FingerprintEnrollmentService.__new__(FingerprintEnrollmentService)
     svc._session = AsyncMock()
-    svc._session.get.return_value = person
+    svc._session.get = _fake_get
+    svc._embedding_service = _make_embedding_service(points=["qdrant-point-1"])
+    svc._loader = loader
+    svc._storage = MagicMock()
     svc._fp_service = MagicMock()
-    svc._mcc_service = _FakeSvc()
+    svc._dev_log = MagicMock()
 
-    capture = MagicMock()
-    capture.id = "cap-1"
-    fingerprint = MagicMock()
-    fingerprint.id = "fp-1"
-    fingerprint.person_id = "person-1"
+    from src.db.repositories.fingerprint_capture_repository import FingerprintCaptureRepository
+    with patch.object(FingerprintCaptureRepository, "create", new_callable=AsyncMock) as mock_create:
+        mock_capture = MagicMock()
+        mock_capture.id = uuid.uuid4()
+        mock_capture.fingerprint_id = fp_id
+        mock_capture.image_uri = "minio://pending/key"
+        mock_create.return_value = mock_capture
 
-    await svc._index_pairs(
-        capture=capture,
-        fingerprint=fingerprint,
-        image_bytes=b"test-image-bytes",
-    )
-    assert len(calls) == 1
-    assert calls[0]["capture_id"] == "cap-1"
-    assert calls[0]["fingerprint_id"] == "fp-1"
-    assert calls[0]["person_id"] == "ext-1"
-    assert calls[0]["len"] == 16
+        result, embedding_id = await svc.create_capture(
+            fingerprint_id=fp_id,
+            image_bytes=b"test-image",
+        )
+    assert embedding_id == "qdrant-point-1"

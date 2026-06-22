@@ -1,5 +1,6 @@
 import { Star } from "lucide-react";
 import type { MatchCandidate } from "@/lib/api";
+import { fingerShortLabel } from "@/components/analisis/candidateGrouping";
 
 interface CandidateCardProps {
   candidate: MatchCandidate;
@@ -21,7 +22,6 @@ export function CandidateCard({
   onSelect,
 }: CandidateCardProps) {
   const scorePercent = ((candidate.score ?? 0) * 100).toFixed(1);
-  const traceCount = candidate.supporting_pairs.length;
 
   return (
     <div
@@ -51,9 +51,19 @@ export function CandidateCard({
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="font-medium text-sm truncate">
-            {candidate.full_name ?? `Persona ${candidate.person_id.slice(0, 8)}`}
-          </p>
+          <div className="flex items-center gap-2 min-w-0">
+            <p className="font-medium text-sm truncate">
+              {candidate.full_name ?? `Persona ${candidate.person_id.slice(0, 8)}`}
+            </p>
+            {candidate.finger_name && (
+              <span
+                className="shrink-0 inline-flex items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary uppercase tracking-wide"
+                title={`Dedo de la captura: ${candidate.finger_name}`}
+              >
+                {fingerShortLabel(candidate.finger_name)}
+              </span>
+            )}
+          </div>
           <p className="text-xs text-muted-foreground font-mono truncate">
             {candidate.external_id ?? candidate.person_id}
           </p>
@@ -68,15 +78,6 @@ export function CandidateCard({
               {scorePercent}%
             </span>
           </div>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {candidate.peak_votes} pares coincidentes
-            {traceCount > 0 && (
-              <>
-                <span className="text-muted-foreground/60"> · </span>
-                <span className="text-primary">{traceCount} supporting</span>
-              </>
-            )}
-          </p>
         </div>
       </div>
     </div>

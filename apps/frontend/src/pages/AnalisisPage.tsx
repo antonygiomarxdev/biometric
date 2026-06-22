@@ -13,32 +13,31 @@ import {
   Loader2,
   Search,
   UserPlus,
-  FilePlus,
-  CheckCircle2,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useCallback, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/components/ui/toast";
 import {
-  createCase,
   createFingerprintSlot,
   enrollFingerprint,
   listPersons,
-  type CaseCreateInput,
-  type MatchCandidate,
 } from "@/lib/api";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
+/**
+ * Análisis de Huella — Phase 29 deep embedding flow.
+ *
+ * 3 steps: Subir → Buscar → Resultado.  The "Extraer" (minutiae
+ * extraction) step is gone — AFR-Net computes the embedding inside
+ * the search call, there is nothing to extract asynchronously.
+ */
 export default function AnalisisPage() {
   const navigate = useNavigate();
   const { addToast } = useToast();
   const {
     latentFile,
     probeDataUrl,
-    probePreviewUrl,
-    probeMinutiae,
-    isPreviewLoading,
     handleFile,
     reset: resetProbe,
   } = useProbeProcessor();
@@ -48,9 +47,6 @@ export default function AnalisisPage() {
   const [showEnrollPicker, setShowEnrollPicker] = useState(false);
   const [enrollPersonId, setEnrollPersonId] = useState("");
   const [enrolling, setEnrolling] = useState(false);
-  const [showCreateCase, setShowCreateCase] = useState(false);
-  const [caseNumber, setCaseNumber] = useState("");
-  const [caseTitle, setCaseTitle] = useState("");
 
   const enrollMutation = useMutation({
     mutationFn: async ({ personId, file }: { personId: string; file: File }) => {
@@ -76,27 +72,6 @@ export default function AnalisisPage() {
     },
   });
 
-  const createCaseMutation = useMutation({
-    mutationFn: (input: CaseCreateInput) => createCase(input),
-    onSuccess: (newCase) => {
-      addToast({
-        type: "success",
-        title: "Caso creado",
-        description: `${newCase.case_number}`,
-        duration: 4000,
-      });
-      setShowCreateCase(false);
-      navigate(`/cases/${newCase.id}/compare`);
-    },
-    onError: (err: Error) => {
-      addToast({
-        type: "error",
-        title: "Error al crear caso",
-        description: err.message,
-      });
-    },
-  });
-
   const { data: persons } = useQuery({
     queryKey: ["persons"],
     queryFn: () => listPersons(0, 100),
@@ -112,17 +87,9 @@ export default function AnalisisPage() {
     setEnrolling(true);
     enrollMutation.mutate(
       { personId: enrollPersonId, file: latentFile },
-      { onSettled: () => setEnrolling(false) }
+      { onSettled: () => setEnrolling(false) },
     );
   }, [latentFile, enrollPersonId, enrollMutation]);
-
-  const handleOpenCreateCase = useCallback((c: MatchCandidate) => {
-    const label = c.full_name ?? c.external_id ?? c.person_id.slice(0, 8);
-    const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-    setCaseNumber(`LATENT-${stamp}-${c.person_id.slice(0, 4).toUpperCase()}`);
-    setCaseTitle(`Identificación latente vs ${label}`);
-    setShowCreateCase(true);
-  }, []);
 
   const handleReset = useCallback(() => {
     resetProbe();
@@ -158,14 +125,11 @@ export default function AnalisisPage() {
         <WorkflowStepper
           current={currentStep}
           searchRunning={searchMutation.isPending}
-          minutiae={
-            searchResult?.probe_minutiae.length ?? probeMinutiae.length ?? 0
-          }
           candidateCount={searchResult?.candidates.length ?? 0}
           queryTimeMs={searchResult?.query_time_ms}
         >
           {!probeDataUrl ? (
-            <UploadDropzone onFile={handleFile} running={isPreviewLoading} />
+            <UploadDropzone onFile={handleFile} />
           ) : (
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-2 p-3 bg-card border border-border rounded-lg">
@@ -211,11 +175,7 @@ export default function AnalisisPage() {
 
                 <div className="ml-auto text-xs text-muted-foreground font-mono">
                   {searchResult
-                    ? `${searchResult.probe_minutiae.length} minucias · ${searchResult.candidates.length} candidatos · ${searchResult.query_time_ms}ms`
-                    : probeMinutiae.length > 0
-                    ? `${probeMinutiae.length} minucias`
-                    : isPreviewLoading
-                    ? "procesando..."
+                    ? `${searchResult.candidates.length} candidatos · ${searchResult.query_time_ms}ms`
                     : "—"}
                 </div>
               </div>
@@ -265,20 +225,14 @@ export default function AnalisisPage() {
 
               <ProbePanel
                 probeDataUrl={probeDataUrl}
-                probePreviewUrl={probePreviewUrl}
-                probeMinutiae={probeMinutiae}
                 searchResult={searchResult}
-                selectedCandidate={searchResult?.candidates[0]}
                 onFile={handleFile}
-                isLoading={isPreviewLoading}
+                isLoading={searchMutation.isPending}
               />
 
               <ResultsPanel
                 searchResult={searchResult}
-                probeImageUrl={
-                  searchResult?.probe_image_url ?? probePreviewUrl ?? probeDataUrl
-                }
-                probeMinutiae={searchResult?.probe_minutiae ?? []}
+                probeImageUrl={probeDataUrl}
               />
             </div>
           )}

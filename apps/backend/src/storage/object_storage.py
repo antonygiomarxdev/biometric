@@ -81,6 +81,18 @@ class ObjectStorage:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    def close(self) -> None:
+        """Release the MinIO client.
+
+        The ``Minio`` client uses ``urllib3`` connection pools; on
+        application shutdown we drop the reference so the pools can
+        be GC'd.  ``urllib3`` does not expose a public ``close()`` on
+        the Minio client, so this is a soft cleanup.
+        """
+        self.client = None
+        self._strategy = None
+        self._encryption_service = None
+
     def _ensure_bucket_exists(self) -> None:
         """Verifica que el bucket exista, si no, intenta crearlo."""
         if not self.client:

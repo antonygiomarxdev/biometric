@@ -49,3 +49,11 @@ data/
 # Internal Tools
 .codegraph/
 .playwright-mcp/
+
+# Model artifacts and embeddings (large binaries)
+*.pt
+*.onnx
+*.pth
+*.npz
+apps/backend/models/
+!apps/backend/models/README.md

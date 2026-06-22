@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import Session, sessionmaker
 
+from src.ai.loader import ModelLoader
 from src.core.config import config
 from src.db.models import User
 from src.services.auth_service import decode_access_token
@@ -36,7 +37,8 @@ from src.services.auth_service import decode_access_token
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, AsyncIterator
 
-    from src.services.mcc_matching_service import MccMatchingService
+    from src.db.qdrant_embedding_repository import QdrantEmbeddingRepository
+    from src.services.embedding_service import EmbeddingService
 
 logger = logging.getLogger(__name__)
 
@@ -107,10 +109,29 @@ class AppResources:
         )
 
     async def dispose(self) -> None:
-        """Gracefully shut down all resources."""
+        """Gracefully shut down all resources.
+
+        Order matters: stop accepting new requests first (the
+        ProcessPoolExecutor drains in-flight subprocesses), then
+        release network/IO resources (Qdrant, MinIO, ModelLoader
+        pool), and only then dispose of the DB engines.  Reversing
+        the order can leave async DB sessions in flight when the
+        engine is torn down.
+        """
         if self.process_pool is not None:
             self.process_pool.shutdown(wait=True)
             logger.info("ProcessPoolExecutor shut down")
+
+        from src.storage.object_storage import storage
+        storage.close()
+        logger.info("MinIO client released")
+
+        await close_qdrant_repo()
+        logger.info("Qdrant client closed")
+
+        loader = get_model_loader_cached()
+        await loader.shutdown()
+        logger.info("ModelLoader pool shut down")
 
         if self.engine is not None:
             self.engine.dispose()
@@ -191,23 +212,57 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info("Shutdown complete")
 
 # ---------------------------------------------------------------------------
-# MccMatchingService provider (Phase 21)
+# Deep Embedding providers (Phase 29)
 # ---------------------------------------------------------------------------
 
 
-_mcc_matching_service: MccMatchingService | None = None
+_embedding_model_loader: ModelLoader | None = None
+_qdrant_repo: "QdrantEmbeddingRepository | None" = None
 
 
-def get_mcc_matching_service() -> MccMatchingService:
-    from src.services.mcc_matching_service import MccMatchingService
-
-    global _mcc_matching_service
-    if _mcc_matching_service is None:
-        _mcc_matching_service = MccMatchingService()
-    return _mcc_matching_service
+def get_model_loader_cached() -> ModelLoader:
+    global _embedding_model_loader
+    if _embedding_model_loader is None:
+        _embedding_model_loader = ModelLoader()
+    return _embedding_model_loader
 
 
-logger = logging.getLogger(__name__)
+def get_model_loader() -> ModelLoader:
+    return get_model_loader_cached()
+
+
+def get_embedding_repository() -> "QdrantEmbeddingRepository":
+    """Cached singleton — the underlying Qdrant client owns an HTTP/2
+    connection pool and should be reused across requests, not
+    re-created per call.  The instance is closed in
+    ``AppResources.dispose`` (called from the FastAPI lifespan).
+    """
+    global _qdrant_repo
+    if _qdrant_repo is None:
+        from qdrant_client import QdrantClient
+
+        from src.db.qdrant_embedding_repository import QdrantEmbeddingRepository
+
+        client = QdrantClient(host="localhost", port=6333)
+        _qdrant_repo = QdrantEmbeddingRepository(client)
+        _qdrant_repo.ensure_collection()
+    return _qdrant_repo
+
+
+async def close_qdrant_repo() -> None:
+    global _qdrant_repo
+    if _qdrant_repo is not None:
+        _qdrant_repo.close()
+        _qdrant_repo = None
+
+
+def get_embedding_service(
+    loader: ModelLoader = Depends(get_model_loader),
+    repo: "QdrantEmbeddingRepository" = Depends(get_embedding_repository),
+) -> EmbeddingService:
+    from src.services.embedding_service import EmbeddingService
+
+    return EmbeddingService(loader, repo)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 

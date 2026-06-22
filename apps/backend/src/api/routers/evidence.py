@@ -9,7 +9,6 @@ are delegated to :class:`~src.services.evidence_service.EvidenceService`.
 import logging
 import uuid
 from datetime import datetime
-from typing import Any
 
 from fastapi import APIRouter, Depends, Query, UploadFile
 from fastapi.responses import Response
@@ -42,8 +41,6 @@ class EvidenceUpdate(BaseModel):
     """Request body for updating evidence metadata."""
 
     fingerprint_id: str | None = Field(None, max_length=100)
-    num_minutiae: int | None = Field(None, ge=0)
-    minutiae_data: dict[str, Any] | None = None
 
 
 class EvidenceResponse(BaseModel):
@@ -53,7 +50,6 @@ class EvidenceResponse(BaseModel):
     case_id: uuid.UUID
     fingerprint_id: str
     image_path: str | None
-    num_minutiae: int | None
     created_at: datetime
     updated_at: datetime | None
 

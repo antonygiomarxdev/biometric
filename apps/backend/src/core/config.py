@@ -263,46 +263,6 @@ class EnhancerDefaultsConfig:
 
 
 @dataclass(frozen=True)
-class MccMatchingConfig:
-    """Parameters for NIST Bozorth3 pair matching (Phase 27).
-
-    Cylinders (Phase 21) and triplets (Phase 25) have been removed —
-    pairs is the only matcher. See ``docs/adr/009-remove-cylinders.md``
-    for the decision.
-    """
-    # Minimum quality score for pair extraction (Phase 27). Pairs where
-    # either minutia has ``quality < min_pair_quality`` are skipped,
-    # reducing noise from dirty/smudged regions. 0.3 = moderate quality.
-    min_pair_quality: float = field(
-        default_factory=lambda: float(os.getenv("MCC_MIN_PAIR_QUALITY", "0.1"))
-    )
-
-    # Bozorth3 linker tolerances (Phase 27, Plan 27-01). Calibrated on
-    # SOCOFing Altered-Easy CR for 5 subjects (100% top-1 accuracy).
-    # 0.02 in normalised coords ≈ 5px at 256×256 (NBIS reference: 12px).
-    link_dx_tol: float = field(
-        default_factory=lambda: float(os.getenv("MCC_LINK_DX_TOL", "0.02"))
-    )
-    link_dy_tol: float = field(
-        default_factory=lambda: float(os.getenv("MCC_LINK_DY_TOL", "0.02"))
-    )
-    link_dtheta_tol: float = field(
-        default_factory=lambda: float(os.getenv("MCC_LINK_DTHETA_TOL", "0.15"))
-    )
-    confidence_saturation: int = field(
-        default_factory=lambda: int(os.getenv("MCC_CONFIDENCE_SATURATION", "30"))
-    )
-    confidence_threshold: float = field(
-        default_factory=lambda: float(os.getenv("MCC_CONFIDENCE_THRESHOLD", "0.70"))
-    )
-    # Compute backend: "auto" (default) tries cupy then numpy;
-    # "cupy" forces GPU; "numpy" forces CPU cv2. Falls back gracefully.
-    compute_backend: str = field(
-        default_factory=lambda: os.getenv("MCC_COMPUTE_BACKEND", "auto")
-    )
-
-
-@dataclass(frozen=True)
 class Config:
     """Global application configuration (Immutable)."""
 
@@ -342,11 +302,28 @@ class Config:
     force_cpu: bool = field(default_factory=lambda: os.getenv("FORCE_CPU", "0") == "1")
 
     # AI / ML
-    ai_model_dir: str = field(default_factory=lambda: os.getenv("AI_MODEL_DIR", "data/models/"))
+    ai_model_dir: str = field(default_factory=lambda: os.getenv("AI_MODEL_DIR", "models/"))
     ai_use_gpu: bool = field(default_factory=lambda: os.getenv("AI_USE_GPU", "true").lower() == "true")
     ai_gpu_device_id: int = field(default_factory=lambda: int(os.getenv("AI_GPU_DEVICE_ID", "0")))
     ai_input_size: int = field(default_factory=lambda: int(os.getenv("AI_INPUT_SIZE", "512")))
     ai_confidence_threshold: float = field(default_factory=lambda: float(os.getenv("AI_CONFIDENCE_THRESH", "0.5")))
+
+    # Deep fingerprint embedding (Phase 29)
+    embedding_model_path: str = field(
+        default_factory=lambda: os.getenv("EMBEDDING_MODEL_PATH", "models/best_model.pt")
+    )
+    unet_model_path: str = field(
+        default_factory=lambda: os.getenv("UNET_MODEL_PATH", "models/unet_best.pt")
+    )
+    qdrant_embedding_collection: str = field(
+        default_factory=lambda: os.getenv("QDRANT_EMBEDDING_COLLECTION", "fingerprint_embeddings")
+    )
+    embedding_dim: int = field(
+        default_factory=lambda: int(os.getenv("EMBEDDING_DIM", "512"))
+    )
+    embedding_num_classes: int = field(
+        default_factory=lambda: int(os.getenv("EMBEDDING_NUM_CLASSES", "540"))
+    )
 
     # Comparison Logic
     match_threshold: float = field(default_factory=lambda: float(os.getenv("MATCH_THRESHOLD", "2000.0")))
@@ -364,7 +341,6 @@ class Config:
     fusion: FusionConfig = field(default_factory=FusionConfig)
     extraction: ExtractionConfig = field(default_factory=ExtractionConfig)
     enhancer_defaults: EnhancerDefaultsConfig = field(default_factory=EnhancerDefaultsConfig)
-    matching: MccMatchingConfig = field(default_factory=MccMatchingConfig)
 
     # Logging & Metrics
     log_level: str = field(default_factory=lambda: os.getenv("LOG_LEVEL", "INFO").upper())

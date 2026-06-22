@@ -1,32 +1,22 @@
-"""Fingerprints API — Phase 17 + Phase 23 (/preview)."""
+"""Fingerprints API — Phase 17."""
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import uuid
 from typing import TYPE_CHECKING, Any
 
-import cv2
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from fastapi.responses import Response as FastAPIResponse
+from fastapi import APIRouter, Depends, HTTPException
 
-from src.api.dependencies import get_async_db, get_mcc_matching_service
+from src.api.dependencies import get_async_db
 from src.api.prefix import API_PREFIX
 from src.db.models import Person
 from src.db.repositories.fingerprint_repository import FingerprintRepository
-from src.schemas.fingerprint_schema import (
-    FingerprintCreate,
-    FingerprintListResponse,
-    FingerprintResponse,
-    MinutiaPoint,
-)
+from src.schemas.fingerprint_schema import FingerprintCreate, FingerprintListResponse, FingerprintResponse
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
     from starlette.responses import Response
-
-    from src.services.mcc_matching_service import MccMatchingService
 
 log = logging.getLogger(__name__)
 
@@ -54,25 +44,16 @@ async def create_fingerprint(
     person = await session.get(Person, person_id)
     if person is None:
         raise HTTPException(status_code=404, detail="Person not found")
-    existing = await FingerprintRepository.find_slot(
-        session,
-        person_id,
-        data.finger_position,
-        data.capture_type,
-    )
-    if existing is not None:
-        if response is not None:
-            response.status_code = 200
-        return existing
-    if response is not None:
-        response.status_code = 201
-    return await FingerprintRepository.create(
+    fingerprint, created = await FingerprintRepository.create(
         session,
         person_id=person_id,
         finger_position=data.finger_position,
         capture_type=data.capture_type,
         notes=data.notes,
     )
+    if response is not None:
+        response.status_code = 201 if created else 200
+    return fingerprint
 
 
 @router.get(
@@ -88,73 +69,3 @@ async def list_fingerprints(
     items = await FingerprintRepository.list_by_person(session, person_id)
     response_items = [FingerprintResponse.model_validate(item) for item in items]
     return FingerprintListResponse(items=response_items, total=len(response_items))
-
-
-@router.post(
-    API_PREFIX + "/fingerprints/preview",
-    summary="Preview minutiae extraction without persisting (Phase 23)",
-)
-async def preview_fingerprint(
-    file: UploadFile = File(..., description="Fingerprint image (BMP, PNG, JPEG)"),
-    mcc_svc: MccMatchingService = Depends(get_mcc_matching_service),
-) -> Any:
-    """Preview minutiae for a fingerprint image without persisting."""
-    import uuid as _uuid
-
-    image_bytes = await file.read()
-    if not image_bytes:
-        raise HTTPException(status_code=400, detail="Empty file")
-
-    loop = asyncio.get_running_loop()
-    try:
-        result = await loop.run_in_executor(
-            None,
-            mcc_svc.preview,
-            image_bytes,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    minutiae_dicts: list[dict[str, Any]] = result["minutiae"]
-    skeleton = result["skeleton"]
-    if skeleton is None or skeleton.size == 0:
-        raise HTTPException(status_code=400, detail="Pipeline produced no skeleton")
-
-    ok, buf = cv2.imencode(".png", skeleton)
-    if not ok:
-        raise HTTPException(status_code=400, detail="Failed to encode skeleton")
-
-    preview_id = str(_uuid.uuid4())
-    from src.storage.object_storage import storage
-
-    storage.upload_file(buf.tobytes(), f"temp/{preview_id}.png", content_type="image/png")
-
-    h, w = skeleton.shape[:2]
-    return {
-        "preview_id": preview_id,
-        "processed_image_url": f"/api/v1/fingerprints/preview/{preview_id}/image",
-        "minutiae": [MinutiaPoint(**p) for p in minutiae_dicts],
-        "terminations": 0,
-        "bifurcations": 0,
-        "image_shape": [int(h), int(w)],
-        "image_dtype": str(skeleton.dtype),
-    }
-
-
-@router.get(
-    API_PREFIX + "/fingerprints/preview/{preview_id}/image",
-    response_model=None,
-    summary="Get a preview skeleton image by preview_id",
-)
-async def get_preview_image(preview_id: str) -> FastAPIResponse:
-    """Serve the skeleton image for a previous preview call."""
-    from src.storage.object_storage import storage
-
-    png_bytes = storage.download_file(f"temp/{preview_id}.png")
-    if png_bytes is None:
-        raise HTTPException(status_code=404, detail="Preview image expired or not found")
-    return FastAPIResponse(
-        content=png_bytes,
-        media_type="image/png",
-        headers={"Cache-Control": "public, max-age=3600"},
-    )

@@ -1,17 +1,27 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useToast } from "@/components/ui/toast";
-import { getMinutiaeForImage, type MinutiaPoint } from "@/lib/api";
 
-const VALID_TYPES = ["image/bmp", "image/png", "image/jpeg", "image/jpg"];
+const VALID_TYPES = ["image/bmp", "image/png", "image/jpeg", "image/jpg", "image/tiff", "image/tif", "image/x-tiff"];
 const MAX_BYTES = 10 * 1024 * 1024;
 
+/**
+ * Phase 29: the probe no longer goes through a minutia-extraction
+ * step.  This hook just decodes the file into a local data URL for
+ * preview and exposes a ``latentFile`` for the search call.
+ */
 export function useProbeProcessor() {
   const { addToast } = useToast();
   const [latentFile, setLatentFile] = useState<File | null>(null);
   const [probeDataUrl, setProbeDataUrl] = useState<string | null>(null);
-  const [probePreviewUrl, setProbePreviewUrl] = useState<string | null>(null);
-  const [probeMinutiae, setProbeMinutiae] = useState<MinutiaPoint[]>([]);
-  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+
+  useEffect(() => {
+    let url = probeDataUrl;
+    return () => {
+      if (url && url.startsWith("blob:")) {
+        URL.revokeObjectURL(url);
+      }
+    };
+  }, [probeDataUrl]);
 
   const handleFile = useCallback(
     (file: File) => {
@@ -19,7 +29,7 @@ export function useProbeProcessor() {
         addToast({
           type: "error",
           title: "Tipo inválido",
-          description: "BMP, PNG o JPEG",
+          description: "BMP, PNG, JPEG o TIFF",
         });
         return;
       }
@@ -32,32 +42,9 @@ export function useProbeProcessor() {
         return;
       }
 
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        setProbeDataUrl(ev.target?.result as string);
-        setLatentFile(file);
-        setProbePreviewUrl(null);
-        setProbeMinutiae([]);
-      };
-      reader.readAsDataURL(file);
-
-      setIsPreviewLoading(true);
-      getMinutiaeForImage(file)
-        .then((res) => {
-          setProbePreviewUrl(res.processed_image_url);
-          setProbeMinutiae(res.minutiae);
-        })
-        .catch((err) => {
-          console.error("Preview failed:", err);
-          addToast({
-            type: "error",
-            title: "Error en la previsualización",
-            description: err.message,
-          });
-        })
-        .finally(() => {
-          setIsPreviewLoading(false);
-        });
+      const localUrl = URL.createObjectURL(file);
+      setProbeDataUrl(localUrl);
+      setLatentFile(file);
     },
     [addToast]
   );
@@ -65,16 +52,11 @@ export function useProbeProcessor() {
   const reset = useCallback(() => {
     setLatentFile(null);
     setProbeDataUrl(null);
-    setProbePreviewUrl(null);
-    setProbeMinutiae([]);
   }, []);
 
   return {
     latentFile,
     probeDataUrl,
-    probePreviewUrl,
-    probeMinutiae,
-    isPreviewLoading,
     handleFile,
     reset,
   };

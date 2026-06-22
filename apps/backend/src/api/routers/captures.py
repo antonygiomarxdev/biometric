@@ -16,17 +16,19 @@ from fastapi import (
     UploadFile,
 )
 
-from src.api.dependencies import get_async_db, get_mcc_matching_service
+from src.api.dependencies import (
+    get_async_db,
+    get_embedding_service,
+    get_model_loader,
+)
 from src.api.prefix import API_PREFIX
 from src.db.repositories.fingerprint_capture_repository import (
     FingerprintCaptureRepository,
 )
-from src.db.repositories.ridge_graph_repository import RidgeGraphRepository
 from src.schemas.capture_schema import (
     CaptureResponse,
     CaptureUpdate,
     CaptureUploadResponse,
-    RidgeGraphResponse,
 )
 from src.services.fingerprint_enrollment_service import (
     FingerprintEnrollmentService,
@@ -37,7 +39,8 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from src.services.mcc_matching_service import MccMatchingService
+    from src.ai.loader import ModelLoader
+    from src.services.embedding_service import EmbeddingService
 
 log = logging.getLogger(__name__)
 
@@ -48,7 +51,7 @@ router = APIRouter(tags=["captures"])
     API_PREFIX + "/fingerprints/{fingerprint_id}/captures",
     response_model=CaptureUploadResponse,
     status_code=201,
-    summary="Upload fingerprint capture",
+    summary="Upload fingerprint capture (AFR-Net embedding)",
     responses={
         400: {"description": "Invalid image or extraction failure"},
         404: {"description": "Fingerprint slot not found"},
@@ -57,24 +60,23 @@ router = APIRouter(tags=["captures"])
 async def upload_capture(
     fingerprint_id: uuid.UUID,
     file: UploadFile = File(..., description="Fingerprint image (BMP, PNG, JPEG)"),
-    image_dpi: int | None = Form(None),
     is_reference: bool = Form(default=False),  # noqa: FBT001
     is_exemplar: bool = Form(default=True),  # noqa: FBT001
     notes: str | None = Form(None),
     session: AsyncSession = Depends(get_async_db),
-    mcc_service: MccMatchingService = Depends(get_mcc_matching_service),
+    embedding_service: EmbeddingService = Depends(get_embedding_service),
+    loader: ModelLoader = Depends(get_model_loader),
 ) -> Any:
     image_bytes = await file.read()
     if not image_bytes:
         raise HTTPException(status_code=400, detail="Empty file")
     try:
         svc = FingerprintEnrollmentService(
-            session, mcc_matching_service=mcc_service,
+            session, embedding_service=embedding_service, loader=loader,
         )
-        capture, _ = await svc.create_capture(
+        capture, embedding_id = await svc.create_capture(
             fingerprint_id=fingerprint_id,
             image_bytes=image_bytes,
-            image_dpi=image_dpi,
             is_reference=is_reference,
             is_exemplar=is_exemplar,
             notes=notes,
@@ -86,28 +88,23 @@ async def upload_capture(
         fingerprint_id=capture.fingerprint_id,
         capture_index=capture.capture_index,
         image_uri=capture.image_uri,
-        image_dpi=capture.image_dpi,
-        image_quality_score=capture.image_quality_score,
         algorithm_version=capture.algorithm_version,
         processed_at=capture.processed_at,
-        num_minutiae=capture.num_minutiae,
-        num_graphs=capture.num_graphs,
         is_reference=capture.is_reference,
         is_exemplar=capture.is_exemplar,
         notes=capture.notes,
-        graphs=[],
     )
     return CaptureUploadResponse(
         capture=capture_dto,
-        graphs_created=0,
+        embedding_id=embedding_id,
     )
 
 
 @router.get(
     API_PREFIX + "/captures/{capture_id}/image",
-    summary="Get the skeleton fingerprint image from MinIO",
+    summary="Get the original fingerprint image from MinIO",
     description=(
-        "Returns the thinned binary skeleton (256×256) as image/png. "
+        "Returns the original captured image as image/png. "
         "Stored in MinIO at enrollment — single source of truth."
     ),
     responses={
@@ -119,7 +116,7 @@ async def get_capture_image(
     capture_id: uuid.UUID,
     session: AsyncSession = Depends(get_async_db),
 ) -> Response:
-    """Serve the skeleton fingerprint image from MinIO."""
+    """Serve the original fingerprint image from MinIO."""
     from src.services.fingerprint_storage import FingerprintStorage
 
     c = await FingerprintCaptureRepository.get_by_id(session, capture_id)
@@ -156,25 +153,10 @@ async def get_capture(
     return CaptureResponse(
         id=c.id, fingerprint_id=c.fingerprint_id,
         capture_index=c.capture_index, image_uri=c.image_uri,
-        image_dpi=c.image_dpi, image_quality_score=c.image_quality_score,
         algorithm_version=c.algorithm_version, processed_at=c.processed_at,
-        num_minutiae=c.num_minutiae, num_graphs=c.num_graphs,
         is_reference=c.is_reference, is_exemplar=c.is_exemplar,
-        notes=c.notes, graphs=[],
+        notes=c.notes,
     )
-
-
-@router.get(
-    API_PREFIX + "/captures/{capture_id}/graphs",
-    response_model=list[RidgeGraphResponse],
-    summary="List graphs for capture",
-)
-async def get_capture_graphs(
-    capture_id: uuid.UUID,
-    session: AsyncSession = Depends(get_async_db),
-) -> Any:
-    """Retrieve all RidgeGraphs associated with a capture."""
-    return await RidgeGraphRepository.list_by_capture(session, capture_id)
 
 
 @router.patch(
@@ -196,9 +178,7 @@ async def update_capture(
     return CaptureResponse(
         id=c.id, fingerprint_id=c.fingerprint_id,
         capture_index=c.capture_index, image_uri=c.image_uri,
-        image_dpi=c.image_dpi, image_quality_score=c.image_quality_score,
         algorithm_version=c.algorithm_version, processed_at=c.processed_at,
-        num_minutiae=c.num_minutiae, num_graphs=c.num_graphs,
         is_reference=c.is_reference, is_exemplar=c.is_exemplar,
-        notes=c.notes, graphs=[],
+        notes=c.notes,
     )

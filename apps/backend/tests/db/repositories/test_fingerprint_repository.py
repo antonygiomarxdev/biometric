@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 from sqlalchemy import event
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from src.db.models import Base, Fingerprint, Person
@@ -36,17 +36,19 @@ async def session():
 
 @pytest.fixture
 async def person(session) -> Person:
-    return await PersonRepository.create(session, external_id="X")
+    p, _ = await PersonRepository.create(session, external_id="X")
+    return p
 
 
 class TestFingerprintRepository:
     @pytest.mark.asyncio
     async def test_create_slot(self, session, person) -> None:
-        f = await FingerprintRepository.create(
+        f, created = await FingerprintRepository.create(
             session, person_id=person.id, finger_position=2,
         )
         assert f.id is not None
         assert f.person_id == person.id
+        assert created is True
 
     @pytest.mark.asyncio
     async def test_list_by_person_returns_in_order(self, session, person) -> None:
@@ -76,7 +78,7 @@ class TestFingerprintRepository:
 
     @pytest.mark.asyncio
     async def test_increment_capture_count(self, session, person) -> None:
-        f = await FingerprintRepository.create(
+        f, _ = await FingerprintRepository.create(
             session, person_id=person.id, finger_position=2,
         )
         assert f.capture_count == 0
@@ -87,7 +89,7 @@ class TestFingerprintRepository:
 
     @pytest.mark.asyncio
     async def test_increment_capture_count_sets_first_captured_at(self, session, person) -> None:
-        f = await FingerprintRepository.create(
+        f, _ = await FingerprintRepository.create(
             session, person_id=person.id, finger_position=2,
         )
         assert f.first_captured_at is None
@@ -97,18 +99,20 @@ class TestFingerprintRepository:
         assert f.last_captured_at is not None
 
     @pytest.mark.asyncio
-    async def test_create_duplicate_slot_raises(self, session, person) -> None:
-        await FingerprintRepository.create(
+    async def test_create_duplicate_slot_is_idempotent(self, session, person) -> None:
+        f1, c1 = await FingerprintRepository.create(
             session, person_id=person.id, finger_position=2,
         )
-        with pytest.raises(Exception):
-            await FingerprintRepository.create(
-                session, person_id=person.id, finger_position=2,
-            )
+        f2, c2 = await FingerprintRepository.create(
+            session, person_id=person.id, finger_position=2,
+        )
+        assert c1 is True
+        assert c2 is False
+        assert f1.id == f2.id
 
     @pytest.mark.asyncio
     async def test_delete(self, session, person) -> None:
-        f = await FingerprintRepository.create(
+        f, _ = await FingerprintRepository.create(
             session, person_id=person.id, finger_position=2,
         )
         assert await FingerprintRepository.delete(session, f.id) is True

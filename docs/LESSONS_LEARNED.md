@@ -4,6 +4,36 @@ This document captures the history of debugging the latent fingerprint search
 (`/api/v1/matching/search`) and the decisions made along the way, so future
 work on this subsystem can avoid repeating the same mistakes.
 
+## Table of Contents
+
+**Phase 21–27: MCC / Bozorth3 matcher**
+- [TL;DR](#tldr)
+- [Setup and Test Data](#setup-and-test-data)
+- Issues 1–9: latent-search debugging session (triplets vs cylinders)
+- [What Worked and What Didn't](#what-worked-and-what-didnt)
+- [Algorithmic Analysis: Why Triplets Fail](#algorithmic-analysis-why-triplets-fail)
+- [Scale Implications (CRITICAL)](#scale-implications-critical)
+- [What To Do Next](#what-to-do-next)
+- [Anti-Patterns Observed](#anti-patterns-observed-do-not-repeat)
+
+**Phase 27: Cleanup**
+- [Triplet matcher eliminated](#phase-27-triplet-matcher-eliminated-research-dead-code)
+- [Cylinder matcher eliminated](#phase-27-cylinder-matcher-eliminated-dev--prod)
+- [Compute backend abstraction](#phase-27-compute-backend-abstraction-strategy-pattern)
+- [cv2.filter2D vs scipy](#phase-27-cv2filter2d-vs-scipysignalconvolve2d)
+
+**Phase 29: AFR-Net deep embedding**
+- Issue 10: 4-worker `ensure_collection` race (409 Conflict, 4 captures lost)
+- Issue 11: `Person` in `TYPE_CHECKING`-only but used at runtime
+- Issue 12: `enroll.replay` incrementing `capture_count` on idempotent replay
+- Issue 13: `redirect: "follow"` missing in frontend `fetch`
+- Issue 14: React `key={c.person_id}` duplicate when same person has 10 fingers
+- Issue 15: Cropped image not centered → model can't find the fingerprint
+- Issue 16: Partial-print search — U-Net + sliding window don't help; need re-training
+- [Phase 29: AFIS Quality Pre-Requisites](#phase-29-afis-quality-pre-requisites)
+- [Phase 29: Idempotency Pattern](#phase-29-idempotency-pattern-defense-in-depth)
+- [Phase 29: Anti-Patterns](#phase-29-anti-patterns-do-not-repeat)
+
 ## TL;DR
 
 1. The triplet-based matcher (`search_by_triplets`) shipped in Phase 25 was
@@ -473,3 +503,205 @@ or new backends should be a 1-file change, not a refactor.
 **Lesson learned:** Always check the actual bottleneck before
 optimizing. We assumed KNN was the bottleneck (it wasn't). One
 profiler call + one library swap = 12x speedup. No GPU, no rewrite.
+
+## Phase 29: AFR-Net deep embedding
+
+Phase 29 replaced the entire MCC/Bozorth3 minutiae pipeline with AFR-Net
+(ConvNeXt-T + ViT-T hybrid + ArcFace, 34M params, 512-D embeddings). 6K
+SOCOFing subjects indexed, top-1 person correctly identified on Altered-Hard
+probes (CR margin 0.12, Zcut margin 0.02).
+
+The bugs below were found during validation against the live system. None
+of them would have been caught by unit tests — they required running the
+full pipeline with concurrent workers and real users.
+
+### Issue 10: `ensure_collection` race across 4 uvicorn workers
+- **Symptom:** During `quick_enroll.py` ingestion (4 workers, C=16), the
+  first request from each worker hit `qdrant.create_collection` at the same
+  time. 1 won, 3 lost with 409 Conflict → 4 captures failed with
+  `UnexpectedResponse` and were silently lost.
+- **Root cause:** `QdrantEmbeddingRepository.ensure_collection()` assumed
+  a single process. With `--workers 4` the four uvicorn workers all call
+  `create_collection` on first request.
+- **Fix:** Catch `(ValueError, UnexpectedResponse)` from
+  `create_collection`, re-check existence via `get_collection`, fall through
+  to dim validation. Idempotent across workers.
+- **Lesson:** Any one-time init method (create collection, create index,
+  create bucket) must be idempotent under concurrent first-call. The fix
+  is "try-create-then-validate", not "check-then-create" (TOCTOU).
+
+### Issue 11: `Person` in `TYPE_CHECKING` only but used at runtime
+- **Symptom:** `EmbeddingService.search` raised `NameError: name 'Person' is
+  not defined` on the first matching request after restart.
+- **Root cause:** The import was `if TYPE_CHECKING: from src.db.models
+  import Person` (correct for type hints), but the code used `Person(...)`
+  at runtime in a payload-builder. Static type checkers don't catch this
+  because the body is valid Python without the import — it's only a
+  NameError at execution time.
+- **Fix:** Moved `Person` to a runtime import. Strict pyright passed
+  because the symbol exists for type checking; nothing in pyright told us
+  the runtime would fail.
+- **Lesson:** Imports used at runtime (not just annotations) must NOT
+  live in `if TYPE_CHECKING:` blocks. Pyright + `from __future__ import
+  annotations` is not enough to catch this class of bug. The only way
+  to detect it is to run the code, which is why we run the live search
+  end-to-end before declaring a phase done.
+
+### Issue 12: `enroll.replay` incrementing `capture_count` on idempotent replay
+- **Symptom:** Re-running `quick_enroll.py` on already-indexed data
+  inflated `capture_count` on the parent `Fingerprint` row. After 3
+  replays, a fingerprint that had 1 capture claimed 4.
+- **Root cause:** The `create_capture` method always called
+  `fingerprint.capture_count += 1` before the existence check, even when
+  the capture already existed.
+- **Fix:** Only increment on new inserts. The `created` boolean from the
+  repository's `(capture, created)` tuple is the single source of truth.
+- **Lesson:** Replay-idempotency is not just "don't error". It is
+  "don't mutate state on replay". Every side effect (count bumps, log
+  lines, metrics) must be gated on the `created` flag.
+
+### Issue 13: `redirect: "follow"` missing in frontend `fetch`
+- **Symptom:** `GET /api/v1/persons` (no trailing slash) returned 307 →
+  `/api/v1/persons/`. The browser followed the redirect automatically, but
+  the SPA's `fetch()` wrapper did not. The list returned empty silently.
+- **Root cause:** The `fetch()` wrapper in `lib/api.ts` did not set
+  `redirect: "follow"` (the default is `"follow"` in browser `fetch`, but
+  the wrapper rebuilt the request and dropped the default). FastAPI's
+  default behaviour is to redirect `/foo` → `/foo/`.
+- **Fix:** Added `redirect: "follow"` to the `fetch()` call. The redirect
+  now happens transparently.
+- **Lesson:** When wrapping `fetch()`, copy ALL browser defaults you
+  depend on. The browser default for `redirect` is `"follow"`; explicitly
+  set it on every wrapper call. Don't assume defaults carry over.
+
+### Issue 14: React `key={c.person_id}` duplicate when same person has 10 fingers
+- **Symptom:** React warning in console: "Encountered two children with
+  the same key". Top-10 list had the same `person_id` up to 10 times
+  (one per finger) but used `person_id` as the React key.
+- **Root cause:** In the MCC pipeline, top-k candidates were diverse
+  (different people), so `person_id` was effectively unique. With AFR-Net
+  returning one match per finger, the same person appears multiple times
+  in the response, exposing the latent duplicate-key bug.
+- **Fix:** Changed `key={c.person_id}` to `key={`${i}-${c.capture_id}`}`.
+  `capture_id` is unique per embedding. Also updated `isSelected` checks
+  to use `capture_id`.
+- **Lesson:** React keys must be unique across the rendered set under
+  ALL valid data shapes, not just the common case. A pipeline change that
+  returns "more matches per entity" can break frontend keys that were
+  only ever tested with "one match per entity".
+
+### Issue 15: Cropped image not centered → model can't find the fingerprint
+- **Symptom:** Uploading a tightly cropped fingerprint (latent-style) gave
+  poor results. GradCAM activated on the bottom border and the empty
+  black region, not on the actual ridge pattern. Top-1 was the wrong
+  person with low confidence.
+- **Root cause:** The AFR-Net was trained on SOCOFing where every
+  fingerprint is centred in a fixed canvas. The preprocessor padded the
+  image to a square with black borders, but didn't recenter the content.
+  A cropped image has its content in a corner → the resize stretches
+  the empty area, the ridge pattern is squashed, the model can't find
+  ridge features to lock onto.
+- **Fix:** `_center_on_content` (in `embedding_service.py`) detects the
+  bounding box of non-zero pixels, crops to it, and re-pads the shorter
+  side with black borders. The fingerprint ends up centred in the canvas,
+  matching the training distribution. The same function is used for
+  probe and capture paths.
+- **Lesson:** Preprocessing for a deep model must match its training
+  distribution. The model's "input space" is not "any square image" — it
+  is "image with the subject in the centre". When users can upload
+  arbitrary crops, the preprocessor has to recenter the content. GradCAM
+  is the cheapest way to verify this: if the heatmap lights up outside
+  the subject, the preprocessor is wrong.
+
+### Issue 16: Partial-print search — U-Net + sliding window don't help; need re-training
+- **Symptom:** A tightly cropped fingerprint (25 % corner, 24×25 px) produces p50 top-1 score 0.48 (mostly noise). The user uploaded a partial, the system returned candidates that all looked like "Coincidencia baja". Multi-finger match badge showed "7/10 dedos" but every finger was noise.
+- **Root cause:** AFR-Net was trained on **full** SOCOFing prints (96×103 px). It has no internal representation for partial prints. Whatever sub-region the user uploads, the embedding is essentially "I see some ridges in a corner surrounded by black" → random vector.
+- **What we tried (and why each didn't help):**
+  1. **Sliding window + max-pool ensemble** (`mode=ensemble`): 9 crops of 96×96 over the probe, batched into one forward pass. The hypothesis was "one of the crops will contain a recognisable chunk and max-pool will pick it up". **Result: +0.019 median score gain, 7/10 probes slightly better.** The problem is that a 24×25 px probe padded to 96×96 gives only 1 distinct crop. The 9 crops are nearly identical, so max-pool sees nothing new. Multi-scale (crops at 48, 96, 192) **adds no information** — it's the same 24×25 px of content at different upsample factors. The model still doesn't know what a partial looks like. Code is kept as opt-in (`?mode=ensemble`); latency ~90 ms vs ~60 ms single. See `apps/backend/services/sliding_window.py`.
+  2. **U-Net enhancement** (`?enhance=true`): the U-Net was trained on Altered-Hard → Real pairs (see `.planning/spikes/06-afrnet-baseline/UNET_REPORT.md`). It **does** help on Altered-Hard (TAR@FAR=0.001 +9.6 pp), but Altered-Hard is full-print-with-cuts, **not** small crops. **Result: p50 score 0.472 (worse than no enhance) on 25 % corner crops.** The U-Net wasn't trained on tiny fragments.
+- **What would actually work (deferred, Phase 29-03):**
+  - **Fine-tune AFR-Net on partials.** Take Altered-Hard as partial-like training data (or, better, hand-crop 25 / 50 / 75 % versions of Real prints) and retrain. The model would learn that "any sub-region of a fingerprint maps to a useful embedding". 2-4 weeks of work + GPU.
+  - **Alternatively:** detect candidate regions first (with a segmentation network) and only feed the segmented region to AFR-Net. The model then sees "a print, no padding". 1-2 days of work if a suitable segmenter exists.
+- **Lesson:** **Before adding ensemble / multi-scale / enhance to a model that was trained on a specific input distribution, validate the model handles out-of-distribution inputs at all.** A 5-minute benchmark (`scripts/benchmark_partials.py`) saves hours of implementing a feature that does nothing.  **Trust the data, not the literature.** Sliding window is a known technique for partial prints in classical AFIS, but the deep model still needs partial training data to use it.
+
+## Phase 29: AFIS Quality Pre-Requisites
+
+The deep-embedding AFIS works on a specific input distribution. When a
+field image (crime-scene latent) goes wrong, the root cause is almost
+always one of these:
+
+1. **Crop not centered.** Issue 15. Fix: `_center_on_content`. Detects
+   non-zero bbox, re-pads so the fingerprint is in the middle.
+2. **Background not removed.** SOCOFing is clean; latents have a noisy
+   background. The U-Net enhancer (`apps/backend/models/unet_best.pt`)
+   is loaded but not wired in production. The `?enhance=true` toggle is
+   a TODO. Workaround: pre-crop tightly to the fingerprint region.
+3. **Wrong finger position.** A left-thumb probe cannot match a
+   right-index gallery capture. The `finger_name` is in the response
+   (`MatchCandidate.finger_name`) — the perito should compare same
+   fingers, not just same person.
+4. **Worn / partial / smudged prints.** AFR-Net is robust to small
+   noise but not to 30%+ ridge loss. NIST SD27 validation (Phase 29-03)
+   is the calibration step.
+
+The GradCAM is the first thing to check when results are bad. If the
+heatmap doesn't light up on the fingerprint, the model never saw the
+right pixels.
+
+## Phase 29: Idempotency Pattern (defense in depth)
+
+Phase 29 made every write endpoint replay-safe. The pattern, applied at
+every layer:
+
+1. **Database UNIQUE constraint** — the final correctness guard.
+   `UNIQUE(fingerprint_id, image_hash_sha256)` on `fingerprint_captures`,
+   `UNIQUE(external_id)` on `persons`, `UNIQUE(person_id, finger_position,
+   capture_type)` on `fingerprints`.
+2. **`ON CONFLICT DO NOTHING`** at the insert site — converts a UNIQUE
+   violation into a no-op without an exception.
+3. **`pg_advisory_xact_lock(hash(key))`** before the insert — serialises
+   concurrent writers so they don't all try to insert. The lock is
+   per-entity (hash of natural key), so unrelated entities don't block
+   each other.
+4. **Dialect-aware**: PG uses the lock + ON CONFLICT. SQLite (used in
+   tests) is single-writer, so the lock is a no-op there.
+
+The three layers are belt-and-suspenders: even if one is broken (lock
+released early, ON CONFLICT forgotten, UNIQUE constraint dropped), the
+others catch it. The tuple `(entity, created)` returned by repositories
+is the single source of truth for "did this create something new?".
+
+## Phase 29: Anti-Patterns (do not repeat)
+
+1. **No "drop_old" flags on repository methods.** A method that takes
+   `drop_old=True` and silently deletes a 6K-vector gallery on next DI
+   initialisation is a footgun. Destructive operations belong in
+   reviewed scripts (`scripts/cleanup_qdrant.py`), gated by humans.
+   See `docs/adr/011-repository-no-destructive-ops.md`.
+2. **No `Any` in service signatures.** Strict pyright catches type drift.
+   Use `TypedDict` for Qdrant payloads, `NDArray[np.float32]` for
+   vectors, concrete class types (`SearchCandidate`) for results.
+3. **No `if TYPE_CHECKING:` for runtime symbols.** Pyright + future
+   annotations don't catch NameError at execution time. Either the
+   symbol is used at runtime (import it) or it's only a type hint
+   (no need to import the value). The same name cannot be both.
+4. **No padding without centering.** When a deep model's training
+   distribution places the subject in the centre, the preprocessor
+   must put it there. Pad-and-resize on a corner-cropped image is
+   wrong. Use bbox detection first.
+5. **No React keys on non-unique fields.** `person_id` is not unique
+   in a per-finger candidate list. `capture_id` is. When the data
+   shape changes (one match per person → one match per finger), audit
+   every `key={c.x}` site.
+6. **No "explainability" features in the perito's main view** without
+   a domain-expert review. GradCAM was a reasonable idea in
+   Phase 29-CONTEXT (it replaces the minutiae the system no longer
+   extracts), but the perito explicitly said it is not useful and the
+   heatmap actively misleads when the preprocessor is wrong (it
+   activates on the empty border, not the fingerprint). Lesson: when
+   in doubt, ship **less** to the perito's main view. If a feature
+   is for debugging, put it in an admin endpoint, not in the main
+   workflow. See `.planning/STATE.md` §"Phase 29" for the decision
+   and `apps/frontend/src/components/analisis/ProbePanel.tsx` for
+   the current implementation.
+

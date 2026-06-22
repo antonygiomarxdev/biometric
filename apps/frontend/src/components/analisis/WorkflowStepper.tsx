@@ -1,12 +1,18 @@
-import React from 'react';
+import React from "react";
 import { cn } from "@/lib/utils";
-import { Upload, Fingerprint, Search, CheckCircle2, Loader2 } from "lucide-react";
+import { Upload, Search, CheckCircle2, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 
+/**
+ * 3-step workflow: Subir → Buscar → Resultado.
+ *
+ * Phase 29 removed the minutiae-extraction step.  The deep embedding
+ * pipeline computes the embedding at upload time; there is no
+ * intermediate "extract" pass to show.  ``current`` is 0..2.
+ */
 interface WorkflowStepperProps {
   current: 0 | 1 | 2;
   searchRunning: boolean;
-  minutiae: number;
   candidateCount: number;
   queryTimeMs: number | undefined;
   children: React.ReactNode;
@@ -15,13 +21,12 @@ interface WorkflowStepperProps {
 export function WorkflowStepper({
   current,
   searchRunning,
-  minutiae,
   candidateCount,
   queryTimeMs,
   children,
 }: WorkflowStepperProps): React.JSX.Element {
   const steps: Array<{
-    n: 1 | 2 | 3 | 4;
+    n: 1 | 2 | 3;
     label: string;
     icon: React.ReactNode;
     status: string;
@@ -36,30 +41,19 @@ export function WorkflowStepper({
     },
     {
       n: 2,
-      label: "Extraer",
-      icon: <Fingerprint className="w-4 h-4" />,
-      status: minutiae > 0
-        ? `${minutiae} minucias detectadas`
-        : current < 1
-        ? "Esperando imagen"
-        : "Listo para procesar",
-      running: false,
-    },
-    {
-      n: 3,
       label: "Buscar",
       icon: <Search className="w-4 h-4" />,
       status: searchRunning
-        ? "KNN sobre Qdrant…"
+        ? "Embedding + KNN sobre Qdrant…"
         : queryTimeMs !== undefined
         ? `${candidateCount} candidato${candidateCount !== 1 ? "s" : ""} · ${queryTimeMs}ms`
-        : current < 2
-        ? "Esperando extracción"
+        : current < 1
+        ? "Esperando imagen"
         : "Listo para buscar",
       running: searchRunning,
     },
     {
-      n: 4,
+      n: 3,
       label: "Resultado",
       icon: <CheckCircle2 className="w-4 h-4" />,
       status:
@@ -70,7 +64,7 @@ export function WorkflowStepper({
     },
   ];
 
-  const progressPct = (current / 3) * 100;
+  const progressPct = (current / 2) * 100;
 
   return (
     <Card className="overflow-hidden border-border/60">
@@ -188,14 +182,14 @@ export function UploadDropzone({
           <p className="text-sm text-muted-foreground">
             Arrastrá una imagen o hacé click para seleccionar.
             <br />
-            BMP, PNG o JPEG. Máx 10MB.
+            BMP, PNG, JPEG o TIFF. Máx 10MB.
           </p>
         </div>
       </div>
       <input
         type="file"
         className="hidden"
-        accept="image/*"
+        accept="image/png, image/jpeg, image/bmp, image/tiff"
         onChange={(e) => {
           const f = e.target.files?.[0];
           if (f) onFile(f);

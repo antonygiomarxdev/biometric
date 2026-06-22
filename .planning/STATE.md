@@ -1,196 +1,205 @@
 ---
-gsd_state_version: 1.0
-milestone: v2.0-alpha
-milestone_name: milestone
-current_phase: 26
-status: Phase 25 complete (self-match PASS, crop FAIL) — Phase 26 planned (OF Registration)
-stopped_at: Phase 25 closed. Phase 26 CONTEXT + PLAN-01 written. Calibration benchmark run on 20 SOCOFing persons: cross-person RMS mean=0.85, 5th-pct=0.49, threshold 0.50 chosen. Ready to execute PLAN-01.
-last_updated: "2026-06-18T12:00:00.000Z"
+gsd_state_version: 1.1
+milestone: v2.1-alpha
+milestone_name: v2.1-deep-embedding
+current_phase: 29
+status: Phase 29 complete (AFR-Net deployed, 6K SOCOFing indexed, Altered-Hard PASS) — UX redesign in progress
+stopped_at: Phase 29 Plan 29-01 executed and validated. Frontend ResultsPanel UX redesign in progress (multi-finger match presentation).
+last_updated: "2026-06-22T12:00:00.000Z"
 progress:
-  total_phases: 26
-  completed_phases: 22
-  total_plans: 74
-  completed_plans: 35
-  percent: 47
+  total_phases: 29
+  completed_phases: 28
+  total_plans: 79
+  completed_plans: 76
+  percent: 96
 ---
 
-# State: Biometric v2.0 Alpha
+# State: Biometric v2.1 Alpha
 
-**Last updated:** 2026-06-18
-**Current phase:** 26 (Orientation Field Registration — PLANNED, ready to execute)
-**Previous phase:** 25 (Triplet-Based Latent Matching — executed, partial pass)
-**Stopped at:** Phase 26 CONTEXT + PLAN-01 finalized. Calibration done. Threshold 0.50 chosen. Ready to execute.
+**Last updated:** 2026-06-22
+**Current phase:** 29 (Deep Embedding — ✅ Complete)
+**Next phase:** 29-02 (U-Net enhance toggle), 29-03 (NIST SD27 validation)
+**Working on:** UX redesign — multi-finger match presentation in ResultsPanel
+
+> **Note (2026-06-22):** This file was significantly out of date before today.
+> Earlier revisions described Phase 25/26 (triplets + OF) and Phase 28 (MinIO
+> minutiae) as if those were the current state. **None of those shipped.**
+> The actual current architecture is documented below and supersedes
+> every prior plan from Phase 24 onward. The phase directories
+> `phases/24-*`, `phases/25-*`, `phases/26-*`, `phases/27-*` are
+> **historical research**, not part of the live system. See
+> `docs/LESSONS_LEARNED.md` §"Anti-Patterns Observed" for why.
 
 ## Project Reference
 
-See: `.planning/PROJECT.md`
-**Architectural Mandate:** "No Legacy".
+- `.planning/PROJECT.md` — current vision (updated 2026-06-22)
+- `.planning/ROADMAP.md` — current phase plan
+- `docs/LESSONS_LEARNED.md` — bugs and decisions, MUST read first
+- `.planning/phases/29-deep-embedding/29-SUMMARY.md` — current architecture
 
-## Tech Stack (Actual)
+**Architectural Mandate:** "No Legacy" — every code path is the production
+path. Research that didn't ship is deleted, not commented out.
+
+## Tech Stack (Actual — 2026-06-22)
 
 | Componente | Tecnología | Reemplazó a |
 |-----------|-----------|-------------|
 | DB | PostgreSQL 17 + AsyncSession (psycopg3) | Sync Session + psycopg2 |
-| Vectores | Qdrant (Docker) | Qdrant |
-| Almacenamiento | MinIO | — |
+| Vectores | Qdrant (Docker) | — |
+| Almacenamiento | MinIO | bytea in PostgreSQL |
 | Auth | Argon2id + PyJWT | passlib + python-jose |
-| Matching | Triplets (6-D) + Growing Algorithm (Phase 25) | MCC Cylinders (144D) |
-| Pipeline | Gabor Enhancement + Thinning + Crossing Number | Gabor + Skeleton + Ridge Graph |
-| Search | Growing algorithm with 3-point alignment | Hough voting on pairs |
+| **Matching** | **AFR-Net (ConvNeXt-T + ViT-T hybrid, 34M params) + ArcFace, 512-D embeddings** | MCC Cylinders (144D), Triplets (6-D), Pairs (5-D), all deleted |
+| **Pipeline** | **U-Net enhancement (optional) → AFR-Net embedding** | Gabor + Thinning + Crossing Number, all deleted |
+| **Search** | **Qdrant cosine KNN, top-K candidates per finger** | Hough voting on pairs, Growing algorithm on triplets, all deleted |
+| Concurrency | asyncio + dedicated ThreadPoolExecutor (4 workers) for inference | sync FastAPI |
+| Type safety | Strict pyright + `from __future__ import annotations` | `Any`, `dict`, `list` loose |
+| Idempotency | UNIQUE + ON CONFLICT + pg_advisory_xact_lock | last-write-wins |
 
 ## Milestone Progress
 
 | Phase | Status |
 |-------|--------|
-| **v1.0 MILESTONE** | ✅ COMPLETED (Phases 1-10) |
+| **v1.0 MILESTONE** (Phases 1-10) | ✅ COMPLETED |
 | 11-17. Pipeline, Qdrant, Security, Data Model | ✅ COMPLETED |
 | 18. End-to-End Forensic Flow | ✅ COMPLETED |
-| 19. Naming Convention Cleanup | ⏸ Partial (Waves 1-3 done) |
-| 20. MCC Graph Matching Spike | ✅ COMPLETED |
-| 21. MCC Integration | ⏸ Partial (replaced by Phase 24/25) |
-| 22. Reconocimiento Facial | ⏳ Pendiente |
-| 23. Frontend — Flujo Forense Unificado | ✅ COMPLETED |
-| 24. Pair-Based Matching Pipeline v2 | ✅ COMPLETED (prototype, replaced) |
-| 25. Triplet-Based Latent Matching | ⚠ EXECUTED (self-match OK, crop FAIL — see findings) |
-| 26. Orientation Field Registration | 📋 PLANNED (calibration done, threshold 0.50 chosen) |
+| 19. Naming Convention Cleanup | ✅ COMPLETED |
+| 20-27. Classical AFIS research (MCC, pairs, triplets, cylinders) | ⚠️ SUPERSEDED by Phase 29 |
+| 23. Frontend — Flujo Forense Unificado | ✅ COMPLETED (then refactored for Phase 29) |
+| 28. MinIO Migration | ✅ COMPLETED (storage layer, no minutiae table) |
+| **29. Deep Embedding (AFR-Net)** | **✅ COMPLETED (Plan 29-01)** |
+| 29-02. U-Net enhance toggle | 📋 PLANNED (model loaded, not wired) |
+| 29-03. NIST SD27 validation | 📋 PLANNED (M1 segmentation) |
 
 ## Accumulated Context
 
-### Phase 24 — Pair-Based Matching (Completed, Replaced)
+### Phase 29 — Deep Embedding (✅ Complete, deployed)
 
-Phase 24 produced a working pair-based matching pipeline with the following
-limitations discovered during testing:
+Replaced the entire classical minutiae pipeline (MCC, triplets, pairs,
+cylinders, Gabor, thinning, ridge graph) with AFR-Net deep embeddings.
 
-- **5-D pair descriptor is weakly discriminative** — random pairs can have
-  similar descriptors by coincidence
-- **Hough voting produces spurious peaks** — 5% match score on Altered-Easy
-  images, with green dots appearing on unrelated minutiae
-- **Visualization bug**: `probe_pair_index` was used as a minutia index,
-  causing green dots to appear on random minutiae whose index happened to
-  match a pair index
-- **Crop matching is poor**: 2/5 on 50% center crop, 1/5 on 25% corner crop
-- **Slow**: 500 KNN queries per search
+**Architecture:**
+- AFR-Net (ConvNeXt-T + ViT-T hybrid + ArcFace, 34M params) computes
+  512-D embeddings from 224×224 grayscale
+- U-Net loaded for `?enhance=true` (preprocess-only, not wired to
+  endpoint yet — that's 29-02)
+- Qdrant stores 512-D vectors with payload `{person_id, capture_id,
+  finger_name}`
+- Cosine KNN returns top-K candidates per finger
+- GradCAM computed on every search (forward + backward hooks) but
+  **not shown to the perito** — they said it's not useful (the heatmap
+  activates on empty borders, not the fingerprint). Still available
+  in the response for debugging.
+- EmbeddingService is async, inference serialised via asyncio.Lock
+  + dedicated ThreadPoolExecutor (PyTorch not thread-safe with hooks)
 
-**Decision (per Phase 25):** Replace pair-based with triplet-based matching
-+ growing algorithm. ADR 010 documents the rationale.
+**Validation results (Plan 29-01, on Altered-Hard):**
+- 6K SOCOFing subjects indexed (5997 captures, 5997 Qdrant points)
+- Real probe vs Real gallery: top-1 score 1.0 (trivial self-match)
+- Altered-Hard CR (Central Rotation) probe: correct person at
+  score 0.54, margin 0.12 over #2
+- Altered-Hard Zcut (Cut) probe: correct person at score 0.53,
+  margin 0.02
+- Throughput: 4 workers × C=16 = 40 img/s on CPU-bound chain
+- Replay idempotency: 184 img/s (no work done)
 
-### Phase 25 — Triplet-Based Matching (Executed, gate partial)
+**Bugs found during validation** (see LESSONS_LEARNED.md Issues 10-15):
+- Race in `ensure_collection` across 4 uvicorn workers (4 captures lost)
+- `Person` in `TYPE_CHECKING`-only but used at runtime → NameError
+- `enroll.replay` incrementing `capture_count` on idempotent replay
+- `fetch` wrapper missing `redirect: "follow"` (307 from FastAPI)
+- React `key={c.person_id}` duplicate when same person has 10 fingers
+- Cropped image not centered → model can't find the fingerprint
+  (GradCAM shows the bug clearly)
 
-| Plan | Title | Status |
-|------|-------|--------|
-| 25-01 | Quality scoring + triplet extraction | ✅ Complete |
-| 25-02 | Triplet storage + search in Qdrant | ✅ Complete |
-| 25-03 | Growing algorithm + validation | ✅ Complete |
-| 25-04 | Frontend + No-Legacy cleanup | ⏸ Deferred (until Phase 26 scope settled) |
-
-**Plan 25-03 acceptance gate (scripts/e2e_triplet_benchmark.py):**
-- Self-match: **5/5 PASS** (score 0.995, 200/200 confirmed)
-- 50% center crop: **0/5 FAIL** (wrong person, score 0.02)
-- 25% corner crop: **0/5 FAIL** (no candidates or wrong person)
-- OVERALL: **FAIL**
-
-**Diagnostic findings (scripts/diag_self_crop_match.py):**
-- 6-D triplet descriptor is invariant to rotation/translation/scale, **NOT to crop**
-- KNN top-5 per triplet returns hits dominated by wrong persons with
-  similarity 0.93-0.99 when probe is a crop of the enrolled image
-- Local-invariant matching is insufficient for partial / latente matches
-- **Phase 26 (OF Registration) required** — global orientation field
-  filter before growing will reject candidates whose global OF doesn't
-  match the probe's OF
-
-**Score refactor (D-09, D-10):**
-- `_compute_score = ratio × smooth × similarity_mean` (multiplicative)
-- `MIN_CONFIRMING_TRIPLETS = 3` (was 2)
-- 156/156 unit tests pass, pyright 0 errors
-
-**Search latency:** 12-15s per self-match (target was <500ms). Deferred.
+**Anti-patterns introduced by Phase 29 and rejected** (LESSONS_LEARNED §
+"Phase 29: Anti-Patterns"):
+- `drop_old` flag on repository methods (ADR-011: rejected)
+- `Any` types in service signatures
+- `TYPE_CHECKING` for runtime symbols
+- Padding without centering (Issue 15)
+- React keys on non-unique fields (Issue 14)
 
 **See:**
-- `.planning/phases/25-triplet-matching/25-CONTEXT.md` — full context
-- `.planning/phases/25-triplet-matching/SUMMARY.md` — execution results
-- `.planning/adr/010-triplet-matching.md` — decision rationale
+- `.planning/phases/29-deep-embedding/29-CONTEXT.md` — phase context
+- `.planning/phases/29-deep-embedding/29-01-PLAN.md` — execution plan
+- `.planning/phases/29-deep-embedding/29-SUMMARY.md` — results + validation
+- `docs/LESSONS_LEARNED.md` — Issues 10-15 + anti-patterns
+- `docs/adr/011-repository-no-destructive-ops.md` — why `drop_old` is bad
 
-### Phase 26 — Orientation Field Registration (Planned)
+### Phase 28 — MinIO Storage (✅ Complete)
 
-**Driver:** Phase 25 crop acceptance gate failure (0/5 on 50%/25% crop).
+Images stored in MinIO at `captures/{capture_id}.png`. PG stores only
+metadata + path. The original plan (Phase 28-CONTEXT) proposed also
+storing minutiae in PG; that was superseded by Phase 29 (no minutiae,
+deep embedding only).
 
-**Calibration results (scripts/calibrate_of_threshold.py, 20 SOCOFing persons):**
-- OF shape: 16×16 (256 blocks per fingerprint)
-- Cross-person RMS scores: min=0.36, 5th-pct=0.49, median=0.84, 95th-pct=1.28
-- **Threshold: 0.50** (5th percentile of cross-person, calibrated)
-- Self-match score: ~0.0 (by construction)
-- Margin: 0.50 (large — no overlap between self and cross distributions)
+### Phases 24-27 — Classical AFIS Research (⚠️ Superseded, not shipped)
 
-**Plan 26-01: OF Pre-Filter Pipeline (7 tasks)**
-- T1 `of_similarity.py` — RMS on `e^{2iθ}` complex vector, coherence-masked
-- T2 `of_registry.py` — PostgreSQL JSONB I/O
-- T3 Migration `0007_fingerprint_of_index.py` — new table
-- T4 Wire OF into `enroll_triplets` (persist on every enrollment)
-- T5 Wire OF filter into `search_by_triplets` (hard reject > 0.50 RMS)
-- T6 `of_filter.py` — clean module split, 7+ unit tests
-- T7 `scripts/e2e_of_benchmark.py` — acceptance gate (self 5/5, crop50 ≥4/5, crop25 ≥3/5)
+These phases are historical research that was tried, evaluated, and
+**rejected** in favor of Phase 29's deep embedding. They are preserved
+in the phase directories for context (so future contributors don't
+re-invent them) but **none of their code is in the live system**.
 
-**Acceptance gate:**
-- Self-match: 5/5 (was 5/5)
-- 50% center crop: ≥4/5 (was 0/5)
-- 25% corner crop: ≥3/5 (was 0/5)
-- Search latency: < 3s (was 12-15s)
-- OF threshold accuracy: TPR ≥ 95% @ FPR ≤ 5% on calibration set
+- **Phase 24** — Pair-based matching (5-D pairs + Hough). 5-D too weak,
+  Hough too noisy. Replaced.
+- **Phase 25** — Triplet-based matching (6-D + growing algorithm). Crop
+  acceptance gate 0/5 on 50%/25% crops. Self-match OK but unusable on
+  real latents. Replaced.
+- **Phase 26** — Orientation Field registration as pre-filter. Never
+  executed; superseded by Phase 29.
+- **Phase 27** — Cleanup of phases 24/25/26. Confirmed cylinders + pairs
+  + triplets are all dead code. ADR-009 (remove cylinders), ADR-010
+  (triplets). The matchers were removed but the deep-embedding
+  replacement (Phase 29) is what actually shipped.
 
-**See:**
-- `.planning/phases/26-of-registration/26-CONTEXT.md` — full context + 8 decisions resolved
-- `.planning/phases/26-of-registration/26-01-PLAN.md` — execution plan
+**Key lesson:** See `docs/LESSONS_LEARNED.md` §"Anti-Patterns Observed":
+do not assume a more complex algorithm is better. The simpler deep
+embedding (512-D, cosine KNN) beats classical minutiae matching
+on the metrics that matter for the perito's day-to-day work.
 
-### Previous Decisions
+### Phase 23 — Frontend Forense Unificado (✅ Complete, then refactored)
 
-- **Plan 23-02 (SOCOFing Seed):** Person records are seeded from SOCOFing Real filenames via `PersonService.find_or_create_person` (async-only since Phase 17). Fingerprints are NOT seeded — enrollment happens interactively via `/enroll` UI. The legacy `scripts/load_socofing.py` (which used `db_manager.create_tables` and `repository.register`) is deleted. The stale `apps/frontend/openapi.json` and `gen:client` script are removed per D-18.
-- **Plan 23-03 (API Client Rewrite):** `lib/api.ts` rewritten as single source of truth for backend communication (D-28). All types mirror Pydantic v1 models in snake_case. New functions: listPersons, getPerson, createFingerprintSlot, getMinutiaeForImage, enrollFingerprint. searchMatching updated to return MatchSearchResponse with probe_minutiae + per-candidate match_trace. Import paths in useCanvasDrawer.ts and MinutiaeEditor.tsx updated from @/client to @/lib/api ahead of Plan 23-07 client deletion.
-- **Plan 23-04 (Canvas Infrastructure):** Three files created for match trace visualization: (1) `useMatchCanvas` hook with 10-color cyclic `PALETTE`, dual-canvas drawing, and SVG line overlay; (2) `MatchOverlay` compound component (dual-canvas + SVG + stats badge + captions + empty state); (3) `CandidateCard` extracted from ComparisonView using `MatchCandidate` type. All three pass strict TypeScript.
-- **Plan 23-05 (Enrollment Wizard):** 3-step enrollment wizard (select person → upload image → review/edit minutiae → confirm) as single-file EnrollPage.tsx. Two routes added to App.tsx (`/enroll`, `/cases/:caseId/enroll`). Dashboard CTA replaced with single "Enrolar Huella" button. Reuses MinutiaeEditor from D-24 without modifications. Edited minutiae displayed in done state as advisory count.
-- **Plan 23-06 (ComparisonView Refactor + Detail Panel):** CandidateDetailPanel renders full-width MatchOverlay (probe + candidate canvases) plus tabular trace (cylinder index, capture_id/fingerprint_id, similarity %) per D-07. D-08 best-fingerprint badge selects the contributing_fingerprint with the most match_trace entries. ComparisonView refactored from side-by-side grid to vertical layout (latent → candidates → detail panel). MatchOverlayProps fixed to omit containerRef from its extends type. `candidateImageUrl` is null for Phase 23 MVP — backend does not yet expose per-candidate image endpoint.
-- **Plan 23-07 (Legacy Cleanup):** Deleted 11 legacy files + 22-file `src/client/` directory (OpenAPI codegen). Removed `/scanner` route from App.tsx. Only 4 routes remain: `/`, `/enroll`, `/cases/:caseId/enroll`, `/cases/:caseId/compare`. No `DefaultService`, `OpenAPI`, or `@/client` imports remain anywhere in src/.
-- **Plan 23-08 (Nyquist Validation Gate):** Added 5 pytest tests as automated Nyquist validation for Phase 23 backend seams: domain types, Qdrant position persistence, service-layer match_trace, router response shape, and /preview endpoint contract. Fixed 2 pre-existing blocking issues (broken IEnhancer import in processing/__init__.py, OAuth2PasswordRequestForm under TYPE_CHECKING in auth.py).
-- **Plan 23-09 (Integration Verification):** Full acceptance gate: backend tests (635/656 pass, 5/5 Phase 23 tests pass), frontend build (pre-existing errors only), legacy cleanup verified, SOCOFing seed verified idempotent, phase-level SUMMARY.md created, ROADMAP and STATE updated.
+The frontend flow (Dashboard → AnalisisPage → ComparisonView → EnrollPage)
+was built in Phase 23 with minutiae-based types. In Phase 29 these
+were simplified:
 
-### Roadmap Evolution
+- Removed: `MinutiaPoint`, `SupportingPair`, `MatchTraceEntry`,
+  `MinutiaSummary`, `peak_votes`, `supporting_pairs`
+- Added: `MatchCandidate.finger_name`, `MatchCandidate.capture_id`
+- Simplified: `MatchSearchResponse` now has `probe_gradcam_b64` instead
+  of `probe_minutiae`
+- Deleted components: `MatchOverlay`, `useMatchCanvas`, `useCanvasDrawer`,
+  `MinutiaeEditor`
+- `lib/api.ts` removed `redirect: "follow"` bug
 
-- Phase 24 completed as a prototype. Demonstrated the thinning pipeline works
-  (deterministic, 63-94 minutiae per SOCOFing image) but exposed limitations
-  of pair-based matching (5-D too weak, Hough voting too noisy).
-- Phase 25 will replace Phase 24's approach with triplet-based matching
-  (classical AFIS, NIST NBIS Bozorth3 style). Per No Legacy doctrine, all
-  pair-based code will be deleted in Plan 25-04.
-- Multi-scale Gabor bank and latent-specific enhancement are deferred to
-  Phase 26+ (post Phase 25 execution).
+The current 5 pages are: Dashboard, AnalisisPage, SearchPage,
+ComparisonView, EnrollPage.
 
-### Phase 28 — MinIO Migration + Minutiae-as-Data (Planned)
+## Open UX Redesign (in progress, 2026-06-22)
 
-**Driver:** Storage architecture issue. Fingerprint images are stored
-as bytea in PostgreSQL (`FingerprintCapture.enhanced_image`).
-This is the wrong place for images — expensive, slow to serve, and
-conflates raw and derived data.
+After Phase 29 validation, the user observed that a single probe can
+match 7 fingers of the same person in the top-10. This is **biologically
+correct** (fingers of the same person share genetic markers) but the
+UI treats the 7 matches as "7 candidates" when they should be
+"1 primary match + 6 supporting evidence".
 
-**Solution:** Decouple storage layers.
-- MinIO bucket `fingerprints/captures/{id}.png` (normalized 256x256)
-- PG `capture_minutiae` table (structured minutia data with hash)
-- Render on demand with minutiae overlay
+**Status:** Research phase. Doc cleanup done, then UX research
+(perito workflow, screens, information architecture), then SPEC,
+then implement.
 
-**No legacy:** `enhanced_image` column dropped in same migration.
-Existing enrollments discarded. Re-enroll from SOCOFING sources
-after deploy. Per user: "nada de legacy".
+## Previous Decisions (preserved for context)
 
-**Calibration result (Phase 27):** NIST Bozorth3 pairs matcher
-achieves 100% top-1 on SOCOFING Altered-Easy (20/20 probes) with
-calibrated tolerances. Ready for production use.
+- **Plan 23-02 (SOCOFing Seed):** Person records seeded from SOCOFing
+  Real filenames. Fingerprints NOT seeded — enrolled interactively
+  via `/enroll` UI.
+- **Plan 23-03 (API Client Rewrite):** `lib/api.ts` as single source
+  of truth (D-28). All types mirror Pydantic v1 models in snake_case.
+- **Plan 23-04/05/06 (Canvas + Enrollment + Detail Panel):** Initially
+  built with minutiae trace visualization. Refactored in Phase 29 to
+  GradCAM-only.
+- **Plan 23-07 (Legacy Cleanup):** Deleted 11 legacy files + 22-file
+  `src/client/` directory. Reduced to 4 routes initially, then expanded
+  to 5 in Phase 29.
+- **Plan 23-08/09 (Validation):** Backend tests 511/635 pass at that
+  time. Frontend build pre-existing errors only.
 
-**Scope:**
-- Migration: drop `enhanced_image`, create `capture_minutiae`
-- Service: `FingerprintStorage` (MinIO wrapper)
-- Repository: `CaptureMinutiaRepository` (PG CRUD)
-- Refactor: enrollment flow + image endpoint
-- Cleanup: remove all `enhanced_image` references
-- Verify: benchmark still passes after re-enrollment
-
-**See:**
-- `.planning/phases/28-minio-migration/28-CONTEXT.md`
-- `.planning/phases/28-minio-migration/28-PLAN.md`

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Any, ClassVar
+from typing import Any
 
 import numpy as np
 
@@ -57,7 +57,6 @@ class NormalizedFingerprint:
     width: int
     height: int
     image: np.ndarray | None = field(default=None, repr=False)
-    ridge_graph: RidgeGraph | None = None
 
     @property
     def vector(self) -> np.ndarray:
@@ -90,151 +89,8 @@ class MatchResult:
 
 
 @dataclass(frozen=True, slots=True)
-class RidgeNode:
-    x: int
-    y: int
-    weight: float = 1.0          # Forensic importance (1.0 = core, decays outwards)
-    is_cutoff: bool = False      # True if it's an artificial boundary truncation
-    angle: float = 0.0           # Local ridge orientation in radians [0, π)
-
-
-@dataclass(frozen=True, slots=True)
-class MccCylinder:
-    """Minutia Cylinder-Code descriptor for a single minutia.
-
-    A 3D cylinder capturing the spatio-directional relationship between
-    a central minutia and its neighbours.  Invariant to rotation and
-    translation (not scale — images expected at similar resolution).
-
-    Dimensions:
-        spatial: (C, C) grid spanning [-R, R] px (C = 2R//S + 1)
-        directional: D bins covering [0, π)
-    """
-    values: np.ndarray          # shape: (spatial, spatial, dir_bins)
-
-    @property
-    def num_cells(self) -> int:
-        return int(np.prod(self.values.shape))
-
-    def cosine_similarity(self, other: MccCylinder) -> float:
-        a = self.values.ravel()
-        b = other.values.ravel()
-        denom = (np.linalg.norm(a) * np.linalg.norm(b))
-        return float(np.dot(a, b) / denom) if denom > 0 else 0.0
-
-@dataclass(frozen=True, slots=True)
-class RidgeEdge:
-    source: int
-    target: int
-    path: list[tuple[int, int]]
-    length: int
-
-@dataclass(frozen=True, slots=True)
-class RidgeGraph:
-    nodes: list[RidgeNode]
-    edges: list[RidgeEdge]
-
-    @property
-    def num_nodes(self) -> int:
-        return len(self.nodes)
-
-    @property
-    def num_edges(self) -> int:
-        return len(self.edges)
-
-    def is_empty(self) -> bool:
-        return self.num_nodes == 0
-
-
-@dataclass(frozen=True, slots=True)
-class GraphEmbedding:
-    """
-    Macro-topology features of a RidgeGraph, used as a dense vector
-    for coarse matching via vector search.
-
-    All features are size-invariant (ratios / normalised) so that two
-    graphs with the same topology but different absolute scale produce
-    identical embeddings.  The canonical 22-dim layout is::
-
-        degree_0..degree_4plus    (5)   node-degree histogram ratios
-        edge_len_p10..p90         (5)   edge length percentiles
-        edge_len_mean, std        (2)
-        weight_p10, p50, p90      (3)
-        weight_mean, std          (2)
-        log_nodes, log_edges      (2)
-        cutoff_ratio              (1)
-        avg_degree                (1)
-        density                   (1)
-        ----
-        total                     (22)
-    """
-    # Degree histogram ratios (5 bins: 0, 1, 2, 3, 4+)
-    degree_0_ratio: float
-    degree_1_ratio: float
-    degree_2_ratio: float
-    degree_3_ratio: float
-    degree_4plus_ratio: float
-    # Edge length distribution (5 percentiles + mean + std)
-    edge_len_p10: float
-    edge_len_p25: float
-    edge_len_p50: float
-    edge_len_p75: float
-    edge_len_p90: float
-    edge_len_mean: float
-    edge_len_std: float
-    # Node weight distribution (3 percentiles + mean + std)
-    weight_p10: float
-    weight_p50: float
-    weight_p90: float
-    weight_mean: float
-    weight_std: float
-    # Graph-level stats
-    log_num_nodes: float
-    log_num_edges: float
-    cutoff_ratio: float
-    avg_degree: float
-    density: float
-
-    EMBEDDING_DIM: ClassVar[int] = 22
-
-    def to_vector(self) -> np.ndarray:
-        """Flatten to a fixed-size numpy vector for vector search."""
-        return np.array(
-            [
-                self.degree_0_ratio,
-                self.degree_1_ratio,
-                self.degree_2_ratio,
-                self.degree_3_ratio,
-                self.degree_4plus_ratio,
-                self.edge_len_p10,
-                self.edge_len_p25,
-                self.edge_len_p50,
-                self.edge_len_p75,
-                self.edge_len_p90,
-                self.edge_len_mean,
-                self.edge_len_std,
-                self.weight_p10,
-                self.weight_p50,
-                self.weight_p90,
-                self.weight_mean,
-                self.weight_std,
-                self.log_num_nodes,
-                self.log_num_edges,
-                self.cutoff_ratio,
-                self.avg_degree,
-                self.density,
-            ],
-            dtype=np.float32,
-        )
-
-
-@dataclass(frozen=True, slots=True)
 class CoarseMatch:
     """A single candidate returned by the coarse matcher."""
     fingerprint_id: str
     score: float
     metadata: dict[str, Any] = field(default_factory=dict)
-
-# NOTE: cylinder-related types (MccCylinderHit, MccPersonHit, MccSearchHit,
-# MinutiaSummary, MatchTraceEntry) were removed in Phase 27 along with
-# the cylinder matcher. See docs/adr/009-remove-cylinders.md.

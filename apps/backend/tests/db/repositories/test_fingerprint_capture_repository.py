@@ -39,38 +39,55 @@ async def session():
 
 @pytest.fixture
 async def person(session) -> Person:
-    return await PersonRepository.create(session, external_id="X")
+    p, _ = await PersonRepository.create(session, external_id="X")
+    return p
 
 
 @pytest.fixture
 async def fingerprint(session, person) -> Fingerprint:
-    return await FingerprintRepository.create(
+    f, _ = await FingerprintRepository.create(
         session, person_id=person.id, finger_position=2,
     )
+    return f
 
 
 @pytest.mark.asyncio
 class TestFingerprintCaptureRepository:
     async def test_create_assigns_capture_index_1(self, session, fingerprint) -> None:
-        c = await FingerprintCaptureRepository.create(
+        c, created = await FingerprintCaptureRepository.create(
             session, fingerprint_id=fingerprint.id,
             image_uri="minio://1.png", image_hash_sha256="h1",
         )
         assert c.capture_index == 1
+        assert created is True
 
     async def test_create_second_capture_assigns_index_2(self, session, fingerprint) -> None:
         await FingerprintCaptureRepository.create(
             session, fingerprint_id=fingerprint.id,
             image_uri="minio://1.png", image_hash_sha256="h1",
         )
-        c2 = await FingerprintCaptureRepository.create(
+        c2, _ = await FingerprintCaptureRepository.create(
             session, fingerprint_id=fingerprint.id,
             image_uri="minio://2.png", image_hash_sha256="h2",
         )
         assert c2.capture_index == 2
 
+    async def test_create_idempotent_on_same_hash(self, session, fingerprint) -> None:
+        c1, cr1 = await FingerprintCaptureRepository.create(
+            session, fingerprint_id=fingerprint.id,
+            image_uri="minio://1.png", image_hash_sha256="h1",
+        )
+        c2, cr2 = await FingerprintCaptureRepository.create(
+            session, fingerprint_id=fingerprint.id,
+            image_uri="minio://1.png", image_hash_sha256="h1",
+        )
+        assert cr1 is True
+        assert cr2 is False
+        assert c1.id == c2.id
+        assert c1.capture_index == c2.capture_index
+
     async def test_get_by_id(self, session, fingerprint) -> None:
-        c = await FingerprintCaptureRepository.create(
+        c, _ = await FingerprintCaptureRepository.create(
             session, fingerprint_id=fingerprint.id,
             image_uri="minio://1.png", image_hash_sha256="h1",
         )
@@ -101,7 +118,7 @@ class TestFingerprintCaptureRepository:
         assert found is not None
 
     async def test_update_is_reference_flag(self, session, fingerprint) -> None:
-        c = await FingerprintCaptureRepository.create(
+        c, _ = await FingerprintCaptureRepository.create(
             session, fingerprint_id=fingerprint.id,
             image_uri="minio://1.png", image_hash_sha256="h1",
         )

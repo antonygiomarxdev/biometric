@@ -50,5 +50,11 @@ tests/output_visual/
 # Track curated SOCOFing fixtures (10 images, ~400KB total)
 !tests/fixtures/socofing_real/*.BMP
 
+# Model artifacts (large binaries, downloaded separately)
+apps/backend/models/*.pt
+apps/backend/models/*.onnx
+apps/backend/models/*.pth
+!apps/backend/models/README.md
+
 # Docker
 .dockerignore

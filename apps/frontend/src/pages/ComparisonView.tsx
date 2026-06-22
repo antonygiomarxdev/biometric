@@ -23,7 +23,7 @@ import {
   searchMatching,
   createDecision,
 } from "@/lib/api";
-import type { EvidenceResponse, MatchCandidate, MinutiaPoint } from "@/lib/api";
+import type { EvidenceResponse, MatchCandidate } from "@/lib/api";
 import { CandidateCard } from "@/components/fingerprint/CandidateCard";
 import { CandidateDetailPanel } from "@/components/fingerprint/CandidateDetailPanel";
 
@@ -88,8 +88,7 @@ export default function ComparisonView() {
   const [latentFile, setLatentFile] = useState<File | null>(null);
   const [candidates, setCandidates] = useState<MatchCandidate[]>([]);
   const [selectedCandidate, setSelectedCandidate] = useState<MatchCandidate | null>(null);
-  const [probeMinutiae, setProbeMinutiae] = useState<MinutiaPoint[]>([]);
-  const [probeImageUrl, setProbeImageUrl] = useState<string | null>(null);
+  const [probeGradcam, setProbeGradcam] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedVerdict, setSubmittedVerdict] = useState<Verdict | null>(null);
@@ -123,12 +122,12 @@ export default function ComparisonView() {
       const file = e.target.files?.[0];
       if (!file) return;
 
-      const validTypes = ["image/bmp", "image/png", "image/jpeg", "image/jpg"];
+      const validTypes = ["image/bmp", "image/png", "image/jpeg", "image/jpg", "image/tiff", "image/tif", "image/x-tiff"];
       if (!validTypes.includes(file.type)) {
         addToast({
           type: "error",
           title: "Tipo de archivo inválido",
-          description: "Selecciona una imagen BMP, PNG o JPEG",
+          description: "Selecciona una imagen BMP, PNG, JPEG o TIFF",
         });
         return;
       }
@@ -148,7 +147,7 @@ export default function ComparisonView() {
         setLatentFile(file);
         setCandidates([]);
         setSelectedCandidate(null);
-        setProbeMinutiae([]);
+        setProbeGradcam(null);
         setSubmittedVerdict(null);
       };
       reader.readAsDataURL(file);
@@ -174,10 +173,9 @@ export default function ComparisonView() {
 
       const result = await searchMatching(latentFile);
 
-      setProbeImageUrl(result.probe_image_url);
+      setProbeGradcam(result.probe_gradcam_b64);
       if (result.candidates.length > 0) {
         setCandidates(result.candidates);
-        setProbeMinutiae(result.probe_minutiae);
         setSelectedCandidate(result.candidates[0]);
         addToast({
           type: "success",
@@ -186,7 +184,6 @@ export default function ComparisonView() {
           duration: 3000,
         });
       } else {
-        setProbeMinutiae(result.probe_minutiae);
         addToast({
           type: "info",
           title: "Sin coincidencias",
@@ -257,7 +254,7 @@ export default function ComparisonView() {
         setLatentFile(null);
         setCandidates([]);
         setSelectedCandidate(null);
-        setProbeMinutiae([]);
+        setProbeGradcam(null);
         setSubmittedVerdict(null);
       }
     },
@@ -383,7 +380,7 @@ export default function ComparisonView() {
                 type="file"
                 ref={fileInputRef}
                 className="hidden"
-                accept="image/*"
+                accept="image/png, image/jpeg, image/bmp, image/tiff"
                 onChange={handleFileChange}
               />
 
@@ -434,10 +431,10 @@ export default function ComparisonView() {
                 <div className="space-y-3">
                   {candidates.map((candidate, index) => (
                     <CandidateCard
-                      key={candidate.person_id}
+                      key={`${index}-${candidate.capture_id ?? candidate.person_id}`}
                       candidate={candidate}
                       rank={index + 1}
-                      isSelected={selectedCandidate?.person_id === candidate.person_id}
+                      isSelected={selectedCandidate?.capture_id === candidate.capture_id}
                       onSelect={() => setSelectedCandidate(candidate)}
                     />
                   ))}
@@ -460,8 +457,11 @@ export default function ComparisonView() {
         {selectedCandidate && (
           <CandidateDetailPanel
             candidate={selectedCandidate}
-            probeImageUrl={probeImageUrl ?? latentPreview ?? ""}
-            probeMinutiae={probeMinutiae}
+            probeImageUrl={
+              probeGradcam
+                ? `data:image/png;base64,${probeGradcam}`
+                : latentPreview ?? ""
+            }
             onDismiss={() => setSelectedCandidate(null)}
           />
         )}

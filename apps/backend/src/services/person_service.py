@@ -31,12 +31,36 @@ class PersonService:
                 data = data.model_copy(update={"doc_type": norm.value})
             except ValueError:
                 pass
-        ext_id = data.external_id
-        if ext_id:
-            existing = await PersonRepository.find_by_external_id(self._session, ext_id)
-            if existing is not None:
-                msg = f"Person with external_id={data.external_id} already exists"
-                raise ValueError(msg)
+        dob_dt = (
+            datetime.combine(data.dob, datetime.min.time()).replace(tzinfo=UTC)
+            if data.dob
+            else None
+        )
+        person, _created = await PersonRepository.create(
+            self._session,
+            external_id=data.external_id,
+            full_name=data.full_name,
+            doc_type=data.doc_type,
+            doc_number=data.doc_number,
+            sex=(data.sex or "").upper() or None,
+            dob=dob_dt,
+            notes=data.notes,
+        )
+        return person
+
+    async def create_person_idempotent(self, data: PersonCreate) -> tuple[Person, bool]:
+        """Create-or-fetch a person.  Returns ``(person, created)``.
+
+        Unlike ``create_person`` (which existed for the legacy 409
+        path) this never raises on duplicate external_id; the caller
+        decides whether to surface 201/200 based on the boolean.
+        """
+        if data.doc_type is not None:
+            try:
+                norm = DocumentType(data.doc_type.lower())
+                data = data.model_copy(update={"doc_type": norm.value})
+            except ValueError:
+                pass
         dob_dt = (
             datetime.combine(data.dob, datetime.min.time()).replace(tzinfo=UTC)
             if data.dob
@@ -56,6 +80,9 @@ class PersonService:
     async def get_person(self, person_id: uuid.UUID) -> Person | None:
         return await PersonRepository.get_by_id(self._session, person_id)
 
+    async def get_person_by_external_id(self, external_id: str) -> Person | None:
+        return await PersonRepository.find_by_external_id(self._session, external_id)
+
     async def list_persons(
         self, *, skip: int = 0, limit: int = 20, search: str | None = None
     ) -> list[Person]:
@@ -71,10 +98,10 @@ class PersonService:
     async def find_or_create_person(
         self, external_id: str, **defaults: Any
     ) -> Person:
-        existing = await PersonRepository.find_by_external_id(self._session, external_id)
-        if existing is not None:
-            return existing
-        return await PersonRepository.create(self._session, external_id=external_id, **defaults)
+        person, _created = await PersonRepository.create(
+            self._session, external_id=external_id, **defaults,
+        )
+        return person
 
     async def delete_person(self, person_id: uuid.UUID) -> bool:
         return await PersonRepository.delete(self._session, person_id)

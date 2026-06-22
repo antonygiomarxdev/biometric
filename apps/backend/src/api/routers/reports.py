@@ -66,7 +66,6 @@ async def generate_report(case_id: UUID, session: AsyncSession = Depends(get_asy
         "evidences": [
             {
                 "fingerprint_id": ev.fingerprint_id,
-                "num_minutiae": ev.num_minutiae,
                 "created_at": ev.created_at,
             }
             for ev in evidences

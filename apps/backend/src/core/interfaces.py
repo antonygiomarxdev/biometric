@@ -18,10 +18,8 @@ if TYPE_CHECKING:
     from src.core.types import (
         CoarseMatch,
         MatchResult,
-
         MinutiaCandidate,
         NormalizedFingerprint,
-        RidgeGraph,
     )
 
 # ---------------------------------------------------------------------------
@@ -65,9 +63,6 @@ class PipelineContext:
 
     # Final Output
     normalized_fingerprint: NormalizedFingerprint | None = None
-
-    # Phase 11: Ridge Graph (biological topology)
-    ridge_graph: RidgeGraph | None = None
 
     # Provenance / debugging
     warnings: list[str] = field(default_factory=list)
@@ -161,9 +156,8 @@ class IMatcher(Protocol):
 class ICoarseMatcher(Protocol):
     """Port for the Coarse Matcher (Phase 11-02).
 
-    Coarse matchers convert a RidgeGraph into a fixed-size dense
-    embedding and return the *top_k* most similar candidates from
-    a vector index.  Concrete adapters include :class:`QdrantRepository`.
+    Converts a fingerprint into a fixed-size dense embedding and
+    returns the *top_k* most similar candidates from a vector index.
     """
 
     def ensure_collection(self) -> None:
@@ -184,36 +178,7 @@ class ICoarseMatcher(Protocol):
         ...
 
 
-class IFineMatcher(Protocol):
-    """Port for the Fine Matcher (Phase 11-03/11-04).
-
-    Fine matchers compare a probe RidgeGraph against a shortlist of
-    enrolled candidates using forensic spatial alignment and topological
-    verification, returning a highly discriminative final score.
-    """
-
-    def insert_graph(
-        self,
-        fingerprint_id: str,
-        graph: RidgeGraph,
-        person_id: str | None = None,
-    ) -> None:
-        """Persist a RidgeGraph into the fine-matcher store."""
-        ...
-
-    def match_subgraph(
-        self,
-        latent_graph: RidgeGraph,
-        candidate_ids: list[str],
-        top_k: int = 10,
-    ) -> list[CoarseMatch]:
-        """Return the *top_k* candidates ranked by spatial/topological fit."""
-        ...
-
-
-# NOTE: IMccMatcher (cylinder matcher port) was removed in Phase 27 along
-# with the cylinder matcher. The pair repository (QdrantPairRepository) is
-# used directly by MccMatchingService — it has a single, focused API
-# (ensure_collection, bulk_insert_pairs, knn_search_pairs, etc.) and
-# does not need a separate Protocol abstraction. See
-# docs/adr/009-remove-cylinders.md.
+# NOTE: IFineMatcher (ridge graph spatial verifier) and the classical
+# MCC/Bozorth3/cylinder/pair matchers were removed in Phase 29 in favour
+# of deep embedding (AFR-Net). Cosine similarity over the 512-D embedding
+# replaces coarse and fine matching in a single step.

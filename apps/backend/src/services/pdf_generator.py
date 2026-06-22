@@ -66,7 +66,6 @@ def _build_html(case_data: dict[str, Any]) -> str:
         evidence_rows += f"""
         <tr>
             <td>{ev.get('fingerprint_id', 'N/A')}</td>
-            <td>{ev.get('num_minutiae', '—')}</td>
             <td>{ev_created}</td>
         </tr>"""
 
@@ -184,7 +183,7 @@ def _build_html(case_data: dict[str, Any]) -> str:
 <h2>Evidencias Analizadas</h2>
 <table class="data">
   <thead>
-    <tr><th>ID de Huella</th><th>Minutiae</th><th>Registrada</th></tr>
+    <tr><th>ID de Huella</th><th>Registrada</th></tr>
   </thead>
   <tbody>
     {evidence_rows if evidence_rows else '<tr><td colspan="3">No hay evidencias registradas.</td></tr>'}

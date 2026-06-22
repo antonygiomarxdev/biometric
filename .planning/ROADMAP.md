@@ -26,6 +26,9 @@
 - [x] **Phase 24:** Pair-Based Matching Pipeline v2 — *prototype, replaced by Phase 25*
 - [~] **Phase 25:** Triplet-Based Latent Matching — Classical AFIS approach (executed, partial pass)
 - [ ] **Phase 26:** Orientation Field Registration — Global OF pre-filter for latentes (planned)
+- [~] **Phase 27:** Match Algorithm Convergence — Pairs vs Triplets (framework decided, not executed)
+- [~] **Phase 28:** MinIO Migration + Minutiae-as-Data (planned, ready)
+- [x] **Phase 29:** Deep Fingerprint Embedding — AFR-Net + U-Net + Qdrant (29-01 complete, 6K SOCOFing indexed)
 
 ## 📋 Phase 25 Details
 
@@ -88,3 +91,40 @@ persons, 190 cross-pairs):
 - Re-enrollment: auto in `enroll_triplets` path
 
 **See:** [Phase 26 Context](phases/26-of-registration/26-CONTEXT.md) · [Phase 26 Plan 26-01](phases/26-of-registration/26-01-PLAN.md)
+
+## 📋 Phase 28 Details
+
+| Plan | Title | Files | Status |
+|------|-------|-------|--------|
+| 28 | MinIO Migration + Minutiae Schema | 3 new + 3 modified | 📋 Planned |
+
+**Why Phase 28:** Fingerprint images stored as bytea in PostgreSQL is wrong.
+MinIO is 10x cheaper, faster, and separates concerns. Minutiae should be
+first-class structured data, not opaque blobs.
+
+**See:** [Phase 28 Context](phases/28-minio-migration/28-CONTEXT.md)
+
+## 📋 Phase 29 Details
+
+| Plan | Title | Effort | Status |
+|------|-------|--------|--------|
+| 29-01 | Embedding pipeline + full MCC legacy cleanup | 4-5 days | ✅ Complete — see [29-SUMMARY](phases/29-deep-embedding/29-SUMMARY.md) |
+| 29-02 | U-Net enhancement toggle | 1 day | 📋 Planned |
+| 29-03 | Segmentation + latent robustness | 3 days | 📋 Planned |
+
+**Why Phase 29:** Classical minutiae matching (MCC, triplets) fails on latents
+and is slow at scale. Deep learning with AFR-Net achieves 99.70% TAR@FAR=0.01
+on Altered-Hard with 15ms inference. Replaces the entire classical pipeline
+with a single model forward pass + Qdrant ANN search.
+
+**Decisions (locked):**
+- **Solo embedding — no MCC/Bozorth3 coexistence**: classical pipeline is **deleted entirely** (services, repos, routers, migrations, Qdrant collections, tests, scripts). No dual-write, no feature flags.
+- Fresh Qdrant collection `fingerprint_embeddings` (512-D, cosine). Old `ridge_graphs`, `pair_features`, `deepprint_poc` deleted.
+- PG tables `capture_minutiae`, `ridge_graphs` dropped via migration.
+- GradCAM for explainability (not minutiae).
+- Images in MinIO only, not DB.
+- Existing `POST /fingerprints/{id}/captures` becomes the enrollment endpoint (rewritten internally).
+- `POST /matching/search` replaces `latent_search.py`.
+- `quick_enroll.py` calls the REST endpoints to batch-enroll SOCOFing.
+
+**See:** [Phase 29 Context](phases/29-deep-embedding/29-CONTEXT.md) · [Plan 29-01](phases/29-deep-embedding/29-01-PLAN.md)

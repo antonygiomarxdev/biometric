@@ -1,4 +1,4 @@
-"""Pydantic DTOs for Fingerprint slots (Phase 17) and preview (Phase 23)."""
+"""Pydantic DTOs for Fingerprint slots (Phase 17)."""
 
 from __future__ import annotations
 
@@ -37,41 +37,10 @@ class FingerprintListResponse(BaseModel):
 
 
 class MinutiaPoint(BaseModel):
-    """A single detected minutia point (Phase 23 — preview and match overlay).
+    """A single detected minutia point (still used by match overlay rendering)."""
 
-    Mirrors the ``MinutiaPoint`` interface in the frontend
-    (``apps/frontend/src/lib/api.ts``) used by ``useCanvasDrawer`` and
-    ``MatchOverlay``.
-    """
     x: int
     y: int
     angle: float
     type: int  # 0=termination, 1=bifurcation, 2=unknown
 
-
-class FingerprintPreviewResponse(BaseModel):
-    """POST /api/v1/fingerprints/preview body (Phase 23).
-
-    Mirrors the legacy ``ExtractResponse`` shape consumed by
-    ``FingerprintViewer`` and the new ``getMinutiaeForImage`` in
-    ``apps/frontend/src/lib/api.ts``. Does NOT persist a capture;
-    the perito reviews the extracted minutiae in the UI before
-    explicitly enrolling.
-    """
-    processed_image: str = Field(
-        description="Base64 PNG of the enhanced/skeletonized image (no data: prefix)",
-    )
-    minutiae: list[MinutiaPoint] = Field(
-        default_factory=list,
-        description="Detected minutiae (x, y, angle, type)",
-    )
-    terminations: int = Field(default=0, description="Count of termination minutiae (type=0)")
-    bifurcations: int = Field(default=0, description="Count of bifurcation minutiae (type=1)")
-    image_shape: list[int] = Field(
-        default_factory=lambda: [0, 0],
-        description="[height, width] of the processed image",
-    )
-    image_dtype: str = Field(default="uint8", description="Numpy dtype of the processed image")
-
-
-FingerprintPreviewResponse.model_rebuild()

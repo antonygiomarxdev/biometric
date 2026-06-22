@@ -10,7 +10,6 @@ import click
 from src.core.compliance import setup_compliance_logging
 from src.core.config import config
 from src.core.metrics import metrics
-from src.services.mcc_matching_service import MccMatchingService
 
 logging.basicConfig(
     level=getattr(logging, config.log_level),
@@ -46,23 +45,6 @@ def init_db() -> None:
         click.echo(f"ERROR: {result.stderr}", err=True)
         sys.exit(result.returncode)
     click.echo("OK Database initialized")
-
-
-@cli.command()
-@click.argument("image_path", type=click.Path(exists=True))
-def extract(image_path: str) -> None:
-    """Extract minutiae from a fingerprint image via the MCC pipeline."""
-    try:
-        click.echo(f"Processing: {image_path}")
-        with open(image_path, "rb") as f:
-            image_bytes = f.read()
-        mcc = MccMatchingService()
-        result = mcc.preview(image_bytes)
-        click.echo(f"\nOK Minutiae extracted: {len(result['minutiae'])}")
-        click.echo(f"  Skeleton shape: {result['skeleton'].shape}")
-    except Exception as e:
-        click.echo(f"ERROR: {e}", err=True)
-        sys.exit(1)
 
 
 @cli.command()
